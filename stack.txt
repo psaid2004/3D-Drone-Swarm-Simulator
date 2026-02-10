@@ -1,0 +1,10 @@
+DroneWorldEnv
+   ↓ _DronePZ (ParallelEnv)
+   ↓ black_death_v3              # keeps dead-agent slots
+   ↓ flatten_v0                  # dict → flat vector spaces
+   ↓ pettingzoo_env_to_vec_env_v1# ParallelEnv → SB3 VecEnv
+   ↓ concat_vec_envs_v1          # N copies in parallel
+   → Stable-Baselines3 algorithm
+
+
+ tensorboard --logdir train/models/tb_logs/
