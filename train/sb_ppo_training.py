@@ -1,213 +1,205 @@
+# train/sb_ppo_training.py
 import os
 import time
 
 import supersuit as ss
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
-from stable_baselines3.common.vec_env import VecMonitor, VecNormalize
+from stable_baselines3.common.vec_env import VecNormalize
 
 from train.callbacks.stats_cb import StepStatsCallback
-from wrappers.pz_parallel import env as make_env
-from staged_curriculums import CURRICULUM
+from wrappers.pz_parallel_3d import env as make_env
+from wrappers.sb3_reset_fix import SB3VecResetTupleFix
 
 MODEL_DIR = "models/"
-NUM_DRONES = 2
-NUM_OBSTACLES = 0
 
-# Hyperparams Configuration
+# rollout length
 N_STEPS = 512
-N_ENVS = 16
+N_ENVS = 1
 GAMMA = 0.99
-TRAINING_TIMESTAMPS = 1_200_000
-BATCH_SIZE = 2048
-# BATCH_SIZE = N_ENVS * N_STEPS
-FIXED_NET_ARCH = dict(
-    # pi=[256, 128, 64],
-    pi=[512, 256, 128],
-    vf=[512, 256, 128],
-    # pi=[756, 512, 256],
-    # vf=[756, 512, 256],
-)
-GAE_Lambda = 0.95
-CLIP_RANGE = 0.25
-ENTROPY = 0.008
+
+BATCH_SIZE = 256
 N_EPOCHS = 6
 
+FIXED_NET_ARCH = dict(pi=[512, 256, 128], vf=[512, 256, 128])
+GAE_LAMBDA = 0.95
+CLIP_RANGE = 0.25
+ENTROPY = 0.008
 
-def get_next_model_path(base_path="models/ppo_", drones=NUM_DRONES, obstacles=NUM_OBSTACLES, ext=".zip"):
+# train with lidar
+LIDAR = True
+
+# IMPORTANT: keep constant across entire SB3 training lifetime
+NUM_DRONES_FIXED = 2
+
+# swarm task constraints
+SWARM_MAX_SEP = 2.0
+SWARM_MIN_SEP = 0.25
+SHARED_TARGET = True
+
+
+def get_next_model_path(base_path="models/ppo_", drones=1, obstacles=0, ext=".zip"):
     k = 0
     while os.path.isfile(f"{base_path}{k}_{drones}_{obstacles}{ext}"):
         k += 1
     return f"{base_path}{k}_{drones}_{obstacles}{ext}"
 
 
-def get_next_checkpoint_dir(base_path="models/ppo_drones_", n_drones=NUM_DRONES, n_obs=NUM_OBSTACLES, ext=".zip"):
+def get_next_checkpoint_dir(base_path="models/ppo_drones_", n_drones=1, n_obs=0):
     k = 0
     while os.path.isdir(f"{base_path}{k}_{n_drones}_{n_obs}"):
         k += 1
     return f"ppo_drones_{k}_{n_drones}_{n_obs}"
 
 
-def create_env(num_drones, num_obstacles, spawn_limit=100.0):
-    # 1. base PettingZoo parallel env
-    raw = make_env(num_drones=num_drones, num_obstacles=num_obstacles,
-                   max_steps=N_STEPS, lidar=True, render_mode=None, spawn_area=spawn_limit)
+def create_env(num_drones: int, active_drones: int, num_obstacles: int, world_scale: float):
+    raw = make_env(
+        num_drones=num_drones,          # constant across all stages
+        active_drones=active_drones,    # curriculum knob
+        num_obstacles=num_obstacles,
+        max_steps=N_STEPS,
+        lidar=LIDAR,
+        render_mode=None,
+        world_scale=world_scale,
+        obstacle_dynamic=True,
+        debug=False,
+        # swarm + shared target
+        shared_target=SHARED_TARGET,
+        swarm_max_sep=SWARM_MAX_SEP,
+        swarm_min_sep=SWARM_MIN_SEP,
+        terminate_on_cohesion_break=False,
+        terminate_on_separation=False,
+        # lidar config
+        lidar_num_rays=72,
+        lidar_num_layers=5,
+        lidar_range=6.0,
+        lidar_vertical_fov_deg=45.0,
+        lidar_horizontal_fov_deg=360.0,
+        lidar_noise_std=0.0,
+        lidar_show_rays=False,   # training: OFF
+    )
     raw.render_mode = None
-    # 2. keep “dead” agents alive
-    wrapped = ss.black_death_v3(raw)
-    # wrapped = raw
-    # wrapped = raw
-    # 3. SB3 VecEnv (still a single copy)
-    vec = ss.pettingzoo_env_to_vec_env_v1(wrapped)
 
-    # 4. concatenate N copies for throughput
-    vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
+    vec = ss.pettingzoo_env_to_vec_env_v1(raw)
 
-    vec = VecMonitor(vec)
-    # 5. normalise obs & rewards after concat
-    vec = VecNormalize(vec, gamma=GAMMA, norm_reward=False, norm_obs=True, clip_obs=1.0, clip_reward=3.0)
-    #
-    # vec = InfoStashWrapper(vec)
-    # 6. record episode stats
+    if N_ENVS > 1:
+        vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
+
+    vec = SB3VecResetTupleFix(vec)
+
+    vec = VecNormalize(
+        vec,
+        gamma=GAMMA,
+        norm_reward=False,
+        norm_obs=True,
+        clip_obs=5.0,
+        clip_reward=10.0,
+    )
+
     return vec
 
 
-def make_eval_raw(num_drones=NUM_DRONES, num_obstacles=NUM_OBSTACLES):
-    return make_env(
-        num_drones=num_drones,
-        num_obstacles=num_obstacles,
-        max_steps=N_STEPS,
-        lidar=True
+def train(device: str = "auto"):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+    if device == "auto":
+        try:
+            import torch
+            device_ = "cuda" if torch.cuda.is_available() else "cpu"
+        except Exception:
+            device_ = "cpu"
+    else:
+        device_ = device
+
+    print(f"Using {device_} device")
+
+    # Curriculum: (world_scale, active_drones, num_obstacles, timesteps)
+    CURR = [
+        (2.0, 1, 10, 200_000),
+        (2.5, 1, 8,  400_000),
+        (3.0, 1, 6,  500_000),
+        (3.5, 2, 6,  600_000),
+        (4.5, 2, 8,  800_000),
+    ]
+
+    world_scale, active_drones, obs, _ = CURR[0]
+    print(
+        f"\n=== Stage 0 | world={world_scale} active={active_drones}/{NUM_DRONES_FIXED} "
+        f"obs={obs} | shared_target={SHARED_TARGET} swarm_max={SWARM_MAX_SEP} | "
+        f"lidar={LIDAR} rays=72 layers=5 ==="
+    )
+    train_env = create_env(NUM_DRONES_FIXED, active_drones, obs, world_scale)
+
+    model = PPO(
+        "MlpPolicy",
+        train_env,
+        learning_rate=3e-4,
+        n_steps=N_STEPS,
+        batch_size=BATCH_SIZE,
+        gamma=GAMMA,
+        n_epochs=N_EPOCHS,
+        policy_kwargs=dict(net_arch=FIXED_NET_ARCH),
+        gae_lambda=GAE_LAMBDA,
+        clip_range=CLIP_RANGE,
+        ent_coef=ENTROPY,
+        vf_coef=0.5,
+        max_grad_norm=0.5,
+        tensorboard_log=None,
+        verbose=1,
+        device=device_,
     )
 
-
-def make_eval_env(train_norm_wrapper, num_drones=1, num_obstacles=0):
-    raw = make_env(num_drones=num_drones, num_obstacles=num_obstacles,
-                   max_steps=N_STEPS, lidar=False, render_mode=None)
-    raw.render_mode = None
-
-    wrapped = ss.black_death_v3(raw)
-    # wrapped = raw
-    vec = ss.pettingzoo_env_to_vec_env_v1(wrapped)
-
-    vec = ss.concat_vec_envs_v1(vec, 1, base_class="stable_baselines3")
-
-    # freeze normalisation but share statistics
-    eval_norm = VecNormalize(vec, gamma=GAMMA,
-                             norm_reward=True, norm_obs=True, clip_obs=10.0,
-                             training=False)
-    eval_norm.obs_rms = train_norm_wrapper.obs_rms
-    eval_norm.ret_rms = train_norm_wrapper.ret_rms
-
-    return VecMonitor(eval_norm)
-
-
-def train(num_iters=1, curriculum_drones=2):
-    for k in range(num_iters):
-        train_env = create_env(num_drones=NUM_DRONES, num_obstacles=NUM_OBSTACLES, spawn_limit=100.0)
-        model = PPO(
-            "MlpPolicy",
-            train_env,
-            # learning_rate=get_linear_fn(3e-4, 1e-5, 1.0),
-            learning_rate=3e-4,
-            n_steps=N_STEPS,
-            batch_size=BATCH_SIZE,
-            gamma=GAMMA,
-            n_epochs=N_EPOCHS,
-            # policy_kwargs=dict(net_arch=[128, 64, 64]),
-            policy_kwargs=dict(net_arch=FIXED_NET_ARCH),
-            gae_lambda=GAE_Lambda,
-            clip_range=CLIP_RANGE,
-            # ent_coef=0.01,
-            ent_coef=ENTROPY,
-            vf_coef=0.5,
-            max_grad_norm=0.5,
-            target_kl=None,
-            tensorboard_log="models/tb_logs/",
-            verbose=1,
-            device="cuda",
+    for stage, (world_scale, active_drones, obs, steps) in enumerate(CURR):
+        print(
+            f"\n=== Stage {stage} | world={world_scale} active={active_drones}/{NUM_DRONES_FIXED} "
+            f"obs={obs} steps={steps} | shared_target={SHARED_TARGET} swarm_max={SWARM_MAX_SEP} | "
+            f"lidar={LIDAR} rays=72 layers=5 ==="
         )
-        # print(">>> actual parallel envs:", train_env.num_envs)
-        curr = CURRICULUM[curriculum_drones]
-        # for stage, (spawn, drones, obs, steps) in enumerate([
-        #     # (100, 2, 0, 2_000_000),
-        #     # (40, 2, 0, 1_000_000),
-        #     # (40, 2, 1, 700_000),
-        #     # (40, 2, 2, 700_000),
-        #     # (40, 2, 3, 700_000),
-        #     (60, 2, 10, 2_000_000),
-        #
-        #     # (100, 1, 0, 2_000_000),
-        #     # (40, 1, 3, 700_000),
-        #     # (40, 1, 5, 700_000),
-        #     # (60, 1, 8, 700_000),
-        #     # (100, 1, 10, 2_000_000),
-        #
-        #     # (60, 2, 6, 2_000_000),
-        #     # (90, 2, 8, 2_000_000),
-        #     # (100, 2, 10, 3_500_000),
-        #     # (100, 2, 15, 3_500_000),
-        #     # (40, 2, 4, 1_200_000),
-        #     # (100, 2, 6, 1_200_000),
-        #     # (100, 2, 10, 2_000_000)
-        # ]):
-        for stage, (spawn, drones, obs, steps) in enumerate(curr):
-            # if stage != 4:
-            #     continue
-            print(f"Stage {stage} stared...")
-            old_env = model.get_env()
-            training_env = create_env(num_drones=drones, num_obstacles=obs, spawn_limit=spawn)
-            if isinstance(old_env, VecNormalize):
-                training_env.obs_rms = old_env.obs_rms
-                training_env.ret_rms = old_env.ret_rms
-                training_env.training = old_env.training  # keep updating stats if you like
-            model.set_env(train_env)
-            # kpi_cb = KPIRecorder(verbose=1)
-            checkpoint_dir = get_next_checkpoint_dir(n_drones=drones, n_obs=obs)
-            # callbacks = CallbackList([kpi_cb])
-            checkpoint_cb = CheckpointCallback(
-                save_freq=10_000 // N_ENVS,
-                save_path=f"models/{checkpoint_dir}",
-                name_prefix="ppo_"
-            )
 
-            stats_cb = StepStatsCallback(drones, N_ENVS, verbose=1)
-            # callbacks = CallbackList([stats_cb])
-            callbacks = CallbackList([stats_cb, checkpoint_cb])
+        old_env = model.get_env()
+        new_env = create_env(NUM_DRONES_FIXED, active_drones, obs, world_scale)
 
-            model_path = get_next_model_path(drones=drones, obstacles=obs)
-            # model.learn(total_timesteps=TRAINING_TIMESTAMPS, callback=callbacks)
-            # stage_1 = int(TRAINING_TIMESTAMPS)
-            # stage_1 = int(TRAINING_TIMESTAMPS / 10) + 50_000'
-            if stage == 0:
-                model.learn(total_timesteps=steps, progress_bar=True, callback=callbacks)
-            else:
-                model.learn(total_timesteps=steps, reset_num_timesteps=False, progress_bar=True, callback=callbacks)
-            # model.batch_size = 180
-            # model.learning_rate = 3e-4
-            # model.n_epochs = 16
-            # model.clip_range = constant_fn(0.25)
-            # model.ent_coef = 0.005
-            # # train_env_danger = create_env(
-            # #     num_drones=NUM_DRONES,
-            # #     num_obstacles=NUM_OBSTACLES,
-            # #     spawn_limit=30.0,
-            # # )
-            # stage_2 = (TRAINING_TIMESTAMPS // 2)
-            # model.learn(total_timesteps=stage_2, reset_num_timesteps=False, progress_bar=True, callback=callbacks)
-            #
-            # model.set_env(train_env_danger)
-            # model.learn(total_timesteps=stage_2, reset_num_timesteps=False, progress_bar=True,
-            #             callback=callbacks)
-            model.save(model_path)
+        # Share normalization stats between stages
+        try:
+            if isinstance(old_env, VecNormalize) and isinstance(new_env, VecNormalize):
+                new_env.obs_rms = old_env.obs_rms
+                new_env.ret_rms = old_env.ret_rms
+                new_env.training = True
+        except Exception:
+            pass
 
-        train_env.close()
+        model.set_env(new_env)
+
+        checkpoint_dir = get_next_checkpoint_dir(n_drones=NUM_DRONES_FIXED, n_obs=obs)
+        checkpoint_cb = CheckpointCallback(
+            save_freq=max(1, 20_000 // max(1, N_ENVS)),
+            save_path=f"models/{checkpoint_dir}",
+            name_prefix="ppo_",
+        )
+
+        stats_cb = StepStatsCallback(NUM_DRONES_FIXED, N_ENVS, verbose=1)
+        callbacks = CallbackList([stats_cb, checkpoint_cb])
+
+        model.learn(
+            total_timesteps=steps,
+            reset_num_timesteps=False,
+            callback=callbacks,
+        )
+
+        model_path = get_next_model_path(drones=NUM_DRONES_FIXED, obstacles=obs)
+        model.save(model_path)
+        print(f"[SAVED] {model_path}")
+
+        try:
+            train_env.close()
+        except Exception:
+            pass
+        train_env = new_env
+
+    train_env.close()
 
 
 if __name__ == "__main__":
-    stage_start = time.time()
-    train(num_iters=1)
-    stage_duration = time.time() - stage_start
-    print(f"Training completed in {stage_duration:.2f} seconds")
-    # train_i(0)
-    # train_staged()
+    t0 = time.time()
+    train(device="auto")
+    print(f"Training completed in {time.time() - t0:.2f} seconds")

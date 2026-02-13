@@ -1,76 +1,89 @@
-from stable_baselines3 import PPO
+# train/evaluation/test_run.py
+import time
+import numpy as np
 
-# from train.sb_ppo_training import CURRICULUM
-from wrappers.pz_parallel import env as make_env
+from wrappers.pz_parallel_3d import env as make_env
+
 
 NUM_DRONES = 2
-NUM_OBSTACLES = 4
-MODEL_N = 0
-N_STEPS = 510
+NUM_OBSTACLES = 2
+N_STEPS = 600
+
 LIDAR = True
-
-MODEL = f"ppo_{MODEL_N}_{NUM_DRONES}_{NUM_OBSTACLES}"
-MODEL_PATH = f"../models/{MODEL}.zip"
-# MODEL = "ppo_drones_0_2_4/ppo__2272416_steps"
-# MODEL_PATH = f"../models/ppo_drones_50_2_0/ppo__680000_steps.zip"
+DYNAMIC_OBSTACLES = True
 
 
-def print_rewards(reward_dictionary):
-    print("\nReward system:\n")
-    for k in reward_dictionary.keys():
-        print(f'\n{k} - {reward_dictionary[k]}')
-    print(reward_dictionary)
+def _safe_unit(v: np.ndarray) -> np.ndarray:
+    n = float(np.linalg.norm(v))
+    if n < 1e-6:
+        return np.zeros_like(v)
+    return v / n
 
 
-# 1) load your policy
-def test_run(n_drones=NUM_DRONES, n_obstacles=NUM_OBSTACLES, n_steps=N_STEPS, model_path=MODEL_PATH):
-    model = PPO.load(model_path)  # adjust path if needed
+def test_run(
+    n_drones: int = NUM_DRONES,
+    n_obstacles: int = NUM_OBSTACLES,
+    n_steps: int = N_STEPS,
+):
+    pz_env = make_env(
+        num_drones=n_drones,
+        render_mode="human",
+        num_obstacles=n_obstacles,
+        max_steps=n_steps,
+        lidar=LIDAR,
+        obstacle_radius=0.30,
+        obstacle_dynamic=DYNAMIC_OBSTACLES,
+        debug=False,
+        # swarm + shared target
+        shared_target=True,
+        swarm_max_sep=2.0,
+        swarm_min_sep=0.25,
+        terminate_on_cohesion_break=False,
+        terminate_on_separation=False,
+        # lidar config
+        lidar_num_rays=72,
+        lidar_num_layers=5,
+        lidar_range=6.0,
+        lidar_vertical_fov_deg=45.0,
+        lidar_horizontal_fov_deg=360.0,
+        lidar_noise_std=0.0,
+        lidar_show_rays=True,
+        world_scale=3.5,
+    )
 
-    # 2) make a ParallelEnv with human rendering
-    pz_env = make_env(num_drones=n_drones, render_mode="human", num_obstacles=n_obstacles, max_steps=n_steps,
-                      lidar=LIDAR)
-
-    # 3) reset
     obs_dict, info = pz_env.reset()
-    sims_number = 10
-    # 4) episode loop
-    while sims_number != 0:
-        obs_dict, _ = pz_env.reset()
-        j = 0
-        while j < n_steps:
-            # build actions for currently alive agents
-            action_dict = {a: model.predict(o, deterministic=True)[0]
-                           for a, o in obs_dict.items()}
 
-            obs_dict, reward_dict, term_dict, trunc_dict, info = pz_env.step(action_dict)
+    for t in range(n_steps):
+        if len(pz_env.agents) == 0:
+            obs_dict, info = pz_env.reset()
 
-            pz_env.render()
-            # print(sims_number)
-            print(info)
-            # if j >= 60:
-            #     time.sleep(1)
-            # print(obs_dict)
-            # episode is over when the live agent list is empty
-            if len(pz_env.agents) == 0:  # <-- this is the correct check
-                print("Episode ended, final info:", info)
-                break
-            j += 1
-        sims_number -= 1
+        # Heuristic "go to target + stay together" controller (NOT RL)
+        # Observation layout:
+        # pos(0:3), vel(3:6), to_target(6:9), to_obs(9:12), to_centroid(12:15), to_nearest_teammate(15:18), lidar...
+        action_dict = {}
+        for a in pz_env.agents:
+            obs = obs_dict[a]
+            to_target = obs[6:9]
+            to_centroid = obs[12:15]
 
-    # 5) clean up
+            # move mostly to target, slightly to centroid (cohesion)
+            dir_vec = 0.85 * _safe_unit(to_target) + 0.15 * _safe_unit(to_centroid)
+            dir_vec = _safe_unit(dir_vec)
+
+            # speed control: increase when far from target, slow down when close
+            dist = float(np.linalg.norm(to_target))
+            speed01 = np.clip(dist / 3.0, 0.2, 1.0)  # [0.2..1.0]
+            u3 = float(speed01 * 2.0 - 1.0)          # map [0..1] -> [-1..1]
+
+            action_dict[a] = np.array([dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32)
+
+        obs_dict, reward_dict, term_dict, trunc_dict, info = pz_env.step(action_dict)
+        pz_env.render()
+        time.sleep(1 / 60)
+
+    input("Press Enter to close...")
     pz_env.close()
 
 
-# def test_full_curriculum():
-#     for stage, (num_drones, num_obstacles, timesteps) in enumerate(CURRICULUM):
-#         test_run(num_drones, num_obstacles, 300, f"../stage_{stage}_model")
-#
-#
-# def test_curriculum(stage=1):
-#     num_drones, num_obstacles, timesteps = CURRICULUM[stage - 1]
-#     test_run(num_drones, num_obstacles, 300, f"../stage_{stage}_model")
-
-
-if __name__ == '__main__':
-    # test_curriculum(3)
+if __name__ == "__main__":
     test_run()
