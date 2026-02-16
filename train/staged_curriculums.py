@@ -1,4 +1,5 @@
 # Curriculum with time steps and environment specifications
+# Curriculum: (world_scale, active_drones, num_obstacles, timesteps)
 CURRICULUM = {
     1: [(100, 1, 0, 2_000_000),
         (40, 1, 3, 700_000),

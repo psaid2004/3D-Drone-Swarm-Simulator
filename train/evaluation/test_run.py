@@ -7,7 +7,7 @@ from wrappers.pz_parallel_3d import env as make_env
 
 NUM_DRONES = 2
 NUM_OBSTACLES = 2
-N_STEPS = 600
+N_STEPS = 2000
 
 LIDAR = True
 DYNAMIC_OBSTACLES = True
@@ -48,7 +48,10 @@ def test_run(
         lidar_horizontal_fov_deg=360.0,
         lidar_noise_std=0.0,
         lidar_show_rays=True,
-        world_scale=3.5,
+        world_scale=2,
+        vel_scale=6.0,          # try 6–8
+        takeoff_steps=40,       # optional: shorter takeoff
+        takeoff_vz=1.2,         # optional: faster climb
     )
 
     obs_dict, info = pz_env.reset()

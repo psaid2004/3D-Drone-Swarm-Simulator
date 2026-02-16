@@ -22,11 +22,11 @@ class DroneSwarm3D(ParallelEnv):
         lidar: bool = False,
         max_steps: int = 500,
         render_mode: Optional[str] = None,
-        world_scale: float = 3.0,
+        world_scale: float = 2.0,               #TOO LARGES DRONES DONT REACH TARGET
         seed: Optional[int] = None,
         gravity: float = -9.81,
         # --- motion helpers ---
-        vel_scale: float = 3.0,
+        vel_scale: float = 15.0,                     #TOO SMALL DRONES DONT REACH TARGET
         takeoff_steps: int = 60,
         takeoff_vz: float = 1.0,
         hover_bias_vz: float = 0.0,
@@ -41,10 +41,10 @@ class DroneSwarm3D(ParallelEnv):
         collision_penalty: float = 200.0,
         near_obstacle_penalty_k: float = 0.6,
         # --- goal / shaping ---
-        goal_radius: float = 0.25,
+        goal_radius: float = 0.8,
         goal_bonus: float = 80.0,
         progress_k: float = 8.0,
-        time_penalty: float = 0.01,
+        time_penalty: float = 0.05,
         ctrl_penalty_k: float = 0.003,
         # --- swarm cohesion / separation ---
         swarm_max_sep: float = 2.0,
@@ -825,7 +825,7 @@ class DroneSwarm3D(ParallelEnv):
             self._prev_dists[i] = dist
 
             r_progress = self.progress_k * (prev - dist)
-            r_goal_dist = -0.05 * dist
+            r_goal_dist = -0.15 * dist          #WAS 0.05
             r_time = -self.time_penalty
             r_ctrl = -self.ctrl_penalty_k * float(np.linalg.norm(act[i]))
             r_near = -self.near_obstacle_penalty_k / max(float(np.linalg.norm(obs_dict[a][9:12])), 0.10)
