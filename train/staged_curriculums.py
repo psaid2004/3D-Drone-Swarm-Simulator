@@ -1,28 +1,10 @@
-# Curriculum with time steps and environment specifications
-# Curriculum: (world_scale, active_drones, num_obstacles, timesteps)
-CURRICULUM = {
-    1: [(100, 1, 0, 2_000_000),
-        (40, 1, 3, 700_000),
-        (40, 1, 5, 700_000),
-        (60, 1, 8, 700_000),
-        (100, 1, 10, 2_000_000)],
+"""train/staged_curriculums.py (LEGACY)
 
-    2: [(40, 2, 0, 1_000_000),
-        (40, 2, 1, 700_000),
-        (40, 2, 2, 700_000),
-        (40, 2, 3, 700_000),
-        (60, 2, 10, 2_000_000)],
+This file used to contain a separate curriculum dict.
+It is kept as a tiny shim so existing imports keep working.
 
-    4: [(50, 4, 0, 1_000_000),
-        (60, 4, 2, 1_000_000),
-        (60, 4, 4, 1_000_000),
-        (80, 4, 8, 1_000_000),
-        (80, 4, 10, 2_000_000)],
+New canonical location:
+  config/curriculum.py
+"""
 
-    6: [(50, 6, 0, 1_000_000),
-        (60, 6, 2, 1_000_000),
-        (70, 6, 4, 1_500_000),
-        (80, 6, 8, 2_000_000),
-        (100, 6, 10, 3_000_000)]
-
-}
+from config.curriculum import CURRICULUM  # re-export (backwards compatible)
