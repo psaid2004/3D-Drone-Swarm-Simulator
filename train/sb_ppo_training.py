@@ -36,7 +36,7 @@ from config.experiment import (
     MODELS_DIR,
     DEFAULT_NUM_DRONES,
 )
-from train.callbacks.stats_cb import StepStatsCallback
+from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.pz_parallel_3d import env as make_env
 from wrappers.sb3_reset_fix import SB3VecResetTupleFix
 
@@ -80,7 +80,12 @@ TERMINATE_ON_SEPARATION = DEFAULT_TERMINATE_ON_SEPARATION
 # =============================================================================
 # FILESYSTEM HELPERS
 # =============================================================================
-def get_next_model_path(base_path: str = f"{MODEL_DIR}/ppo_", drones: int = 1, obstacles: int = 0, ext: str = ".zip") -> str:
+def get_next_model_path(
+    base_path: str = f"{MODEL_DIR}/ppo_",
+    drones: int = 1,
+    obstacles: int = 0,
+    ext: str = ".zip",
+) -> str:
     """Find a new model filename that does not overwrite an existing model."""
     k = 0
     while os.path.isfile(f"{base_path}{k}_{drones}_{obstacles}{ext}"):
@@ -88,7 +93,11 @@ def get_next_model_path(base_path: str = f"{MODEL_DIR}/ppo_", drones: int = 1, o
     return f"{base_path}{k}_{drones}_{obstacles}{ext}"
 
 
-def get_next_checkpoint_dir(base_path: str = f"{MODEL_DIR}/ppo_drones_", n_drones: int = 1, n_obs: int = 0) -> str:
+def get_next_checkpoint_dir(
+    base_path: str = f"{MODEL_DIR}/ppo_drones_",
+    n_drones: int = 1,
+    n_obs: int = 0,
+) -> str:
     """Find a new checkpoint directory name that does not overwrite an existing directory."""
     k = 0
     while os.path.isdir(f"{base_path}{k}_{n_drones}_{n_obs}"):
@@ -173,15 +182,17 @@ def train(device: str = "auto"):
 
     # ---------- Curriculum ----------
     curr = PPO_CURRICULUM
+    total_planned_timesteps = int(sum(int(stage[3]) for stage in curr))
 
     # Build stage-0 env first
-    world_scale, active_drones, obs, _ = curr[0]
+    world_scale0, active_drones0, obs0, _ = curr[0]
     print(
-        f"\n=== Stage 0 | world={world_scale} active={active_drones}/{NUM_DRONES_FIXED} "
-        f"obs={obs} | shared_target={SHARED_TARGET} swarm_max={SWARM_MAX_SEP} | "
+        f"\n=== Stage 0 | world={world_scale0} active={active_drones0}/{NUM_DRONES_FIXED} "
+        f"obs={obs0} | shared_target={SHARED_TARGET} swarm_max={SWARM_MAX_SEP} swarm_min={SWARM_MIN_SEP} | "
+        f"terminate_far={TERMINATE_ON_COHESION_BREAK} terminate_close={TERMINATE_ON_SEPARATION} | "
         f"lidar={LIDAR} rays={LIDAR_NUM_RAYS} layers={LIDAR_NUM_LAYERS} ==="
     )
-    train_env = create_env(NUM_DRONES_FIXED, active_drones, obs, world_scale)
+    train_env = create_env(NUM_DRONES_FIXED, active_drones0, obs0, world_scale0)
 
     # ---------- SB3 PPO model ----------
     model = PPO(
@@ -204,15 +215,19 @@ def train(device: str = "auto"):
     )
 
     # ---------- Curriculum stages ----------
-    for stage, (world_scale, active_drones, obs, steps) in enumerate(curr):
+    for stage_idx, (world_scale, active_drones, num_obstacles, stage_steps) in enumerate(curr):
+        stage_steps = int(stage_steps)
+
         print(
-            f"\n=== Stage {stage} | world={world_scale} active={active_drones}/{NUM_DRONES_FIXED} "
-            f"obs={obs} steps={steps} | shared_target={SHARED_TARGET} swarm_max={SWARM_MAX_SEP} | "
+            f"\n=== Stage {stage_idx} | world={world_scale} active={active_drones}/{NUM_DRONES_FIXED} "
+            f"obs={num_obstacles} steps={stage_steps} | shared_target={SHARED_TARGET} "
+            f"swarm_max={SWARM_MAX_SEP} swarm_min={SWARM_MIN_SEP} | "
+            f"terminate_far={TERMINATE_ON_COHESION_BREAK} terminate_close={TERMINATE_ON_SEPARATION} | "
             f"lidar={LIDAR} rays={LIDAR_NUM_RAYS} layers={LIDAR_NUM_LAYERS} ==="
         )
 
         old_env = model.get_env()
-        new_env = create_env(NUM_DRONES_FIXED, active_drones, obs, world_scale)
+        new_env = create_env(NUM_DRONES_FIXED, active_drones, num_obstacles, world_scale)
 
         # Share normalization stats between stages
         try:
@@ -226,25 +241,41 @@ def train(device: str = "auto"):
         model.set_env(new_env)
 
         # ---------- Callbacks ----------
-        checkpoint_dir = get_next_checkpoint_dir(n_drones=NUM_DRONES_FIXED, n_obs=obs)
+        checkpoint_dir = get_next_checkpoint_dir(n_drones=NUM_DRONES_FIXED, n_obs=num_obstacles)
         checkpoint_cb = CheckpointCallback(
             save_freq=max(1, 20_000 // max(1, N_ENVS)),
             save_path=f"{MODEL_DIR}/{checkpoint_dir}",
             name_prefix="ppo_",
         )
 
-        stats_cb = StepStatsCallback(NUM_DRONES_FIXED, N_ENVS, verbose=1)
+        # Curriculum info for stats callback (prints + TB logs)
+        stage_info = CurriculumStageInfo(
+            stage_idx=int(stage_idx),
+            world_scale=float(world_scale),
+            active_drones=int(active_drones),
+            num_obstacles=int(num_obstacles),
+            stage_timesteps=int(stage_steps),
+            total_planned_timesteps=int(total_planned_timesteps),
+        )
+
+        stats_cb = StepStatsCallback(
+            n_drones_fixed=NUM_DRONES_FIXED,
+            n_envs=N_ENVS,
+            stage_info=stage_info,
+            verbose=1,
+        )
+
         callbacks = CallbackList([stats_cb, checkpoint_cb])
 
         # ---------- Train this stage ----------
         model.learn(
-            total_timesteps=steps,
-            reset_num_timesteps=False,
+            total_timesteps=stage_steps,
+            reset_num_timesteps=False,  # keep global progress increasing across stages
             callback=callbacks,
         )
 
         # ---------- Save model snapshot ----------
-        model_path = get_next_model_path(drones=NUM_DRONES_FIXED, obstacles=obs)
+        model_path = get_next_model_path(drones=NUM_DRONES_FIXED, obstacles=num_obstacles)
         model.save(model_path)
         print(f"[SAVED] {model_path}")
 

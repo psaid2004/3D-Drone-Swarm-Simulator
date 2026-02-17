@@ -23,7 +23,7 @@ from typing import Dict, List, Tuple
 #
 # These values are taken 1:1 from train/sb_ppo_training.py (before refactor).
 PPO_CURRICULUM: List[Tuple[float, int, int, int]] = [
-    (2.0, 1, 10, 200_000),
+    (2.0, 2, 10, 200_000),
     (2.5, 1, 8,  400_000),
     (3.0, 1, 6,  500_000),
     (3.5, 2, 6,  600_000),
