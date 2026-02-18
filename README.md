@@ -57,7 +57,7 @@ The project uses a **Staged Curriculum** to train drones effectively.
 To start training from Stage 1:
 
 ```bash
-python train/sb_ppo_training.py
+python train/sb3_sac_training.py
 
 ```
 

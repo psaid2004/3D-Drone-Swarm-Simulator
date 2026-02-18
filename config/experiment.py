@@ -1,11 +1,5 @@
-# config/experiment.py
 """
-Single source of truth for experiment-wide settings.
-
-Design:
-- This file defines DEFAULTS (constants).
-- Training / evaluation scripts import these values.
-- Scripts may override locally, but should NOT mutate this module.
+This file defines DEFAULTS (constants). Training / evaluation scripts import these values.
 """
 
 # =============================================================================
@@ -50,5 +44,5 @@ LIDAR_SHOW_RAYS_TEST = True
 # =============================================================================
 # Paths / naming
 # =============================================================================
-MODEL_PREFIX = "ppo_"
+MODEL_PREFIX = "sac_"
 MODELS_DIR = "models"  # relative to project root

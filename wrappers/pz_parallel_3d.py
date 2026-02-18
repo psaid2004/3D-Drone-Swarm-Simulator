@@ -1,8 +1,6 @@
-# wrappers/pz_parallel_3d.py
 from __future__ import annotations
 
 from typing import Dict, Optional, Tuple, List
-
 import numpy as np
 from gymnasium import spaces
 from pettingzoo.utils.env import ParallelEnv
@@ -15,56 +13,56 @@ class DroneSwarm3D(ParallelEnv):
     metadata = {"name": "drone_swarms_3d_v0"}
 
     def __init__(
-        self,
-        num_drones: int = 2,
-        active_drones: Optional[int] = None,
-        num_obstacles: int = 4,
-        lidar: bool = False,
-        max_steps: int = 500,
-        render_mode: Optional[str] = None,
-        world_scale: float = 2.0,  # too large -> harder to reach targets
-        seed: Optional[int] = None,
-        gravity: float = -9.81,
-        # --- motion helpers ---
-        vel_scale: float = 15.0,  # too small -> may not reach target
-        takeoff_steps: int = 60,
-        takeoff_vz: float = 1.0,
-        hover_bias_vz: float = 0.0,
-        # --- obstacle params ---
-        obstacle_radius: float = 0.30,
-        obstacle_height_range: Tuple[float, float] = (0.5, 1.8),
-        obstacle_dynamic: bool = False,
-        obstacle_drift_amp: float = 0.8,
-        obstacle_drift_omega: float = 0.35,
-        # --- safety / reward ---
-        collision_distance: float = 0.12,
-        collision_penalty: float = 200.0,
-        near_obstacle_penalty_k: float = 0.6,
-        # --- goal / shaping ---
-        goal_radius: float = 0.8,
-        goal_bonus: float = 80.0,
-        progress_k: float = 8.0,
-        time_penalty: float = 0.05,
-        ctrl_penalty_k: float = 0.003,
-        # --- swarm cohesion / separation ---
-        swarm_max_sep: float = 2.0,
-        swarm_min_sep: float = 0.25,
-        cohesion_penalty_k: float = 50.0,
-        separation_penalty_k: float = 30.0,
-        terminate_on_cohesion_break: bool = False,
-        terminate_on_separation: bool = False,
-        # --- shared target ---
-        shared_target: bool = True,
-        # --- lidar params ---
-        lidar_num_rays: int = 72,
-        lidar_num_layers: int = 5,
-        lidar_range: float = 6.0,
-        lidar_vertical_fov_deg: float = 45.0,
-        lidar_horizontal_fov_deg: float = 360.0,
-        lidar_noise_std: float = 0.0,
-        lidar_show_rays: bool = True,
-        # --- debug ---
-        debug: bool = False,
+            self,
+            num_drones: int = 2,
+            active_drones: Optional[int] = None,
+            num_obstacles: int = 4,
+            lidar: bool = False,
+            max_steps: int = 500,
+            render_mode: Optional[str] = None,
+            world_scale: float = 2.0,  # too large -> harder to reach targets
+            seed: Optional[int] = None,
+            gravity: float = -9.81,
+            # --- motion helpers ---
+            vel_scale: float = 15.0,  # too small -> may not reach target
+            takeoff_steps: int = 60,
+            takeoff_vz: float = 1.0,
+            hover_bias_vz: float = 0.0,
+            # --- obstacle params ---
+            obstacle_radius: float = 0.30,
+            obstacle_height_range: Tuple[float, float] = (0.5, 1.8),
+            obstacle_dynamic: bool = False,
+            obstacle_drift_amp: float = 0.8,
+            obstacle_drift_omega: float = 0.35,
+            # --- safety / reward ---
+            collision_distance: float = 0.12,
+            collision_penalty: float = 200.0,
+            near_obstacle_penalty_k: float = 0.6,
+            # --- goal / shaping ---
+            goal_radius: float = 0.8,
+            goal_bonus: float = 80.0,
+            progress_k: float = 8.0,
+            time_penalty: float = 0.05,
+            ctrl_penalty_k: float = 0.003,
+            # --- swarm cohesion / separation ---
+            swarm_max_sep: float = 2.0,
+            swarm_min_sep: float = 0.25,
+            cohesion_penalty_k: float = 50.0,
+            separation_penalty_k: float = 30.0,
+            terminate_on_cohesion_break: bool = False,
+            terminate_on_separation: bool = False,
+            # --- shared target ---
+            shared_target: bool = True,
+            # --- lidar params ---
+            lidar_num_rays: int = 72,
+            lidar_num_layers: int = 5,
+            lidar_range: float = 6.0,
+            lidar_vertical_fov_deg: float = 45.0,
+            lidar_horizontal_fov_deg: float = 360.0,
+            lidar_noise_std: float = 0.0,
+            lidar_show_rays: bool = True,
+            # --- debug ---
+            debug: bool = False,
     ):
         # ---------------- basic config ----------------
         self.num_drones = int(num_drones)
@@ -84,7 +82,8 @@ class DroneSwarm3D(ParallelEnv):
         self.hover_bias_vz = float(hover_bias_vz)
 
         self.obstacle_radius = float(obstacle_radius)
-        self.obstacle_height_range = (float(obstacle_height_range[0]), float(obstacle_height_range[1]))
+        self.obstacle_height_range = (
+            float(obstacle_height_range[0]), float(obstacle_height_range[1]))
         self.obstacle_dynamic = bool(obstacle_dynamic)
         self.obstacle_drift_amp = float(obstacle_drift_amp)
         self.obstacle_drift_omega = float(obstacle_drift_omega)
@@ -417,7 +416,8 @@ class DroneSwarm3D(ParallelEnv):
 
         p = self._p
         col = self._call_physics(p.createCollisionShape, p.GEOM_SPHERE, radius=self.obstacle_radius)
-        vis = self._call_physics(p.createVisualShape, p.GEOM_SPHERE, radius=self.obstacle_radius, rgbaColor=[1, 0, 0, 1])
+        vis = self._call_physics(p.createVisualShape, p.GEOM_SPHERE, radius=self.obstacle_radius,
+                                 rgbaColor=[1, 0, 0, 1])
 
         base_positions = []
         phases = []
@@ -443,11 +443,11 @@ class DroneSwarm3D(ParallelEnv):
 
     def _update_obstacles(self) -> None:
         if (
-            (not self.obstacle_dynamic)
-            or self._p is None
-            or self._obstacle_base_pos is None
-            or self._obstacle_phase is None
-            or len(self._obstacle_ids) == 0
+                (not self.obstacle_dynamic)
+                or self._p is None
+                or self._obstacle_base_pos is None
+                or self._obstacle_phase is None
+                or len(self._obstacle_ids) == 0
         ):
             return
 
@@ -462,7 +462,8 @@ class DroneSwarm3D(ParallelEnv):
             dy = self.obstacle_drift_amp * np.sin(self.obstacle_drift_omega * t + ph)
 
             pos = [float(base[0] + dx), float(base[1] + dy), float(base[2])]
-            self._call_physics(p.resetBasePositionAndOrientation, oid, posObj=pos, ornObj=[0, 0, 0, 1])
+            self._call_physics(p.resetBasePositionAndOrientation, oid, posObj=pos,
+                               ornObj=[0, 0, 0, 1])
 
     def _nearest_obstacle_vector(self, drone_pos: np.ndarray) -> np.ndarray:
         if self._p is None or len(self._obstacle_ids) == 0:
@@ -496,12 +497,14 @@ class DroneSwarm3D(ParallelEnv):
 
         p = self._p
         thresh = self.obstacle_radius + self.collision_distance
-        active_ids = self._drone_ids[: self.active_drones] if len(self._drone_ids) >= self.active_drones else self._drone_ids
+        active_ids = self._drone_ids[: self.active_drones] if len(
+            self._drone_ids) >= self.active_drones else self._drone_ids
 
         for did in active_ids:
             for oid in self._obstacle_ids:
                 try:
-                    pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=oid, distance=thresh)
+                    pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=oid,
+                                             distance=thresh)
                     if pts and len(pts) > 0:
                         return True
                 except Exception:
@@ -566,14 +569,17 @@ class DroneSwarm3D(ParallelEnv):
         v_fov = np.deg2rad(max(0.0, self.lidar_vertical_fov_deg))
 
         if self.lidar_horizontal_fov_deg >= 359.0:
-            az = np.linspace(0.0, 2.0 * np.pi, num=self.lidar_num_rays, endpoint=False, dtype=np.float32)
+            az = np.linspace(0.0, 2.0 * np.pi, num=self.lidar_num_rays, endpoint=False,
+                             dtype=np.float32)
         else:
-            az = np.linspace(-0.5 * h_fov, 0.5 * h_fov, num=self.lidar_num_rays, endpoint=True, dtype=np.float32)
+            az = np.linspace(-0.5 * h_fov, 0.5 * h_fov, num=self.lidar_num_rays, endpoint=True,
+                             dtype=np.float32)
 
         if self.lidar_num_layers <= 1 or self.lidar_vertical_fov_deg <= 1e-6:
             el = np.array([0.0], dtype=np.float32)
         else:
-            el = np.linspace(-0.5 * v_fov, 0.5 * v_fov, num=self.lidar_num_layers, endpoint=True, dtype=np.float32)
+            el = np.linspace(-0.5 * v_fov, 0.5 * v_fov, num=self.lidar_num_layers, endpoint=True,
+                             dtype=np.float32)
 
         dirs = []
         for e in el:
@@ -653,7 +659,8 @@ class DroneSwarm3D(ParallelEnv):
 
         if self.lidar_noise_std > 0.0:
             hit_frac = np.clip(
-                hit_frac + self.rng.normal(0.0, self.lidar_noise_std, size=hit_frac.shape).astype(np.float32),
+                hit_frac + self.rng.normal(0.0, self.lidar_noise_std, size=hit_frac.shape).astype(
+                    np.float32),
                 0.0,
                 1.0,
             )
@@ -741,7 +748,8 @@ class DroneSwarm3D(ParallelEnv):
             to_centroid = (centroid - pos).astype(np.float32)
             to_nearest_teammate = self._nearest_teammate_vector(i, positions)
 
-            base = np.concatenate([pos, vel, to_target, to_obs, to_centroid, to_nearest_teammate], axis=0).astype(np.float32)
+            base = np.concatenate([pos, vel, to_target, to_obs, to_centroid, to_nearest_teammate],
+                                  axis=0).astype(np.float32)
 
             if self.lidar:
                 scan = self._lidar_scan(i, pos)
@@ -838,7 +846,8 @@ class DroneSwarm3D(ParallelEnv):
         # Swarm constraint:
         # - this does NOT terminate unless you enable the flags below.
         # ---------------------------------------------------------------------
-        swarm_term = (too_far and self.terminate_on_cohesion_break) or (too_close and self.terminate_on_separation)
+        swarm_term = (too_far and self.terminate_on_cohesion_break) or (
+                too_close and self.terminate_on_separation)
 
         cohesion_pen = 0.0
         if positions.shape[0] > 1 and max_sep > self.swarm_max_sep:
@@ -859,7 +868,8 @@ class DroneSwarm3D(ParallelEnv):
             if i >= self.active_drones:
                 continue
             pos = obs_dict[a][0:3]
-            target = self._targets[i] if self._targets is not None else np.zeros(3, dtype=np.float32)
+            target = self._targets[i] if self._targets is not None else np.zeros(3,
+                                                                                 dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
             if dist < self.goal_radius:
                 reached_now[i] = True
@@ -886,7 +896,8 @@ class DroneSwarm3D(ParallelEnv):
                 continue
 
             pos = obs_dict[a][0:3]
-            target = self._targets[i] if self._targets is not None else np.zeros(3, dtype=np.float32)
+            target = self._targets[i] if self._targets is not None else np.zeros(3,
+                                                                                 dtype=np.float32)
 
             dist = float(np.linalg.norm(target - pos))
             prev = float(self._prev_dists[i])
@@ -896,7 +907,8 @@ class DroneSwarm3D(ParallelEnv):
             r_goal_dist = -0.15 * dist
             r_time = -self.time_penalty
             r_ctrl = -self.ctrl_penalty_k * float(np.linalg.norm(act[i]))
-            r_near = -self.near_obstacle_penalty_k / max(float(np.linalg.norm(obs_dict[a][9:12])), 0.10)
+            r_near = -self.near_obstacle_penalty_k / max(float(np.linalg.norm(obs_dict[a][9:12])),
+                                                         0.10)
 
             r = r_progress + r_goal_dist + r_time + r_ctrl + r_near
             r += float(cohesion_pen + sep_pen)
@@ -945,8 +957,8 @@ class DroneSwarm3D(ParallelEnv):
                 "active": True,
                 "collided": bool(collided),
                 "reached": bool(self._reached_once[i]),  # persistent reach
-                "reached_now": bool(reached_now[i]),     # inside goal at this step
-                "just_reached": bool(just_reached[i]),   # first entry into goal
+                "reached_now": bool(reached_now[i]),  # inside goal at this step
+                "just_reached": bool(just_reached[i]),  # first entry into goal
                 "swarm_max_sep": float(max_sep),
                 "swarm_min_sep": float(min_sep),
                 "swarm_too_far": bool(too_far),
@@ -973,13 +985,13 @@ class DroneSwarm3D(ParallelEnv):
 
 
 def env(
-    num_drones=2,
-    active_drones=None,
-    render_mode="human",
-    num_obstacles=4,
-    max_steps=500,
-    lidar=False,
-    **kwargs,
+        num_drones=2,
+        active_drones=None,
+        render_mode="human",
+        num_obstacles=4,
+        max_steps=500,
+        lidar=False,
+        **kwargs,
 ):
     return DroneSwarm3D(
         num_drones=num_drones,

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
-
+from typing import Optional
 import numpy as np
+
 from stable_baselines3.common.callbacks import BaseCallback
 
 
@@ -32,11 +32,11 @@ class StepStatsCallback(BaseCallback):
     """
 
     def __init__(
-        self,
-        n_drones_fixed: int,
-        n_envs: int,
-        stage_info: Optional[CurriculumStageInfo] = None,
-        verbose: int = 0,
+            self,
+            n_drones_fixed: int,
+            n_envs: int,
+            stage_info: Optional[CurriculumStageInfo] = None,
+            verbose: int = 0,
     ):
         super().__init__(verbose)
         self.n_drones_fixed = int(n_drones_fixed)
@@ -59,7 +59,8 @@ class StepStatsCallback(BaseCallback):
         self._seen_reached_slots = set()
 
         # per-env reached flags for drones (shape: n_envs x n_drones_fixed)
-        self._env_drone_reached_anytime = np.zeros((self.n_envs, self.n_drones_fixed), dtype=np.bool_)
+        self._env_drone_reached_anytime = np.zeros((self.n_envs, self.n_drones_fixed),
+                                                   dtype=np.bool_)
         self._team_simul_flag = np.zeros((self.n_envs,), dtype=np.bool_)
 
         # first collision step per slot
@@ -140,8 +141,10 @@ class StepStatsCallback(BaseCallback):
         self.logger.record("stats/team_reach_any", float(team_any))
         self.logger.record("stats/team_reach_all", float(team_all))
         self.logger.record("stats/team_reach_simultaneous", float(team_simul))
-        self.logger.record("stats/collision_steps_rate", float(self._collisions) / float(self._total_steps))
-        self.logger.record("stats/wall_hit_steps_rate", float(self._wallhits) / float(self._total_steps))
+        self.logger.record("stats/collision_steps_rate",
+                           float(self._collisions) / float(self._total_steps))
+        self.logger.record("stats/wall_hit_steps_rate",
+                           float(self._wallhits) / float(self._total_steps))
 
         if self._first_collision_steps:
             steps = np.array(list(self._first_collision_steps.values()), dtype=np.float32)
@@ -173,12 +176,12 @@ class StepStatsCallback(BaseCallback):
                 prefix = (
                     f"[Curr] stage={si.stage_idx} "
                     f"(scale={si.world_scale}, active={si.active_drones}, obs={si.num_obstacles}, stage_ts={si.stage_timesteps}) "
-                    f"| timesteps={self.num_timesteps}/{total} ({100.0*self.num_timesteps/total:5.1f}%)\n"
+                    f"| timesteps={self.num_timesteps}/{total} ({100.0 * self.num_timesteps / total:5.1f}%)\n"
                 )
 
             print(
                 prefix
                 + f"[Stats] reaches_per_drone={reaches}/{denom}, "
-                f"team_any={team_any}, team_all={team_all}, team_simul={team_simul}, "
-                f"collision_rate={self._collisions}/{self._total_steps}, wallhit_rate={self._wallhits}/{self._total_steps}"
+                  f"team_any={team_any}, team_all={team_all}, team_simul={team_simul}, "
+                  f"collision_rate={self._collisions}/{self._total_steps}, wallhit_rate={self._wallhits}/{self._total_steps}"
             )

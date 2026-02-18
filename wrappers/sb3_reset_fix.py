@@ -1,9 +1,8 @@
-# wrappers/sb3_reset_fix.py
 from __future__ import annotations
 
 from typing import Any, Optional
-
 import numpy as np
+
 from stable_baselines3.common.vec_env import VecEnvWrapper
 
 
