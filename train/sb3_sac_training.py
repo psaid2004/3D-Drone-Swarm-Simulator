@@ -89,22 +89,36 @@ class ExpertPolicy:
         self.static_avoid_direction = None
 
     def expert_action(self, state):
+        """
+        Compute expert action based on drone state with 3D LIDAR.
+        Assumes state structure:
+        [ pos(3), target(3), ... , lidar(360 = 72*5) ]
+        """
+        # ---------------- POSITION & TARGET ----------------
         current_pos = np.array(state[:3])
         target_pos = np.array(state[3:6])
-        front_distance = state[6]
-        left_free_space = state[7]
-        right_free_space = state[8]
+        direction_to_target = target_pos - current_pos
+        direction_to_target[2] = 0  # only horizontal
+        dist_to_target = np.linalg.norm(direction_to_target) + 1e-6
+        direction_to_target /= dist_to_target  # normalize
+
+        # ---------------- LIDAR PROCESSING ----------------
+        lidar_raw = np.array(state[-(LIDAR_NUM_RAYS*LIDAR_NUM_LAYERS):])
+        lidar = lidar_raw.reshape(LIDAR_NUM_LAYERS, LIDAR_NUM_RAYS)
+
+        # Use middle layer for obstacle decisions
+        mid_layer = LIDAR_NUM_LAYERS // 2
+
+        # front = middle ray, left = first ray, right = last ray
+        front_distance = np.mean(lidar[mid_layer, LIDAR_NUM_RAYS//2 - 1:LIDAR_NUM_RAYS//2 + 2])
+        left_free_space = np.mean(lidar[mid_layer, :3])
+        right_free_space = np.mean(lidar[mid_layer, -3:])
+
         obstacle_velocity = np.array(state[9:11])
         left_edge, right_edge = state[11], state[12]
-        direction_to_target = target_pos - current_pos
-        direction_to_target[2] = 0
-        direction_to_target /= np.linalg.norm(direction_to_target) + 1e-6
-        distance_to_target = np.linalg.norm(direction_to_target)
-        direction_to_target /= (distance_to_target + 1e-6)  # Normalize
 
         future_obstacle_pos = current_pos[:2] + obstacle_velocity * 0.5
-        print(f"Predicted Obstacle Future Position: {future_obstacle_pos}")
-        # 🔹 Check if the moving obstacle is in the drone's path
+        # check if the moving obstacle is in the drone's path
         obstacle_ahead = (future_obstacle_pos[0] > current_pos[0]) and (
                 np.linalg.norm(future_obstacle_pos - current_pos[:2]) < 3.0)
 
@@ -113,9 +127,9 @@ class ExpertPolicy:
         current_y = state[1]
         obstacle_center = (left_edge + right_edge) / 2
 
-        # 🛑 **Moving Obstacle Avoidance**
+        # -- Moving Obstacle Avoidance --
         if obstacle_ahead and moving_towards_drone:
-            print("⚠️ Moving obstacle detected in path! Adjusting route.")
+            print("Moving obstacle detected in path! Adjusting route.")
             if self.moving_avoid_direction is None:  # Choose direction only once
 
                 if right_free_space > 0.5:
@@ -130,12 +144,10 @@ class ExpertPolicy:
 
                 # Cooldown to prevent rapid switching
 
-            # ✅ Execute Moving Obstacle Avoidance
+            # Execute Moving Obstacle Avoidance
             if self.moving_avoid_direction == "right":
-                print("movv")
                 action = np.array([0, -1, 0])  # Move right
             elif self.moving_avoid_direction == "left":
-                print("mov")
                 action = np.array([0, 1, 0])  # Move left
             elif self.moving_avoid_direction == "stop":
                 action = np.array([-0.5, 0, 0])  # Slow down
@@ -149,7 +161,7 @@ class ExpertPolicy:
                 else:
                     self.static_avoid_direction = "stop"
 
-                # ✅ Step 2: Execute the chosen action
+                # execute the chosen action
             if self.static_avoid_direction == "right":
                 action = np.array([0, -1, 0])  # Move right
                 print("Avoiding obstacle! Moving Right.")
@@ -180,14 +192,14 @@ class ExpertPolicy:
         return action
 
 
-class ExpertBlendPolicy(ActorCriticPolicy):
+class ExpertBlendPolicy(SACPolicy):
     def __init__(self, *args, expert_policy=None, blend_ratio=0.8, **kwargs):
         super().__init__(*args, **kwargs)
         self.expert_policy = expert_policy
         self.blend_ratio = blend_ratio
 
     def forward(self, obs, deterministic=False):
-        action_rl, _ = super().forward()(obs, deterministic=deterministic)
+        action_rl, _ = super()._predict(obs, deterministic=deterministic)
 
         # Convert obs to numpy for expert
         obs_np = obs.cpu().numpy() if isinstance(obs, torch.Tensor) else obs
@@ -292,7 +304,7 @@ def train(device: str = "auto"):
         n_steps=N_STEPS,
         batch_size=BATCH_SIZE,
         gamma=GAMMA,
-        policy_kwargs=dict(expert_policy=expert, blend_ratio=0.8),
+        policy_kwargs=dict(expert_policy=expert_policy, blend_ratio=0.8),
         ent_coef=ENTROPY_COEF,
         tensorboard_log=None,
         verbose=1,
@@ -354,7 +366,7 @@ def train(device: str = "auto"):
 
         # ---------- Train this stage ----------
         model.learn(
-            total_timesteps=stage_steps,
+            total_timesteps=30, # change back to stage_steps
             reset_num_timesteps=False,
             callback=callbacks,
         )
@@ -373,8 +385,54 @@ def train(device: str = "auto"):
 
     train_env.close()
 
+# def debug_env_steps():
+#     env = create_env(
+#         DEFAULT_NUM_DRONES,
+#         active_drones = 1,
+#         num_obstacles = 0,
+#         world_scale = 1.0,
+#     )
+#
+#     obs = env.reset()
+#
+#
+#     print("\nOBS SHAPE:", obs.shape)
+#
+#     print("FIRST OBS:\n", obs)
+#
+#     """Prints full observation for each drone."""
+#     np.set_printoptions(precision=3, suppress=True, linewidth=200, threshold=1000)  # Show full array
+#
+#     for drone_idx, state in enumerate(obs):
+#         print(f"\n=== Drone {drone_idx} ===")
+#         for i, val in enumerate(state):
+#             print(f"{i:03d}: {val}")
+#
+#     def inspect_state(state):
+#         print("Position:", state[:3])
+#         print("Target:", state[3:6])
+#         print("Front LIDAR:", state[6])
+#         print("Left LIDAR:", state[7])
+#         print("Right LIDAR:", state[8])
+#         print("Full LIDAR slice 6–50:", state[6:50])
+#
+#     inspect_state(obs[0])
+#
+#
+#     for i in range(5):
+#         random_action = [env.action_space.sample()]
+#         obs,reward, done, info = env.step(random_action)
+#
+#         print(f"\n--- step {i} ----")
+#         print("OBS:", obs)
+#         print("REWARD:", reward)
+#         print("DONE:", done)
+#
+#     env.close()
+
 
 if __name__ == "__main__":
+    # debug_env_steps()
     t0 = time.time()
     train(device="auto")
     print(f"Training completed in {time.time() - t0:.2f} seconds")
