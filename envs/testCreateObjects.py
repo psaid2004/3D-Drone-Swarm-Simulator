@@ -1,5 +1,6 @@
-import pybullet as p
-import pybullet_data
+import pybullet as p # the physics engine API (loading URDFs, stepping simulation, forces, positions).
+import pybullet_data # gives a path to built-in assets
+from pathlib import Path
 import time
 import numpy as np
 from createObjects import *
@@ -56,7 +57,13 @@ drone_start_pos = [0, 0, 0.5]  # half a meter above ground
 drone_start_ori = p.getQuaternionFromEuler([0, 0, 0])
 
 # Use CF2X drone URDF from gym-pybullet-drones
-drone_id = p.loadURDF("C:/Users/psaid/PycharmProjects/gym-pybullet-drones/gym_pybullet_drones/assets/cf2p.urdf", drone_start_pos, drone_start_ori)
+PROJECT_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = PROJECT_DIR / "assets"
+URDF_PATH  = ASSETS_DIR / "cf2p.urdf"
+p.setAdditionalSearchPath(str(ASSETS_DIR))
+print(str(URDF_PATH))
+
+drone_id = p.loadURDF(str(URDF_PATH), drone_start_pos, drone_start_ori)
 
 
 
@@ -68,7 +75,7 @@ target_z = 1.0  # target hover height in meters
 # -------------------------------
 # 5️⃣ Simulation loop
 # -------------------------------
-for t in range(2000):
+for t in range(8000):
 
     for id,path in dynamicObstacles.items():
         x_start = path[0]
