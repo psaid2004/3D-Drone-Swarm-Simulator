@@ -18,12 +18,12 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 dynamicObstacles = dict()
 
-x_start = -2
-x_end = 2
+start = -2
+end = 2
 speed = 0.01  # meters per simulation step
 direction = 1  # 1 = forward, -1 = backward
 
-pathParams = [x_start, x_end, speed, direction]
+pathParams = {"axis" : 0, "min": start, "max": end, "speed":speed, "direction" :direction}
 
 start_position = [2,0,1]
 size = 1
@@ -31,15 +31,17 @@ orientation = [0,0,0]
 obs_id, obs_path = create_dynamic_cylinder(start_position, size, pathParams)
 dynamicObstacles[obs_id] = obs_path
 
+create_static_wall([0,3,3],1, [0,0,1.57])
 
-x_start = -2
-x_end = 1
+
+start = -2
+end = 1
 speed = 0.01  # meters per simulation step
 direction = -1  # 1 = forward, -1 = backward
 
-pathParams = [x_start, x_end, speed, direction]
+pathParams = {"axis" : 0, "min": start, "max": end, "speed":speed, "direction" :direction}
 
-obs_id, obs_path = create_dynamic_wall([-2, -2, 1], size, pathParams, [0,0,1.57])
+obs_id, obs_path = create_dynamic_wall([-2, -2, 1], size, pathParams, [0.2,0,1.57])
 dynamicObstacles[obs_id] = obs_path
 
 
@@ -70,27 +72,8 @@ target_z = 1.0  # target hover height in meters
 # -------------------------------
 for t in range(2000):
 
-    for id,path in dynamicObstacles.items():
-        x_start = path[0]
-        x_end = path[1]
-        speed = path[2]
-        direction = path[3]
-
-        pos, orn = p.getBasePositionAndOrientation(id)
-        current_x = pos[0]
-        current_y = pos[1]
-        current_z = pos[2]
-
-        current_x += speed * direction
-
-        if current_x >= x_end or current_x <= x_start:
-            path[3] *= -1
-
-        p.resetBasePositionAndOrientation(
-            id,
-            [current_x, current_y, current_z],
-            orn
-        )
+    for obj_id, path in dynamicObstacles.items():
+        update_single_axis_obstacle(obj_id, path)
 
     # Get current drone position and velocity
     pos, ori = p.getBasePositionAndOrientation(drone_id)

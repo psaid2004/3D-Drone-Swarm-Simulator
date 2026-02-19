@@ -46,13 +46,15 @@ def create_static_cylinder(startPosition, scale, orientation=[0,0,0]):
 
 # --------------------------------------------- Dynamic Obstacles ---------------------------------
 
-import pybullet as p
-import pybullet_data
-import time
-import numpy as np
 
-# All functions take pathParameters which is a [x_start, x_end, speed, direction = 1/forward or -1/backward]
-
+# All functions take pathParameters which is a
+# path = {
+#     "axis": 0,          # 0 = X, 1 = Y, 2 = Z
+#     "min": -2.0,
+#     "max":  2.0,
+#     "speed": 0.01,
+#     "direction": 1
+# }
 
 # startPosition = [X, Y, Z]
 # scale =number x, that will be used to x*[Width(X), Depth(Y), Height(Z)]
@@ -98,3 +100,19 @@ def create_dynamic_cylinder(startPosition, scale, pathParameters, orientation=[0
     cylinder_visual = p.createVisualShape(p.GEOM_CYLINDER, radius=scaled_radius, length=scaled_height, rgbaColor=[1, 0, 0, 1])
     cylinder_id = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=cylinder_collision,baseVisualShapeIndex=cylinder_visual, basePosition=startPosition, baseOrientation=p.getQuaternionFromEuler(orientation))
     return cylinder_id, pathParameters
+
+def update_single_axis_obstacle(obj_id, path):
+    pos, orn = p.getBasePositionAndOrientation(obj_id)
+    pos = list(pos)
+
+    axis = path["axis"]
+    pos[axis] += path["speed"] * path["direction"]
+
+    if pos[axis] > path["max"]:
+        pos[axis] = path["max"]
+        path["direction"] *= -1
+    elif pos[axis] < path["min"]:
+        pos[axis] = path["min"]
+        path["direction"] *= -1
+
+    p.resetBasePositionAndOrientation(obj_id, pos, orn)
