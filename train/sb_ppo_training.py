@@ -48,7 +48,7 @@ MODEL_DIR = MODELS_DIR  # keep identical behavior, just sourced from config
 # =============================================================================
 # PPO HYPERPARAMETERS (unchanged)
 # =============================================================================
-N_STEPS = 512
+N_STEPS = 512           #TODO: TUNE SO DRONES CAN REACH TARGET
 N_ENVS = 1
 GAMMA = 0.99
 
