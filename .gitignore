@@ -8,3 +8,6 @@ __pycache__/
 .DS_Store
 models/
 *.zip
+
+
+my_notes.py

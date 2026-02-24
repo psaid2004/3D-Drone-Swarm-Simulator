@@ -1,7 +1,7 @@
 # train/evaluation/test_run.py
 """Interactive smoke-test for the 3D PettingZoo wrapper.
 
-Defaults come from config/experiment.py
+Defaults come from config/defaults.py
 Run:
   python -m train.evaluation.test_run
 """
@@ -9,7 +9,7 @@ Run:
 import time
 import numpy as np
 
-from config.experiment import (
+from config.defaults import (
     DEFAULT_NUM_DRONES,
     DEFAULT_NUM_OBSTACLES,
     DEFAULT_MAX_STEPS,

@@ -5,21 +5,16 @@ This file defines DEFAULTS (constants). Training / evaluation scripts import the
 # =============================================================================
 # Core environment defaults
 # =============================================================================
-DEFAULT_NUM_DRONES = 5
-DEFAULT_NUM_OBSTACLES = 4
-DEFAULT_MAX_STEPS = 510
+# constants used if curriculum not called, i.e. for test runs
+DEFAULT_NUM_DRONES = 2
+DEFAULT_NUM_OBSTACLES = 0
+DEFAULT_N_STEPS = 512
 
 DEFAULT_LIDAR = True
-DEFAULT_RENDER_MODE = None  # e.g. None or "human"
-
-# 3D world / motion scaling (used by wrappers/pz_parallel_3d.py)
-DEFAULT_WORLD_SCALE = 2.0
-DEFAULT_VEL_SCALE = 6.0
-DEFAULT_TAKEOFF_STEPS = 40
-DEFAULT_TAKEOFF_VZ = 1.2
+DEFAULT_RENDER_MODE = None  # if "human" -> shows environment
 
 # =============================================================================
-# Swarm task defaults
+# Swarm defaults
 # =============================================================================
 DEFAULT_SHARED_TARGET = True
 DEFAULT_SWARM_MAX_SEP = 2.0
@@ -28,21 +23,15 @@ DEFAULT_TERMINATE_ON_COHESION_BREAK = False
 DEFAULT_TERMINATE_ON_SEPARATION = False
 
 # =============================================================================
-# Lidar defaults (3D wrapper)
+# Lidar defaults
 # =============================================================================
-LIDAR_NUM_RAYS = 72
+LIDAR_NUM_RAYS = 24  # TODO INCREASE THIS LATER
 LIDAR_NUM_LAYERS = 5
-LIDAR_RANGE = 6.0
-LIDAR_VERTICAL_FOV_DEG = 45.0
-LIDAR_HORIZONTAL_FOV_DEG = 360.0
+LIDAR_RANGE = 6.0  # meters ahead
+LIDAR_VERTICAL_FOV_DEG = 45.0  # ±22.5° up/down
+LIDAR_HORIZONTAL_FOV_DEG = 360.0  # full circle
 LIDAR_NOISE_STD = 0.0
 
 # defaults per script (train vs test)
 LIDAR_SHOW_RAYS_TRAIN = False
 LIDAR_SHOW_RAYS_TEST = True
-
-# =============================================================================
-# Paths / naming
-# =============================================================================
-MODEL_PREFIX = "sac_"
-MODELS_DIR = "models"  # relative to project root

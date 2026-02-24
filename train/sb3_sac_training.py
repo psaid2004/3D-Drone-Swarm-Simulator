@@ -21,7 +21,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.sac.policies import SACPolicy
 
 from config.curriculum import SAC_CURRICULUM
-from config.experiment import (
+from config.defaults import (
     DEFAULT_LIDAR,
     DEFAULT_SHARED_TARGET,
     DEFAULT_SWARM_MAX_SEP,
