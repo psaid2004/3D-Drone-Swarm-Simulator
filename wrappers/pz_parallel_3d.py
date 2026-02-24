@@ -207,7 +207,7 @@ class DroneSwarm3D(ParallelEnv):
 
         return obs0, info_dict
 
-
+    # ----- OBSERVATION VECTOR FUNCTIONS -----
     def _build_obs_dict(self) -> Dict[str, np.ndarray]:
         """Build a dictionary containing every drone's observation space vector"""
 
@@ -253,6 +253,37 @@ class DroneSwarm3D(ParallelEnv):
                 obs_dict[a] = base
 
         return obs_dict
+
+
+    def _active_positions(self) -> np.ndarray:
+        """ Retrieve all the active drone positions. """
+        pos = np.zeros((self.active_drones, 3), dtype=np.float32)
+        for i in range(self.active_drones):
+            state = self._env._getDroneStateVector(i)
+            pos[i] = np.array(state[0:3], dtype=np.float32)
+
+        return pos
+
+
+    def _swarm_centroid(self, positions: np.ndarray) -> np.ndarray:
+        """ Compute the swarm centroid. """
+        if positions.shape[0] == 0:
+            return np.zeros(3, dtype=np.float32)
+
+        return positions.mean(axis=0).astype(np.float32)
+
+
+    def _nearest_teammate_vector(self, i: int, positions: np.ndarray) -> np.ndarray:
+        """ Retrieve the vector to the nearest teammate."""
+        if positions.shape[0] <= 1:
+            return np.zeros(3, dtype=np.float32)
+        pi = positions[i]
+        d = positions - pi[None, :]
+        dist = np.linalg.norm(d, axis=1) + 1e-8
+        dist[i] = 1e9
+        j = int(np.argmin(dist))
+
+        return (positions[j] - pi).astype(np.float32)
 
 
     def write_ep_to_csv(self):
@@ -429,6 +460,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def _spawn_target_markers(self) -> None:
+        """ Spawn the target markers on the GUI. """
         if self._p is None or self._targets is None or self.render_mode != "human":
             return
         p = self._p
@@ -493,6 +525,8 @@ class DroneSwarm3D(ParallelEnv):
 
     # ------ OBSTACLE FUNCTIONS --------
     def _spawn_obstacles(self) -> None:
+        """ Spawn the obstacles. """
+
         self._obstacle_ids = []
         self._obstacle_base_pos = None
         self._obstacle_phase = None
@@ -529,6 +563,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def _update_obstacles(self) -> None:
+        """ Update the dynamic obstacles. """
         if (
                 (not OBSTACLE_DYNAMIC)
                 or self._p is None
@@ -638,74 +673,23 @@ class DroneSwarm3D(ParallelEnv):
         self._lidar_line_ids = {}
 
 
-    # ---------------- swarm helpers ----------------
-    def _active_positions(self) -> np.ndarray:
-        pos = np.zeros((self.active_drones, 3), dtype=np.float32)
-        for i in range(self.active_drones):
-            state = self._env._getDroneStateVector(i)
-            pos[i] = np.array(state[0:3], dtype=np.float32)
-        return pos
-
-    def _swarm_centroid(self, positions: np.ndarray) -> np.ndarray:
-        if positions.shape[0] == 0:
-            return np.zeros(3, dtype=np.float32)
-        return positions.mean(axis=0).astype(np.float32)
-
-    def _nearest_teammate_vector(self, i: int, positions: np.ndarray) -> np.ndarray:
-        if positions.shape[0] <= 1:
-            return np.zeros(3, dtype=np.float32)
-        pi = positions[i]
-        d = positions - pi[None, :]
-        dist = np.linalg.norm(d, axis=1) + 1e-8
-        dist[i] = 1e9
-        j = int(np.argmin(dist))
-        return (positions[j] - pi).astype(np.float32)
-
-    def _pairwise_sep_stats(self, positions: np.ndarray) -> Tuple[float, float, bool, bool]:
-        """
-        Computes:
-          max_d   = maximum pairwise distance
-          min_d   = minimum pairwise distance
-          too_far = any pair exceeds swarm_max_sep
-          too_close = any pair below swarm_min_sep
-        """
-        n = positions.shape[0]
-        if n <= 1:
-            return 0.0, 1e9, False, False
-
-        max_d = 0.0
-        min_d = 1e9
-        too_far = False
-        too_close = False
-
-        for i in range(n):
-            for j in range(i + 1, n):
-                d = float(np.linalg.norm(positions[i] - positions[j]))
-                max_d = max(max_d, d)
-                min_d = min(min_d, d)
-                if d > self.swarm_max_sep:
-                    too_far = True
-                if d < self.swarm_min_sep:
-                    too_close = True
-
-        return max_d, min_d, too_far, too_close
-
-    # ---------------- lidar ----------------
+    # ------ LIDAR METHODS ------
     def _precompute_lidar_dirs_body(self) -> np.ndarray:
-        h_fov = np.deg2rad(max(1e-6, self.lidar_horizontal_fov_deg))
-        v_fov = np.deg2rad(max(0.0, self.lidar_vertical_fov_deg))
 
-        if self.lidar_horizontal_fov_deg >= 359.0:
-            az = np.linspace(0.0, 2.0 * np.pi, num=self.lidar_num_rays, endpoint=False,
+        h_fov = np.deg2rad(max(1e-6, LIDAR_HORIZONTAL_FOV_DEG))
+        v_fov = np.deg2rad(max(0.0, LIDAR_VERTICAL_FOV_DEG))
+
+        if LIDAR_HORIZONTAL_FOV_DEG >= 359.0:
+            az = np.linspace(0.0, 2.0 * np.pi, num=LIDAR_NUM_RAYS, endpoint=False,
                              dtype=np.float32)
         else:
-            az = np.linspace(-0.5 * h_fov, 0.5 * h_fov, num=self.lidar_num_rays, endpoint=True,
+            az = np.linspace(-0.5 * h_fov, 0.5 * h_fov, num=LIDAR_NUM_RAYS, endpoint=True,
                              dtype=np.float32)
 
-        if self.lidar_num_layers <= 1 or self.lidar_vertical_fov_deg <= 1e-6:
+        if LIDAR_NUM_LAYERS <= 1 or LIDAR_VERTICAL_FOV_DEG <= 1e-6:
             el = np.array([0.0], dtype=np.float32)
         else:
-            el = np.linspace(-0.5 * v_fov, 0.5 * v_fov, num=self.lidar_num_layers, endpoint=True,
+            el = np.linspace(-0.5 * v_fov, 0.5 * v_fov, num=LIDAR_NUM_LAYERS, endpoint=True,
                              dtype=np.float32)
 
         dirs = []
@@ -719,9 +703,12 @@ class DroneSwarm3D(ParallelEnv):
 
         dirs = np.array(dirs, dtype=np.float32)
         n = np.linalg.norm(dirs, axis=1, keepdims=True) + 1e-8
+
         return (dirs / n).astype(np.float32)
 
+
     def _rotmat_from_quat(self, qxyzw: np.ndarray) -> np.ndarray:
+
         x, y, z, w = [float(v) for v in qxyzw]
         xx = x * x
         yy = y * y
@@ -732,6 +719,7 @@ class DroneSwarm3D(ParallelEnv):
         wx = w * x
         wy = w * y
         wz = w * z
+
         return np.array(
             [
                 [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz), 2.0 * (xz + wy)],
@@ -741,7 +729,9 @@ class DroneSwarm3D(ParallelEnv):
             dtype=np.float32,
         )
 
+
     def _lidar_scan(self, drone_idx: int, pos: np.ndarray) -> np.ndarray:
+
         if (not self.lidar) or (self._p is None) or (self._lidar_dim <= 0):
             return np.zeros((0,), dtype=np.float32)
 
@@ -761,7 +751,7 @@ class DroneSwarm3D(ParallelEnv):
 
         dirs_world = (R @ self._lidar_dirs_body.T).T
         ray_from = np.repeat(origin[None, :], dirs_world.shape[0], axis=0)
-        ray_to = ray_from + dirs_world * self.lidar_range
+        ray_to = ray_from + dirs_world * LIDAR_RANGE
 
         try:
             results = self._call_physics(
@@ -784,16 +774,16 @@ class DroneSwarm3D(ParallelEnv):
             except Exception:
                 pass
 
-        if self.lidar_noise_std > 0.0:
+        if LIDAR_NOISE_STD > 0.0:
             hit_frac = np.clip(
-                hit_frac + self.rng.normal(0.0, self.lidar_noise_std, size=hit_frac.shape).astype(
+                hit_frac + self.rng.normal(0.0, LIDAR_NOISE_STD, size=hit_frac.shape).astype(
                     np.float32),
                 0.0,
                 1.0,
             )
 
         # GUI debug drawing
-        if self.render_mode == "human" and self.lidar_show_rays:
+        if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST:
             old = self._lidar_line_ids.get(drone_idx, [])
             for lid in old:
                 self._call_gui(p.removeUserDebugItem, lid)
@@ -817,14 +807,23 @@ class DroneSwarm3D(ParallelEnv):
         return hit_frac.astype(np.float32)
 
 
-
+    # ----- STEP FUNCTION ------
     def step(self, actions: Dict[str, np.ndarray]):
+        """
+        Args:
+            actions: ndarray, shape (n, 4);
+                    (vx_dir, vy_dir, vz_dir, speed)
+
+        Returns:
+            obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+        """
+
         self._step_count += 1
         self._update_obstacles()
 
         # ---------------------------------------------------------------------
-        # Freeze drones that already reached:
-        # - IMPORTANT: to make speed=0 in your mapping, we must set u[3] = -1
+        # Freeze drones that already reached the goal:
+        # - IMPORTANT: to make speed=0 in the mapping, we must set u[3] = -1
         #   because u[3] in [-1,1] maps to speed01 in [0,1] by:
         #     speed01 = (u[3] + 1) * 0.5
         # ---------------------------------------------------------------------
@@ -839,6 +838,7 @@ class DroneSwarm3D(ParallelEnv):
         # ---------------------------------------------------------------------
         # Convert actions -> VelocityAviary expected format [dir_x, dir_y, dir_z, speed]
         # ---------------------------------------------------------------------
+        # build the action
         act = np.zeros((self.num_drones, 4), dtype=np.float32)
 
         for i, a in enumerate(self.possible_agents):
@@ -852,6 +852,7 @@ class DroneSwarm3D(ParallelEnv):
 
             if a in actions:
                 u = np.array(actions[a], dtype=np.float32).reshape(-1)
+                # clip to valid range
                 u = np.clip(u[:4], -1.0, 1.0)
 
                 v_dir = u[0:3].astype(np.float32)
@@ -863,11 +864,11 @@ class DroneSwarm3D(ParallelEnv):
 
                 # map u[3] from [-1,1] -> [0,1]
                 speed01 = float((u[3] + 1.0) * 0.5)
-                speed = self.vel_scale * speed01
+                speed = VEL_SCALE * speed01
 
                 # small constant vertical bias if you want
                 dir_vec = dir_vec.copy()
-                dir_vec[2] = float(dir_vec[2] + self.hover_bias_vz)
+                dir_vec[2] = float(dir_vec[2] + HOVER_BIAS_VZ)
 
                 # renormalize direction after bias
                 nn = float(np.linalg.norm(dir_vec))
@@ -875,9 +876,9 @@ class DroneSwarm3D(ParallelEnv):
                     dir_vec = dir_vec / nn
 
             # takeoff override
-            if self._step_count <= self.takeoff_steps:
+            if self._step_count <= TAKEOFF_STEPS:
                 dir_vec = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-                speed = float(abs(self.takeoff_vz))
+                speed = float(abs(TAKEOFF_VZ))
 
             act[i, 0:3] = dir_vec
             act[i, 3] = float(speed)
@@ -905,16 +906,16 @@ class DroneSwarm3D(ParallelEnv):
         # Swarm constraint:
         # - this does NOT terminate unless you enable the flags below.
         # ---------------------------------------------------------------------
-        swarm_term = (too_far and self.terminate_on_cohesion_break) or (
-                too_close and self.terminate_on_separation)
+        swarm_term = (too_far and DEFAULT_TERMINATE_ON_COHESION_BREAK) or (
+                too_close and DEFAULT_TERMINATE_ON_SEPARATION)
 
         cohesion_pen = 0.0
-        if positions.shape[0] > 1 and max_sep > self.swarm_max_sep:
-            cohesion_pen = -self.cohesion_penalty_k * (max_sep - self.swarm_max_sep)
+        if positions.shape[0] > 1 and max_sep > DEFAULT_SWARM_MAX_SEP:
+            cohesion_pen = - COHESION_PEN * (max_sep - DEFAULT_SWARM_MAX_SEP)
 
         sep_pen = 0.0
-        if positions.shape[0] > 1 and min_sep < self.swarm_min_sep:
-            sep_pen = -self.separation_penalty_k * (self.swarm_min_sep - min_sep)
+        if positions.shape[0] > 1 and min_sep < DEFAULT_SWARM_MIN_SEP:
+            sep_pen = -SEPARATION_PEN * (DEFAULT_SWARM_MIN_SEP - min_sep)
 
         # ---------------------------------------------------------------------
         # Update reached_once flags (persistent reach memory)
@@ -1028,6 +1029,36 @@ class DroneSwarm3D(ParallelEnv):
             }
 
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+
+    def _pairwise_sep_stats(self, positions: np.ndarray) -> Tuple[float, float, bool, bool]:
+        """
+        Check every unique drone pair and retrieve swarm drone stats.
+        Computes:
+          max_d   = maximum pairwise distance
+          min_d   = minimum pairwise distance
+          too_far = any pair exceeds swarm_max_sep
+          too_close = any pair below swarm_min_sep
+        """
+        n = positions.shape[0]
+        if n <= 1:
+            return 0.0, 1e9, False, False
+
+        max_d = 0.0
+        min_d = 1e9
+        too_far = False
+        too_close = False
+
+        for i in range(n):
+            for j in range(i + 1, n):
+                d = float(np.linalg.norm(positions[i] - positions[j]))
+                max_d = max(max_d, d)
+                min_d = min(min_d, d)
+                if d > DEFAULT_SWARM_MAX_SEP:
+                    too_far = True
+                if d < DEFAULT_SWARM_MIN_SEP:
+                    too_close = True
+
+        return max_d, min_d, too_far, too_close
 
     def render(self):
         return None
