@@ -10,61 +10,13 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 
 
 class DroneSwarm3D(ParallelEnv):
-    metadata = {"name": "drone_swarms_3d_v0"}
+    metadata = {"name": "drone_swarms_3d_v0", "render_modes": ["human", "rgb_array"]}
 
-    def __init__(
-            self,
-            num_drones: int = 2,
-            active_drones: Optional[int] = None,
-            num_obstacles: int = 4,
-            lidar: bool = False,
-            max_steps: int = 500,
-            render_mode: Optional[str] = None,
-            world_scale: float = 2.0,  # too large -> harder to reach targets
-            seed: Optional[int] = None, #
-            gravity: float = -9.81,
-            # --- motion helpers ---
-            vel_scale: float = 15.0,  # too small -> may not reach target
-            takeoff_steps: int = 60,
-            takeoff_vz: float = 1.0,
-            hover_bias_vz: float = 0.0,
-            # --- obstacle params ---
-            obstacle_radius: float = 0.30,
-            obstacle_height_range: Tuple[float, float] = (0.5, 1.8),
-            obstacle_dynamic: bool = False,
-            obstacle_drift_amp: float = 0.8,
-            obstacle_drift_omega: float = 0.35,
-            # --- safety / reward ---
-            collision_distance: float = 0.12,
-            collision_penalty: float = 200.0,
-            near_obstacle_penalty_k: float = 0.6,
-            # --- goal / shaping ---
-            goal_radius: float = 0.8,
-            goal_bonus: float = 80.0,
-            progress_k: float = 8.0,
-            time_penalty: float = 0.05,
-            ctrl_penalty_k: float = 0.003,
-            # --- swarm cohesion / separation ---
-            swarm_max_sep: float = 2.0,
-            swarm_min_sep: float = 0.25,
-            cohesion_penalty_k: float = 50.0,
-            separation_penalty_k: float = 30.0,
-            terminate_on_cohesion_break: bool = False,
-            terminate_on_separation: bool = False,
-            # --- shared target ---
-            shared_target: bool = True,
-            # --- lidar params ---
-            lidar_num_rays: int = 72,
-            lidar_num_layers: int = 5,
-            lidar_range: float = 6.0,
-            lidar_vertical_fov_deg: float = 45.0,
-            lidar_horizontal_fov_deg: float = 360.0,
-            lidar_noise_std: float = 0.0,
-            lidar_show_rays: bool = True,
-            # --- debug ---
-            debug: bool = False,
-    ):
-        # ---------------- basic config ----------------
+    def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None,
+                 num_obstacles: int = 5, lidar: bool = False, max_steps: int = 1000,
+                 render_mode: Optional[str] = None, world_scale: float = 10.0,
+                 seed: Optional[int] = None):
+
         self.num_drones = int(num_drones)
         self.active_drones = int(active_drones) if active_drones is not None else self.num_drones
         self.active_drones = max(1, min(self.active_drones, self.num_drones))
@@ -74,7 +26,6 @@ class DroneSwarm3D(ParallelEnv):
         self.max_steps = int(max_steps)
         self.render_mode = render_mode
         self.world_scale = float(world_scale)
-        self.gravity = float(gravity)
 
         self.vel_scale = float(vel_scale)
         self.takeoff_steps = int(takeoff_steps)
