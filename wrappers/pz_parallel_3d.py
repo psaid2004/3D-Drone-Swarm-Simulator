@@ -21,7 +21,7 @@ class DroneSwarm3D(ParallelEnv):
             max_steps: int = 500,
             render_mode: Optional[str] = None,
             world_scale: float = 2.0,  # too large -> harder to reach targets
-            seed: Optional[int] = None,
+            seed: Optional[int] = None, #
             gravity: float = -9.81,
             # --- motion helpers ---
             vel_scale: float = 15.0,  # too small -> may not reach target
