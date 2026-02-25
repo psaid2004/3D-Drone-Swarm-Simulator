@@ -90,7 +90,7 @@ AWAY_OBS_COEF = 1.5
 eps = 1e-8
 
 # TODO GROUP CORRECTLY
-COHESION_PEN = 50.0,
+COHESION_PEN = 50.0
 SEPARATION_PEN = 30.0
 
 # --- motion helpers ---
@@ -98,3 +98,7 @@ VEL_SCALE = 15.0,  # too small -> may not reach target
 TAKEOFF_STEPS = 60
 TAKEOFF_VZ = 1.0
 HOVER_BIAS_VZ = 0.0
+
+GOAL_RADIUS = 0 # TODO SET VALUES
+GOAL_BONUS = 0
+CNTRL_PEN = 0

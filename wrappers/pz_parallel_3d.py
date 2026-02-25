@@ -61,6 +61,8 @@ class DroneSwarm3D(ParallelEnv):
             record=False,
         )
 
+        self._env.SPEED_LIMIT = 2.0 # m/s
+
         self._p = None
         self._client_id = None
         self._drone_ids: List[int] = []
@@ -132,7 +134,7 @@ class DroneSwarm3D(ParallelEnv):
                     break
 
             try:
-                self._call_physics(p.setGravity, 0, 0, 9.8)
+                self._call_physics(p.setGravity, 0, 0, -9.8)
             except Exception:
                 pass
 
@@ -184,9 +186,9 @@ class DroneSwarm3D(ParallelEnv):
         self._reached_once = np.zeros((self.num_drones,), dtype=np.bool_)
 
         # reset environment
+        self._spawn_obstacles()
         self._targets = self._make_targets()
         self._clear_debug_visuals()
-        self._spawn_obstacles()
         self._spawn_target_markers()
 
         # bookkeeping
@@ -429,7 +431,7 @@ class DroneSwarm3D(ParallelEnv):
                     pass
 
             obs_pos = np.array(obs_pos, dtype=np.float32)
-            if self.num_obstacles > 0:
+            if len(obs_pos) > 0:
                 if np.any(np.linalg.norm(obs_pos - t, axis=-1) < (OBSTACLE_RADIUS + min_dist)):
                     continue
 
@@ -876,8 +878,8 @@ class DroneSwarm3D(ParallelEnv):
                 dir_vec = v/n if n > 1e-6 else dir_vec
 
                 # speed mapping: u[3] from [-1,1] -> [0,1 (vel_scale)]
-                speed01 = float((u[3] + 1.0) * 0.5)
-                speed = VEL_SCALE * speed01
+                speed = float((u[3] + 1.0) * 0.5)
+                # speed = VEL_SCALE * speed01  # fraction, NOT m/s
 
                 # hover bias to fight gravity drift
                 dir_vec[2] += HOVER_BIAS_VZ
@@ -938,8 +940,8 @@ class DroneSwarm3D(ParallelEnv):
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
-            if dist < self.goal_radius:
-                reached_now[i] = True # TODO THIS GOAL_RADIUS IS NOT DEFINED ANYWHERE
+            if dist < GOAL_RADIUS:
+                reached_now[i] = True
                 self._reached_once[i] = True
 
         just_reached = np.logical_and(reached_now, np.logical_not(was_reached))
@@ -953,8 +955,8 @@ class DroneSwarm3D(ParallelEnv):
 
             if i >= self.active_drones:
                 reward_dict[a] = 0.0
-                term_dict[a] = True
                 trunc_dict[a] = time_limit
+                term_dict[a] = episode_done
                 continue
 
             pos = obs_dict[a][0:3]
@@ -969,8 +971,12 @@ class DroneSwarm3D(ParallelEnv):
             r_progress = PROG_COEF * (prev - dist)
             r_goal_dist = -0.15 * dist
             r_time = -TIME_PEN
-            r_ctrl = -self.ctrl_penalty_k * float(np.linalg.norm(act[i])) # TODO FIGURE OUT WHAT CONTROL PENALTY IS?
-            r_near = -NEAR_OBS_PEN / max(float(np.linalg.norm(obs_dict[a][9:12])), 0.10)
+            r_ctrl = -CNTRL_PEN * float(np.linalg.norm(act[i]))
+            if len(self._obstacle_ids) > 0:
+                d_obs = float(np.linalg.norm(obs_dict[a][9:12]))
+                r_near = -NEAR_OBS_PEN / max(d_obs, 0.10)
+            else:
+                r_near = 0.0
 
             r = (
                     r_progress +
@@ -984,7 +990,7 @@ class DroneSwarm3D(ParallelEnv):
 
             # goal bonus (occurs only once): when it first becomes reached
             if just_reached[i]:
-                r += self.goal_bonus # TODO NOT DEFINED ANYWHERE
+                r += GOAL_BONUS
 
             if collided:
                 r -= COLLISION_PEN
@@ -1034,6 +1040,15 @@ class DroneSwarm3D(ParallelEnv):
             }
 
         self.agents = self.possible_agents[:]
+
+        step_mean_reward = float(np.mean([reward_dict[a] for a in self.possible_agents[:self.active_drones]]))
+        self.ep_rewards.append(step_mean_reward)
+
+        if collided:
+            self.collision_count += 1
+
+        # count “first time reach”
+        self.reached_total += int(np.sum(just_reached[:self.active_drones]))
 
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
 
