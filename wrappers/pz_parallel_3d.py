@@ -177,6 +177,8 @@ class DroneSwarm3D(ParallelEnv):
         self._env.reset()
         self._init_pybullet_handles()
         self._refresh_drone_ids_from_pybullet()
+        # retrieve and copy the drone spawn positions
+        self._spawn_positions = self._active_positions().copy()
 
         self.ep_done = False
         self.wall_hits = 0
@@ -306,6 +308,16 @@ class DroneSwarm3D(ParallelEnv):
         self.ep_idx += 1
         self.ep_rewards.clear()
 
+
+    def is_far_from_drones(self, point: np.ndarray, min_dist:float) -> bool:
+        """ Determine if potential obstacle spawn positions is far from the drone spawn positions."""
+        if self._spawn_positions is None:
+            return True
+        d = np.linalg.norm(self._spawn_positions - point, axis=1)
+
+        return np.all(d >= min_dist)
+
+
     # ----- PYBULLET CLIENT FUNCTIONS -----
     def _connected_ids(self) -> List[int]:
         """ Scan and return a list of all active PyBullet Client IDs (simulation connections) """
@@ -418,7 +430,7 @@ class DroneSwarm3D(ParallelEnv):
                 self.rng.uniform(0.8, 2.0)
             ], dtype=np.float32)
 
-            drone_positions = self._active_positions()
+            drone_positions = self._spawn_positions
             if np.any(np.linalg.norm(drone_positions - t, axis=1) < min_dist):
                 continue
 
@@ -543,21 +555,32 @@ class DroneSwarm3D(ParallelEnv):
 
         base_positions = []
         phases = []
+        candidate = []
 
         for _ in range(self.num_obstacles):
-            x = self.rng.uniform(-self.world_scale, self.world_scale)
-            y = self.rng.uniform(-self.world_scale, self.world_scale)
-            z = self.rng.uniform(OBSTACLE_HEIGHT_RANGE[0], OBSTACLE_HEIGHT_RANGE[1])
+
+            for i in range(1000):
+
+                x = self.rng.uniform(-self.world_scale, self.world_scale)
+                y = self.rng.uniform(-self.world_scale, self.world_scale)
+                z = self.rng.uniform(OBSTACLE_HEIGHT_RANGE[0], OBSTACLE_HEIGHT_RANGE[1])
+
+                candidate = np.array([x,y,z], dtype=np.float32)
+
+                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS + 0.4): # TODO ASK PEDRO ABOUT 0.4
+                    continue
+
+                break
 
             body = self._call_physics(
                 p.createMultiBody,
                 baseMass=0.0,
                 baseCollisionShapeIndex=col,
                 baseVisualShapeIndex=vis,
-                basePosition=[x, y, z],
+                basePosition=candidate.tolist(),
             )
             self._obstacle_ids.append(int(body))
-            base_positions.append([x, y, z])
+            base_positions.append(candidate.tolist())
             phases.append(self.rng.uniform(0.0, 2.0 * np.pi))
 
         self._obstacle_base_pos = np.array(base_positions, dtype=np.float32)
@@ -1048,7 +1071,7 @@ class DroneSwarm3D(ParallelEnv):
             if collisions[i]:
                 r -= COLLISION_PEN # full penalty to culprit
             elif np.any(collisions):
-                r = -0.2*COLLISION_PEN # small team penalty if one drone crashes
+                r -= 0.2 * COLLISION_PEN # small team penalty if one drone crashes
 
             reward_dict[a] = float(r)
             term_dict[a] = bool(self.dead[i] or episode_done) # allow only crashed drone to terminate
@@ -1099,8 +1122,7 @@ class DroneSwarm3D(ParallelEnv):
         step_mean_reward = float(np.mean([reward_dict[a] for a in self.possible_agents[:self.active_drones]]))
         self.ep_rewards.append(step_mean_reward)
 
-        if collisions[i]:
-            self.collision_count += 1
+        self.collision_count += int(np.sum(collisions[:self.active_drones]))
 
         # count “first time reach”
         self.reached_total += int(np.sum(just_reached[:self.active_drones]))
