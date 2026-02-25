@@ -32,7 +32,7 @@ class DroneSwarm3D(ParallelEnv):
         self.render_mode = render_mode
         self.world_scale = float(world_scale)
 
-        self.dead = np.zeros(self.num_drones, dtype=np.bool)
+        self.dead = np.zeros(self.num_drones, dtype=np.bool_)
         self.wall_hits = 0
         self.ep_done = False
         self.ep_idx = 0
@@ -613,42 +613,87 @@ class DroneSwarm3D(ParallelEnv):
         return d[idx].astype(np.float32)
 
 
-    def _check_collisions(self) -> bool:
-        """Collision check against obstacles and other drones. """
+    # def _check_collisions(self) -> bool:
+    #     """Collision check against obstacles and other drones. """
+    #     if self._p is None or len(self._drone_ids) == 0:
+    #         return False
+    #
+    #     p = self._p
+    #
+    #     thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
+    #     thresh_drone = COLLISION_DIST
+    #     active_ids = self._drone_ids[: self.active_drones] if len(
+    #         self._drone_ids) >= self.active_drones else self._drone_ids
+    #
+    #     # drone vs obstacle
+    #     if len(self._obstacle_ids) >0:
+    #         for did in active_ids:
+    #             for oid in self._obstacle_ids:
+    #                 try:
+    #                     pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=oid,
+    #                                              distance=thresh_obstacle)
+    #                     if pts and len(pts) > 0:
+    #                         return True
+    #                 except Exception:
+    #                     continue
+    #
+    #     # drone vs drone
+    #     for i, did1 in enumerate(active_ids):
+    #         for did2 in active_ids[i+1:]:
+    #             try:
+    #                 pts = self._call_physics(p.getClosestPoints, bodyA=did1, bodyB=did2,
+    #                                          distance=thresh_drone)
+    #                 if pts and len(pts) > 0:
+    #                     return True
+    #             except Exception:
+    #                 continue
+    #
+    #     return False
+
+
+    def check_collisions_per_drone(self):
+        """
+        Returns:
+            collided[i] is True if drone i collided with anything
+
+        """
+        collided = np.zeros(self.num_drones, dtype=np.bool_)
+
         if self._p is None or len(self._drone_ids) == 0:
-            return False
+            return collided
 
         p = self._p
+        active_ids = self._drone_ids[: self.active_drones]
 
         thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
         thresh_drone = COLLISION_DIST
-        active_ids = self._drone_ids[: self.active_drones] if len(
-            self._drone_ids) >= self.active_drones else self._drone_ids
 
         # drone vs obstacle
         if len(self._obstacle_ids) >0:
-            for did in active_ids:
+            for i, did in enumerate(active_ids):
                 for oid in self._obstacle_ids:
                     try:
                         pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=oid,
                                                  distance=thresh_obstacle)
                         if pts and len(pts) > 0:
-                            return True
+                            collided[i] = True
+                            break
                     except Exception:
                         continue
 
         # drone vs drone
         for i, did1 in enumerate(active_ids):
-            for did2 in active_ids[i+1:]:
+            for j, did2 in enumerate(active_ids[i+1:], start = i+1):
                 try:
                     pts = self._call_physics(p.getClosestPoints, bodyA=did1, bodyB=did2,
                                              distance=thresh_drone)
                     if pts and len(pts) > 0:
-                        return True
+                        collided[i] = True
+                        collided[j] = True
                 except Exception:
                     continue
 
-        return False
+        return collided
 
 
     # -------- GUI-ONLY VISUALS --------
@@ -902,7 +947,9 @@ class DroneSwarm3D(ParallelEnv):
 
         # 6. Global episode state (collision, swarm cohesion, time limit)
         time_limit = (self._step_count >= self.max_steps)
-        collided = self._check_collisions()
+
+        collisions = self.check_collisions_per_drone()
+        all_collided = np.all(collisions[:self.active_drones])
 
         positions = self._active_positions()
         max_sep, min_sep, too_far, too_close = self._pairwise_sep_stats(positions)
@@ -912,7 +959,7 @@ class DroneSwarm3D(ParallelEnv):
                 too_close and DEFAULT_TERMINATE_ON_SEPARATION)
 
         all_active_reached = all(bool(self._reached_once[i]) for i in range(self.active_drones))
-        episode_done = bool(collided or all_active_reached or swarm_term)
+        episode_done = bool(all_collided or all_active_reached or swarm_term) # episode ends if everyone crashed, all active reached or spread too far
 
         # Swarm shaping penalties
         cohesion_pen = 0.0
