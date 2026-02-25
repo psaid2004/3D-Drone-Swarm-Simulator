@@ -810,6 +810,18 @@ class DroneSwarm3D(ParallelEnv):
     # ----- STEP FUNCTION ------
     def step(self, actions: Dict[str, np.ndarray]):
         """
+        One environment step.
+
+        Flow:
+        1. Update world (moving obstacles, counters, etc.)
+        2. Freeze drones that already reached the goal.
+        3. Convert policy actions into simulator velocity commands.
+        4. Step the physics.
+        5. Build observations.
+        6. Compute the swarm stats and termination flags (global).
+        7. Compute per-agent rewards.
+        8. Build the info dict.
+
         Args:
             actions: ndarray, shape (n, 4);
                     (vx_dir, vy_dir, vz_dir, speed)
@@ -818,35 +830,38 @@ class DroneSwarm3D(ParallelEnv):
             obs_dict, reward_dict, term_dict, trunc_dict, info_dict
         """
 
+        # 1. Update the world
         self._step_count += 1
         self._update_obstacles()
 
+        # memory of who already reached the goal
+        if self._reached_once is None:
+            self._reached_once = np.zeros((self.num_drones,), dtype=np.bool_)
         # ---------------------------------------------------------------------
-        # Freeze drones that already reached the goal:
+        # 2. Freeze drones that already reached the goal:
         # - IMPORTANT: to make speed=0 in the mapping, we must set u[3] = -1
         #   because u[3] in [-1,1] maps to speed01 in [0,1] by:
         #     speed01 = (u[3] + 1) * 0.5
         # ---------------------------------------------------------------------
-        if self._reached_once is None:
-            self._reached_once = np.zeros((self.num_drones,), dtype=np.bool_)
-
         for i, a in enumerate(self.possible_agents):
-            if i < self.active_drones and bool(self._reached_once[i]):
-                if a in actions:
-                    actions[a] = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
+            if i < self.active_drones and self._reached_once[i] and a in actions:
+                actions[a] = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
 
         # ---------------------------------------------------------------------
-        # Convert actions -> VelocityAviary expected format [dir_x, dir_y, dir_z, speed]
+        # 3. Convert normalised policy actions into simulator (VelocityAviary) velocity commands
+        # Policy output = [dir_x, dir_y, dir_z, speed] in [-1, 1]
+        # Simulator expects: direction (unit vector) and speed (m/s)
         # ---------------------------------------------------------------------
-        # build the action
         act = np.zeros((self.num_drones, 4), dtype=np.float32)
 
         for i, a in enumerate(self.possible_agents):
+
+            # inactive drones -> just hover
             if i >= self.active_drones:
                 act[i] = np.array([0.0, 0.0, 1.0, 0.0], dtype=np.float32)
                 continue
 
-            # default: hover-ish
+            # default is direction = up and speed = 0 m/s
             dir_vec = np.array([0.0, 0.0, 1.0], dtype=np.float32)
             speed = 0.0
 
@@ -855,60 +870,49 @@ class DroneSwarm3D(ParallelEnv):
                 # clip to valid range
                 u = np.clip(u[:4], -1.0, 1.0)
 
-                v_dir = u[0:3].astype(np.float32)
-                n = float(np.linalg.norm(v_dir))
-                if n > 1e-6:
-                    dir_vec = v_dir / n
-                else:
-                    dir_vec = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+                # get the required direction based on normalised action
+                v = u[:3].astype(np.float32)
+                n = np.linalg.norm(v)
+                dir_vec = v/n if n > 1e-6 else dir_vec
 
-                # map u[3] from [-1,1] -> [0,1]
+                # speed mapping: u[3] from [-1,1] -> [0,1 (vel_scale)]
                 speed01 = float((u[3] + 1.0) * 0.5)
                 speed = VEL_SCALE * speed01
 
-                # small constant vertical bias if you want
-                dir_vec = dir_vec.copy()
-                dir_vec[2] = float(dir_vec[2] + HOVER_BIAS_VZ)
+                # hover bias to fight gravity drift
+                dir_vec[2] += HOVER_BIAS_VZ
+                dir_vec /= max(np.linalg.norm(dir_vec), 1e-6)
 
-                # renormalize direction after bias
-                nn = float(np.linalg.norm(dir_vec))
-                if nn > 1e-6:
-                    dir_vec = dir_vec / nn
-
-            # takeoff override
+            # automatic takeoff phase (override RL for initial steps during training and tell drone to go up with takeoff velocity (off ground))
             if self._step_count <= TAKEOFF_STEPS:
                 dir_vec = np.array([0.0, 0.0, 1.0], dtype=np.float32)
                 speed = float(abs(TAKEOFF_VZ))
 
+            # retrieve direction vector and speed for drone
             act[i, 0:3] = dir_vec
             act[i, 3] = float(speed)
 
+        # 4. Step the simulator using the action
         self._env.step(act)
 
+        # 5. Build the observation dictionary
         obs_dict = self._build_obs_dict()
 
-        reward_dict: Dict[str, float] = {}
-        term_dict: Dict[str, bool] = {}
-        trunc_dict: Dict[str, bool] = {}
-
+        # 6. Global episode state (collision, swarm cohesion, time limit)
         time_limit = (self._step_count >= self.max_steps)
-
-        # NOTE: your collision check is obstacle-only (as in your original code)
         collided = self._check_collisions()
 
         positions = self._active_positions()
         max_sep, min_sep, too_far, too_close = self._pairwise_sep_stats(positions)
 
-        if self._prev_dists is None:
-            self._prev_dists = np.zeros((self.num_drones,), dtype=np.float32)
-
-        # ---------------------------------------------------------------------
-        # Swarm constraint:
-        # - this does NOT terminate unless you enable the flags below.
-        # ---------------------------------------------------------------------
+        # Swarm constraints
         swarm_term = (too_far and DEFAULT_TERMINATE_ON_COHESION_BREAK) or (
                 too_close and DEFAULT_TERMINATE_ON_SEPARATION)
 
+        all_active_reached = all(bool(self._reached_once[i]) for i in range(self.active_drones))
+        episode_done = bool(collided or all_active_reached or swarm_term)
+
+        # Swarm shaping penalties
         cohesion_pen = 0.0
         if positions.shape[0] > 1 and max_sep > DEFAULT_SWARM_MAX_SEP:
             cohesion_pen = - COHESION_PEN * (max_sep - DEFAULT_SWARM_MAX_SEP)
@@ -917,42 +921,40 @@ class DroneSwarm3D(ParallelEnv):
         if positions.shape[0] > 1 and min_sep < DEFAULT_SWARM_MIN_SEP:
             sep_pen = -SEPARATION_PEN * (DEFAULT_SWARM_MIN_SEP - min_sep)
 
-        # ---------------------------------------------------------------------
-        # Update reached_once flags (persistent reach memory)
-        # and compute "just reached" so goal bonus is truly ONCE.
-        # ---------------------------------------------------------------------
-        was_reached = self._reached_once.copy()
+        # Track distances to goal for progress-reward
+        if self._prev_dists is None:
+            self._prev_dists = np.zeros((self.num_drones,), dtype=np.float32)
 
+        # detect newly-reached goals for one-time bonuses in reward
+        was_reached = self._reached_once.copy()
         reached_now = np.zeros((self.num_drones,), dtype=np.bool_)
+
         for i, a in enumerate(self.possible_agents):
             if i >= self.active_drones:
                 continue
+
             pos = obs_dict[a][0:3]
             target = self._targets[i] if self._targets is not None else np.zeros(3,
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
+
             if dist < self.goal_radius:
-                reached_now[i] = True
-                self._reached_once[i] = True  # persistent
+                reached_now[i] = True # TODO THIS GOAL_RADIUS IS NOT DEFINED ANYWHERE
+                self._reached_once[i] = True
 
         just_reached = np.logical_and(reached_now, np.logical_not(was_reached))
 
-        # ---------------------------------------------------------------------
-        # Episode termination condition (GLOBAL):
-        # - only ends if ANY collision OR ALL active reached OR swarm termination.
-        # - Time limit remains truncation (Gym style).
-        # ---------------------------------------------------------------------
-        all_active_reached = all(bool(self._reached_once[i]) for i in range(self.active_drones))
-        episode_done = bool(collided or all_active_reached or swarm_term)
+        # 7. Compute rewards (per agent)
+        reward_dict = {}
+        term_dict = {}
+        trunc_dict = {}
 
-        # ---------------------------------------------------------------------
-        # Rewards (per-agent), but termination is shared for active agents
-        # ---------------------------------------------------------------------
         for i, a in enumerate(self.possible_agents):
+
             if i >= self.active_drones:
                 reward_dict[a] = 0.0
                 term_dict[a] = True
-                trunc_dict[a] = bool(time_limit)
+                trunc_dict[a] = time_limit
                 continue
 
             pos = obs_dict[a][0:3]
@@ -963,39 +965,42 @@ class DroneSwarm3D(ParallelEnv):
             prev = float(self._prev_dists[i])
             self._prev_dists[i] = dist
 
-            r_progress = self.progress_k * (prev - dist)
+            # reward terms
+            r_progress = PROG_COEF * (prev - dist)
             r_goal_dist = -0.15 * dist
-            r_time = -self.time_penalty
-            r_ctrl = -self.ctrl_penalty_k * float(np.linalg.norm(act[i]))
-            r_near = -self.near_obstacle_penalty_k / max(float(np.linalg.norm(obs_dict[a][9:12])),
-                                                         0.10)
+            r_time = -TIME_PEN
+            r_ctrl = -self.ctrl_penalty_k * float(np.linalg.norm(act[i])) # TODO FIGURE OUT WHAT CONTROL PENALTY IS?
+            r_near = -NEAR_OBS_PEN / max(float(np.linalg.norm(obs_dict[a][9:12])), 0.10)
 
-            r = r_progress + r_goal_dist + r_time + r_ctrl + r_near
-            r += float(cohesion_pen + sep_pen)
+            r = (
+                    r_progress +
+                    r_goal_dist +
+                    r_time +
+                    r_ctrl +
+                    r_near +
+                    cohesion_pen +
+                    sep_pen
+            )
 
-            # goal bonus ONLY ONCE: when it first becomes reached
-            if bool(just_reached[i]):
-                r += self.goal_bonus
+            # goal bonus (occurs only once): when it first becomes reached
+            if just_reached[i]:
+                r += self.goal_bonus # TODO NOT DEFINED ANYWHERE
 
             if collided:
-                r -= self.collision_penalty
+                r -= COLLISION_PEN
 
             reward_dict[a] = float(r)
-
-            # IMPORTANT:
-            # - do NOT end when a single drone reaches
-            # - only end when episode_done is true
             term_dict[a] = bool(episode_done)
             trunc_dict[a] = bool(time_limit)
 
         # keep fixed agent list
         self.agents = self.possible_agents[:]
 
-        # ---------------------------------------------------------------------
-        # Info dict (for callbacks & logging)
-        # ---------------------------------------------------------------------
-        info_dict: Dict[str, dict] = {}
+        #  8. Info dict (for callbacks & logging)
+        info_dict = {}
+
         for i, a in enumerate(self.possible_agents):
+
             if i >= self.active_drones:
                 info_dict[a] = {
                     "step": int(self._step_count),
@@ -1016,9 +1021,9 @@ class DroneSwarm3D(ParallelEnv):
                 "step": int(self._step_count),
                 "active": True,
                 "collided": bool(collided),
-                "reached": bool(self._reached_once[i]),  # persistent reach
-                "reached_now": bool(reached_now[i]),  # inside goal at this step
-                "just_reached": bool(just_reached[i]),  # first entry into goal
+                "reached": bool(self._reached_once[i]),
+                "reached_now": bool(reached_now[i]),
+                "just_reached": bool(just_reached[i]),
                 "swarm_max_sep": float(max_sep),
                 "swarm_min_sep": float(min_sep),
                 "swarm_too_far": bool(too_far),
@@ -1028,7 +1033,10 @@ class DroneSwarm3D(ParallelEnv):
                 "episode_done_swarm": bool(swarm_term),
             }
 
+        self.agents = self.possible_agents[:]
+
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+
 
     def _pairwise_sep_stats(self, positions: np.ndarray) -> Tuple[float, float, bool, bool]:
         """
