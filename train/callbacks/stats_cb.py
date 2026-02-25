@@ -7,6 +7,8 @@ import numpy as np
 
 from stable_baselines3.common.callbacks import BaseCallback
 
+PRINT_EVERY = 5_000  # only print to console every N timesteps
+
 
 @dataclass
 class CurriculumStageInfo:
@@ -36,6 +38,7 @@ class StepStatsCallback(BaseCallback):
             n_drones_fixed: int,
             n_envs: int,
             stage_info: Optional[CurriculumStageInfo] = None,
+            print_every: int = PRINT_EVERY,
             verbose: int = 0,
     ):
         super().__init__(verbose)
@@ -44,6 +47,8 @@ class StepStatsCallback(BaseCallback):
         self.agents_count = self.n_drones_fixed * self.n_envs
 
         self.stage_info: Optional[CurriculumStageInfo] = stage_info
+        self.print_every = int(print_every)
+        self._last_print_ts = 0
         self._rollout_reset()
 
     # You can call this from training when you enter a new curriculum stage
@@ -168,7 +173,9 @@ class StepStatsCallback(BaseCallback):
             self.logger.record("curriculum/progress_frac", frac)
 
         # ---- console print ----
-        if self.verbose:
+        if self.verbose and (self.num_timesteps - self._last_print_ts) >= self.print_every:
+            self._last_print_ts = self.num_timesteps
+
             prefix = ""
             if self.stage_info is not None:
                 si = self.stage_info

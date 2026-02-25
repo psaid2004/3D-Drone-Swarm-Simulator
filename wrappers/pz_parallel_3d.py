@@ -13,7 +13,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from config.defaults import *
 
 class DroneSwarm3D(ParallelEnv):
-    metadata = {"name": "drone_swarms_3d"}
+    metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
 
     # ------ Initialisation ------
     def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None, num_obstacles: int = 5,
