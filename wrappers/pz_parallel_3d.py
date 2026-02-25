@@ -961,6 +961,8 @@ class DroneSwarm3D(ParallelEnv):
         all_active_reached = all(bool(self._reached_once[i]) for i in range(self.active_drones))
         episode_done = bool(all_collided or all_active_reached or swarm_term) # episode ends if everyone crashed, all active reached or spread too far
 
+        self.dead = np.logical_or(self.dead, collisions)
+
         # Swarm shaping penalties
         cohesion_pen = 0.0
         if positions.shape[0] > 1 and max_sep > DEFAULT_SWARM_MAX_SEP:
@@ -990,6 +992,10 @@ class DroneSwarm3D(ParallelEnv):
             if dist < GOAL_RADIUS:
                 reached_now[i] = True
                 self._reached_once[i] = True
+
+            # allow a crashed drone to stop moving
+            if self.dead[i] and a in actions:
+                actions[a] = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
 
         just_reached = np.logical_and(reached_now, np.logical_not(was_reached))
 
@@ -1039,11 +1045,13 @@ class DroneSwarm3D(ParallelEnv):
             if just_reached[i]:
                 r += GOAL_BONUS
 
-            if collided:
-                r -= COLLISION_PEN
+            if collisions[i]:
+                r -= COLLISION_PEN # full penalty to culprit
+            elif np.any(collisions):
+                r = -0.2*COLLISION_PEN # small team penalty if one drone crashes
 
             reward_dict[a] = float(r)
-            term_dict[a] = bool(episode_done)
+            term_dict[a] = bool(self.dead[i] or episode_done) # allow only crashed drone to terminate
             trunc_dict[a] = bool(time_limit)
 
         # keep fixed agent list
@@ -1058,13 +1066,13 @@ class DroneSwarm3D(ParallelEnv):
                 info_dict[a] = {
                     "step": int(self._step_count),
                     "active": False,
-                    "collided": bool(collided),
+                    "collided": bool(collisions[i]),
                     "reached": False,
                     "swarm_max_sep": float(max_sep),
                     "swarm_min_sep": float(min_sep),
                     "swarm_too_far": bool(too_far),
                     "swarm_too_close": bool(too_close),
-                    "episode_done_collision": bool(collided),
+                    "episode_done_collision": bool(collisions[i]),
                     "episode_done_all_reached": bool(all_active_reached),
                     "episode_done_swarm": bool(swarm_term),
                 }
@@ -1073,7 +1081,7 @@ class DroneSwarm3D(ParallelEnv):
             info_dict[a] = {
                 "step": int(self._step_count),
                 "active": True,
-                "collided": bool(collided),
+                "collided": bool(collisions[i]),
                 "reached": bool(self._reached_once[i]),
                 "reached_now": bool(reached_now[i]),
                 "just_reached": bool(just_reached[i]),
@@ -1081,7 +1089,7 @@ class DroneSwarm3D(ParallelEnv):
                 "swarm_min_sep": float(min_sep),
                 "swarm_too_far": bool(too_far),
                 "swarm_too_close": bool(too_close),
-                "episode_done_collision": bool(collided),
+                "episode_done_collision": bool(collisions[i]),
                 "episode_done_all_reached": bool(all_active_reached),
                 "episode_done_swarm": bool(swarm_term),
             }
@@ -1091,7 +1099,7 @@ class DroneSwarm3D(ParallelEnv):
         step_mean_reward = float(np.mean([reward_dict[a] for a in self.possible_agents[:self.active_drones]]))
         self.ep_rewards.append(step_mean_reward)
 
-        if collided:
+        if collisions[i]:
             self.collision_count += 1
 
         # count “first time reach”
