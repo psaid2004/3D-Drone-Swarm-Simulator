@@ -23,11 +23,11 @@ from typing import Dict, List, Tuple
 #
 # These values are taken 1:1 from train/sb_ppo_training.py (before refactor).
 PPO_CURRICULUM: List[Tuple[float, int, int, int]] = [
-    (2.0, 2, 10, 200_000),
-    (2.5, 1, 8,  400_000),
-    (3.0, 1, 6,  500_000),
-    (3.5, 2, 6,  600_000),
-    (4.5, 2, 8,  800_000),
+    (2.0, 1, 10, 250_000),       #drones learn
+    (2.5, 2, 8,  450_000),       #drones don't die but don't reach often - converge to hover (loss: 40-60) - local min
+    (3.0, 4, 6,  550_000),
+    (3.5, 8, 6,  650_000),
+    (4.5, 8, 8,  900_000),
 ]
 
 # =============================================================================

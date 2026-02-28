@@ -11,7 +11,7 @@ Design:
 # =============================================================================
 # Core environment defaults
 # =============================================================================
-DEFAULT_NUM_DRONES = 5
+DEFAULT_NUM_DRONES = 8
 DEFAULT_NUM_OBSTACLES = 4
 DEFAULT_MAX_STEPS = 510
 

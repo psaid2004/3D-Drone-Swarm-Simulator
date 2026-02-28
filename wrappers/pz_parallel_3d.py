@@ -44,7 +44,7 @@ class DroneSwarm3D(ParallelEnv):
         goal_radius: float = 0.8,
         goal_bonus: float = 80.0,
         progress_k: float = 8.0,
-        time_penalty: float = 0.05,
+        time_penalty: float = 0.1,
         ctrl_penalty_k: float = 0.003,
         # --- swarm cohesion / separation ---
         swarm_max_sep: float = 2.0,
@@ -795,7 +795,7 @@ class DroneSwarm3D(ParallelEnv):
                     dir_vec = np.array([0.0, 0.0, 1.0], dtype=np.float32)
 
                 # map u[3] from [-1,1] -> [0,1]
-                speed01 = float((u[3] + 1.0) * 0.5)
+                speed01 = float((u[3] + 1.0) * 0.5)     #TODO: tune so drones can reach target in episode time
                 speed = self.vel_scale * speed01
 
                 # small constant vertical bias if you want
@@ -893,7 +893,7 @@ class DroneSwarm3D(ParallelEnv):
             self._prev_dists[i] = dist
 
             r_progress = self.progress_k * (prev - dist)
-            r_goal_dist = -0.15 * dist
+            r_goal_dist = -0.3 * dist
             r_time = -self.time_penalty
             r_ctrl = -self.ctrl_penalty_k * float(np.linalg.norm(act[i]))
             r_near = -self.near_obstacle_penalty_k / max(float(np.linalg.norm(obs_dict[a][9:12])), 0.10)
