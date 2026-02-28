@@ -25,11 +25,74 @@ class Drone:
     def __init__(self, start_pos, euler_angles):
         self.start_pos = start_pos
         self.rotation = p.getQuaternionFromEuler(euler_angles)
+    
+    def set_id(self, id) :
+        self.id = id
+            
     def get_start(self) :
         return self.start_pos
-    def get_ori(self):
-        return self.rotation
     
+    def get_ori(self):
+        return self.rotation    
+    
+class EnvObject:
+    def __init__(self):
+        pass
+
+class Dynamic(EnvObject):
+    def __init__(self, axis, min, max, speed, direction):
+        self._axis = axis
+        self._min = min
+        self._max = max
+        self._speed = speed
+        self._direction = direction
+
+    # axis
+    @property
+    def axis(self):
+        return self._axis
+
+    @axis.setter
+    def axis(self, value):
+        self._axis = value
+
+    # min
+    @property
+    def min(self):
+        return self._min
+
+    @min.setter
+    def min(self, value):
+        self._min = value
+
+    # max
+    @property
+    def max(self):
+        return self._max
+
+    @max.setter
+    def max(self, value):
+        self._max = value
+
+    # speed
+    @property
+    def speed(self):
+        return self._speed
+
+    @speed.setter
+    def speed(self, value):
+        self._speed = value
+
+    # direction
+    @property
+    def direction(self):
+        return self._direction
+
+    @direction.setter
+    def direction(self, value):
+        self._direction = value
+        
+        
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
 p.setGravity(0, 0, -9.81)
