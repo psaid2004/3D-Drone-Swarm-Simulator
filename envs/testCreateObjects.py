@@ -6,8 +6,30 @@ import numpy as np
 from createObjects import *
 
 
+class Swarm:
+    def __init__(self, max_drones) :
+        self.max_dr = max_drones
+        self.drones = []
+        
+    def add_drone(self, drone) :
+        if len(self.drones) < self.max_dr :
+            self.drones.append(drone)
+            return True
+        
+        return False
 
-
+    def get_drones(self) :
+        return self.drones
+    
+class Drone:
+    def __init__(self, start_pos, euler_angles):
+        self.start_pos = start_pos
+        self.rotation = p.getQuaternionFromEuler(euler_angles)
+    def get_start(self) :
+        return self.start_pos
+    def get_ori(self):
+        return self.rotation
+    
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
 p.setGravity(0, 0, -9.81)
@@ -101,3 +123,7 @@ for t in range(8000):
 
 # 5️⃣ Disconnect when done
 p.disconnect()
+
+class Simulator:
+    def simulate(self, env, t) :
+        pass
