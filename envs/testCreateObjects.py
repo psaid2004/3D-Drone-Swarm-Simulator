@@ -48,35 +48,56 @@ class Dynamic(EnvObject):
         self.direction = direction
         self.start_pos = start_pos
         self.size = size
+        self.orientation = [0,0,0]
         self.SHAPE_CONFIGS = {
-            "box":    {"geom": p.GEOM_BOX,    "base_size": np.array([0.2, 0.2, 0.2])},
-            "wall":   {"geom": p.GEOM_BOX,    "base_size": np.array([0.3, 0.05, 0.2])},
-            "sphere": {"geom": p.GEOM_SPHERE, "base_radius": 0.2},
-            "cylinder": {"geom" : p.GEOM_CYLINDER, "base_radius": 0.1, "base_height": 0.5}
-        }    
-    
-    def create(self, shape, scale):
+            "box": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
+                "use_orientation": False,
+            },
+            "wall": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
+                "use_orientation": True,
+            },
+            "sphere": {
+                "geom": p.GEOM_SPHERE,
+                "collision_kwargs": lambda s: {"radius": 0.2 * s},
+                "visual_kwargs":    lambda s: {"radius": 0.2 * s},
+                "use_orientation": False,
+            },
+            "cylinder": {
+                "geom": p.GEOM_CYLINDER,
+                "collision_kwargs": lambda s: {"radius": 0.1 * s, "height": 0.5 * s},
+                "visual_kwargs":    lambda s: {"radius": 0.1 * s},
+                "use_orientation": True,
+            },
+        }
+
+    # kwargs = keyword arguments
+    def create(self, shape, color=(1, 0, 0, 1)):
         conf = self.SHAPE_CONFIGS[shape]
-        scaled_size = conf["base_size"] * scale
         geom = conf["geom"]
-        if shape == "sphere" :
-            radius = conf["base_radius"] * scale
-            geom_kwargs = {"radius": radius}  
-        elif shape == "cylinder":
-            radius = conf["base_radius"] * scale
-            height = conf["base_height"] * scale
-            geom_kwargs = {"radius": radius, "height": height}
-        else:
-            scaled_size = conf["base_size"] * scale
-            geom_kwargs = {"size": scaled_size}
-        collision = p.createCollisionShape(geom, **geom_kwargs)
-        visual = p.createVisualShape(geom, scaled_size, rgbaColor=[1, 0, 0, 1])
-        if shape == "wall" | shape == "cylinder" :
-            id = p.createMultiBody(0, collision, visual, self.start_pos, baseOrientation=p.getQuaternionFromEuler([0,0,0]))
-        else:
-            id = p.createMultiBody(0, collision, visual, self.start_pos)
-        return id
         
+        collision_kwargs = conf["collision_kwargs"](self.size)
+        visual_kwargs = conf["visual_kwargs"](self.size)
+        
+        collision = p.createCollisionShape(geom, **collision_kwargs)
+        visual = p.createVisualShape(geom, rgbaColor=color, **visual_kwargs)
+        
+        body_kwargs = {
+            "baseMass": 0,
+            "baseCollisionShapeIndex": collision,
+            "baseVisualShapeIndex": visual,
+            "basePosition": self.start_pos,
+        }
+        
+        if conf["use_orientation"]:
+            body_kwargs["baseOrientation"] = p.getQuaternionFromEuler(self.orientation)
+
+        return p.createMultiBody(**body_kwargs)
         
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
@@ -104,7 +125,7 @@ orientation = [0,0,0]
 
 cylinder = Dynamic(0, start, end, speed, direction, start_position, size)
 
-obs_id = create_dynamic_cylinder(cylinder)
+obs_id = cylinder.create("cylinder")
 dynamicObstacles[obs_id] = pathParams
 
 create_static_wall([0,3,3],1, [0,0,1.57])
