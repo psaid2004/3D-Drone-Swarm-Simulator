@@ -52,6 +52,7 @@ class Dynamic(EnvObject):
             "box":    {"geom": p.GEOM_BOX,    "base_size": np.array([0.2, 0.2, 0.2])},
             "wall":   {"geom": p.GEOM_BOX,    "base_size": np.array([0.3, 0.05, 0.2])},
             "sphere": {"geom": p.GEOM_SPHERE, "base_radius": 0.2},
+            "cylinder": {"geom" : p.GEOM_CYLINDER, "base_radius": 0.1, "base_height": 0.5}
         }    
     
     def create(self, shape, scale):
@@ -59,10 +60,16 @@ class Dynamic(EnvObject):
         scaled_size = conf["base_size"] * scale
         geom = conf["geom"]
         if shape == "sphere" :
-            scaled_size = conf["base_radius"] * scale
+            radius = conf["base_radius"] * scale
+            geom_kwargs = {"radius": radius}  
+        elif shape == "cylinder":
+            radius = conf["base_radius"] * scale
+            height = conf["base_height"] * scale
+            geom_kwargs = {"radius": radius, "height": height}
         else:
             scaled_size = conf["base_size"] * scale
-        collision = p.createCollisionShape(geom, scaled_size)
+            geom_kwargs = {"size": scaled_size}
+        collision = p.createCollisionShape(geom, **geom_kwargs)
         visual = p.createVisualShape(geom, scaled_size, rgbaColor=[1, 0, 0, 1])
         if shape == "wall" | shape == "cylinder" :
             id = p.createMultiBody(0, collision, visual, self.start_pos, baseOrientation=p.getQuaternionFromEuler([0,0,0]))
