@@ -40,13 +40,15 @@ class EnvObject:
         pass
 
 class Dynamic(EnvObject):
-    def __init__(self, axis, min, max, speed, direction):
+    def __init__(self, axis, min, max, speed, direction, start_pos, size):
         self._axis = axis
         self._min = min
         self._max = max
         self._speed = speed
         self._direction = direction
-
+        self._start_pos = start_pos
+        self._size = size
+    
     # axis
     @property
     def axis(self):
@@ -91,7 +93,22 @@ class Dynamic(EnvObject):
     @direction.setter
     def direction(self, value):
         self._direction = value
-        
+    
+    @property
+    def size(self):
+        return self._size
+    
+    @size.setter
+    def size(self, value):
+        self._size = value
+    
+    @property
+    def start_pos(self):
+        return self._start_pos
+    
+    @start_pos.setter
+    def start_pos(self, value):
+        self._start_pos = value        
         
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
@@ -104,18 +121,23 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 dynamicObstacles = dict()
 
+
 start = -2
 end = 2
 speed = 0.01  # meters per simulation step
 direction = 1  # 1 = forward, -1 = backward
+
 
 pathParams = {"axis" : 0, "min": start, "max": end, "speed":speed, "direction" :direction}
 
 start_position = [2,0,1]
 size = 1
 orientation = [0,0,0]
-obs_id, obs_path = create_dynamic_cylinder(start_position, size, pathParams)
-dynamicObstacles[obs_id] = obs_path
+
+cylinder = Dynamic(0, start, end, speed, direction, start_position, size)
+
+obs_id = create_dynamic_cylinder(cylinder)
+dynamicObstacles[obs_id] = pathParams
 
 create_static_wall([0,3,3],1, [0,0,1.57])
 

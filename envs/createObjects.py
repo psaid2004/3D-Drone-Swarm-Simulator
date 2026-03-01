@@ -91,15 +91,15 @@ def create_dynamic_sphere(startPosition, scale, pathParameters):
 # startPosition = [X, Y, Z]
 # scale =number x, that will be used to x*radius and x*height
 # orientation = [X/Roll, Y/Pitch, Z/Yaw] how the object in orientated when its spawned (tilted= [0.2, 0,0] , 90 degrees to the right = [0,0,1.57])
-def create_dynamic_cylinder(startPosition, scale, pathParameters, orientation=[0,0,0]):
+def create_dynamic_cylinder(obj, orientation=[0,0,0]):
     base_radius = 0.1
     base_height = 0.5
-    scaled_radius = base_radius*scale
-    scaled_height = base_height*scale
+    scaled_radius = base_radius*obj.size
+    scaled_height = base_height*obj.size
     cylinder_collision = p.createCollisionShape(p.GEOM_CYLINDER, radius=scaled_radius, height=scaled_height)
     cylinder_visual = p.createVisualShape(p.GEOM_CYLINDER, radius=scaled_radius, length=scaled_height, rgbaColor=[1, 0, 0, 1])
-    cylinder_id = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=cylinder_collision,baseVisualShapeIndex=cylinder_visual, basePosition=startPosition, baseOrientation=p.getQuaternionFromEuler(orientation))
-    return cylinder_id, pathParameters
+    cylinder_id = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=cylinder_collision,baseVisualShapeIndex=cylinder_visual, basePosition=obj.start_pos, baseOrientation=p.getQuaternionFromEuler(orientation))
+    return cylinder_id
 
 def update_single_axis_obstacle(obj_id, path):
     pos, orn = p.getBasePositionAndOrientation(obj_id)
@@ -114,5 +114,22 @@ def update_single_axis_obstacle(obj_id, path):
     elif pos[axis] < path["min"]:
         pos[axis] = path["min"]
         path["direction"] *= -1
+
+    p.resetBasePositionAndOrientation(obj_id, pos, orn)
+
+
+def update_single_axis_obstacle_sec(obj_id, object):
+    pos, orn = p.getBasePositionAndOrientation(obj_id)
+    pos = list(pos)
+
+    axis = object.axis
+    pos[axis] += object.speed * object.direction
+
+    if pos[axis] > object.max:
+        pos[axis] = object.max
+        object.direction *= -1
+    elif pos[axis] < object.min:
+        pos[axis] = object.min
+        object.direction *= -1
 
     p.resetBasePositionAndOrientation(obj_id, pos, orn)
