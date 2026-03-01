@@ -41,74 +41,35 @@ class EnvObject:
 
 class Dynamic(EnvObject):
     def __init__(self, axis, min, max, speed, direction, start_pos, size):
-        self._axis = axis
-        self._min = min
-        self._max = max
-        self._speed = speed
-        self._direction = direction
-        self._start_pos = start_pos
-        self._size = size
+        self.axis = axis
+        self.min = min
+        self.max = max
+        self.speed = speed
+        self.direction = direction
+        self.start_pos = start_pos
+        self.size = size
+        self.SHAPE_CONFIGS = {
+            "box":    {"geom": p.GEOM_BOX,    "base_size": np.array([0.2, 0.2, 0.2])},
+            "wall":   {"geom": p.GEOM_BOX,    "base_size": np.array([0.3, 0.05, 0.2])},
+            "sphere": {"geom": p.GEOM_SPHERE, "base_radius": 0.2},
+        }    
     
-    # axis
-    @property
-    def axis(self):
-        return self._axis
-
-    @axis.setter
-    def axis(self, value):
-        self._axis = value
-
-    # min
-    @property
-    def min(self):
-        return self._min
-
-    @min.setter
-    def min(self, value):
-        self._min = value
-
-    # max
-    @property
-    def max(self):
-        return self._max
-
-    @max.setter
-    def max(self, value):
-        self._max = value
-
-    # speed
-    @property
-    def speed(self):
-        return self._speed
-
-    @speed.setter
-    def speed(self, value):
-        self._speed = value
-
-    # direction
-    @property
-    def direction(self):
-        return self._direction
-
-    @direction.setter
-    def direction(self, value):
-        self._direction = value
-    
-    @property
-    def size(self):
-        return self._size
-    
-    @size.setter
-    def size(self, value):
-        self._size = value
-    
-    @property
-    def start_pos(self):
-        return self._start_pos
-    
-    @start_pos.setter
-    def start_pos(self, value):
-        self._start_pos = value        
+    def create(self, shape, scale):
+        conf = self.SHAPE_CONFIGS[shape]
+        scaled_size = conf["base_size"] * scale
+        geom = conf["geom"]
+        if shape == "sphere" :
+            scaled_size = conf["base_radius"] * scale
+        else:
+            scaled_size = conf["base_size"] * scale
+        collision = p.createCollisionShape(geom, scaled_size)
+        visual = p.createVisualShape(geom, scaled_size, rgbaColor=[1, 0, 0, 1])
+        if shape == "wall" | shape == "cylinder" :
+            id = p.createMultiBody(0, collision, visual, self.start_pos, baseOrientation=p.getQuaternionFromEuler([0,0,0]))
+        else:
+            id = p.createMultiBody(0, collision, visual, self.start_pos)
+        return id
+        
         
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
@@ -149,7 +110,11 @@ direction = -1  # 1 = forward, -1 = backward
 
 pathParams = {"axis" : 0, "min": start, "max": end, "speed":speed, "direction" :direction}
 
-obs_id, obs_path = create_dynamic_wall([-2, -2, 1], size, pathParams, [0.2,0,1.57])
+wall_st_pos = [-2, -2, 1]
+
+dynamic_wall = Dynamic(0, start, end, speed, direction, wall_st_pos, size)
+
+obs_id, obs_path = create_dynamic_wall(wall_st_pos, size, pathParams, [0.2,0,1.57])
 dynamicObstacles[obs_id] = obs_path
 
 
