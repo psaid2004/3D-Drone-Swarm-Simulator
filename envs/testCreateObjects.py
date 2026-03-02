@@ -17,23 +17,11 @@ class Swarm:
             return True
         
         return False
-
-    def get_drones(self) :
-        return self.drones
     
 class Drone:
     def __init__(self, start_pos, euler_angles):
         self.start_pos = start_pos
-        self.rotation = p.getQuaternionFromEuler(euler_angles)
-    
-    def set_id(self, id) :
-        self.id = id
-            
-    def get_start(self) :
-        return self.start_pos
-    
-    def get_ori(self):
-        return self.rotation    
+        self.rotation = p.getQuaternionFromEuler(euler_angles)   
     
 class EnvObject:
     def __init__(self, start_pos, size, orientation):
@@ -156,8 +144,7 @@ plane_id = p.loadURDF("plane.urdf")
 
 
 # Load URDF
-drone_start_pos = [0, 0, 0.5]  # half a meter above ground
-drone_start_ori = p.getQuaternionFromEuler([0, 0, 0])
+drone = Drone([0, 0, 0.5], [0, 0, 0])
 
 # Use CF2X drone URDF from gym-pybullet-drones
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -166,7 +153,7 @@ URDF_PATH  = ASSETS_DIR / "cf2p.urdf"
 p.setAdditionalSearchPath(str(ASSETS_DIR))
 print(str(URDF_PATH))
 
-drone_id = p.loadURDF(str(URDF_PATH), drone_start_pos, drone_start_ori)
+drone_id = p.loadURDF(str(URDF_PATH), drone.start_pos, drone.rotation)
 
 
 
