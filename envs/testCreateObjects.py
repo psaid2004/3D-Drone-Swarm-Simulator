@@ -40,7 +40,7 @@ class EnvObject:
         pass
 
 class Dynamic(EnvObject):
-    def __init__(self, axis, min, max, speed, direction, start_pos, size):
+    def __init__(self, axis, min, max, speed, direction, start_pos, size, orientation):
         self.axis = axis
         self.min = min
         self.max = max
@@ -48,7 +48,7 @@ class Dynamic(EnvObject):
         self.direction = direction
         self.start_pos = start_pos
         self.size = size
-        self.orientation = [0,0,0]
+        self.orientation = orientation
         self.SHAPE_CONFIGS = {
             "box": {
                 "geom": p.GEOM_BOX,
@@ -123,7 +123,7 @@ start_position = [2,0,1]
 size = 1
 orientation = [0,0,0]
 
-cylinder = Dynamic(0, start, end, speed, direction, start_position, size)
+cylinder = Dynamic(0, start, end, speed, direction, start_position, size, [0,0,0])
 
 obs_id = cylinder.create("cylinder")
 dynamicObstacles[obs_id] = pathParams
@@ -140,10 +140,9 @@ pathParams = {"axis" : 0, "min": start, "max": end, "speed":speed, "direction" :
 
 wall_st_pos = [-2, -2, 1]
 
-dynamic_wall = Dynamic(0, start, end, speed, direction, wall_st_pos, size)
-
-obs_id, obs_path = create_dynamic_wall(wall_st_pos, size, pathParams, [0.2,0,1.57])
-dynamicObstacles[obs_id] = obs_path
+dynamic_wall = Dynamic(0, start, end, speed, direction, wall_st_pos, size, [0.2,0,1.57])
+obs_id = dynamic_wall.create("wall")
+dynamicObstacles[obs_id] = pathParams
 
 
 start_position = [-2,2,1]
