@@ -36,18 +36,9 @@ class Drone:
         return self.rotation    
     
 class EnvObject:
-    def __init__(self):
-        pass
-
-class Dynamic(EnvObject):
-    def __init__(self, axis, min, max, speed, direction, start_pos, size, orientation):
-        self.axis = axis
-        self.min = min
-        self.max = max
-        self.speed = speed
-        self.direction = direction
-        self.start_pos = start_pos
+    def __init__(self, start_pos, size, orientation):
         self.size = size
+        self.start_pos = start_pos
         self.orientation = orientation
         self.SHAPE_CONFIGS = {
             "box": {
@@ -75,7 +66,7 @@ class Dynamic(EnvObject):
                 "use_orientation": True,
             },
         }
-
+    
     # kwargs = keyword arguments
     def create(self, shape, color=(1, 0, 0, 1)):
         conf = self.SHAPE_CONFIGS[shape]
@@ -98,6 +89,16 @@ class Dynamic(EnvObject):
             body_kwargs["baseOrientation"] = p.getQuaternionFromEuler(self.orientation)
 
         return p.createMultiBody(**body_kwargs)
+
+
+class Dynamic(EnvObject):
+    def __init__(self, axis, min, max, speed, direction, start_pos, size, orientation):
+        self.axis = axis
+        self.min = min
+        self.max = max
+        self.speed = speed
+        self.direction = direction
+        super().__init__(start_pos, size, orientation)
         
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
@@ -128,8 +129,8 @@ cylinder = Dynamic(0, start, end, speed, direction, start_position, size, [0,0,0
 obs_id = cylinder.create("cylinder")
 dynamicObstacles[obs_id] = pathParams
 
-create_static_wall([0,3,3],1, [0,0,1.57])
-
+static_wall = EnvObject([0,3,3], 1, [0,0,1.57])
+static_wall.create("wall")
 
 start = -2
 end = 1
@@ -146,7 +147,8 @@ dynamicObstacles[obs_id] = pathParams
 
 
 start_position = [-2,2,1]
-create_static_box(start_position, size)
+static_box = EnvObject(start_position, size, [0,0,0])
+static_box.create("box")
 
 # 3️⃣ Load a simple ground plane
 plane_id = p.loadURDF("plane.urdf")
