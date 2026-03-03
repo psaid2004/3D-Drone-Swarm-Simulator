@@ -16,7 +16,7 @@ import torch
 import supersuit as ss
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import (
-    CallbackList, CheckpointCallback, BaseCallback,
+    CallbackList, CheckpointCallback
 )
 from stable_baselines3.common.vec_env import VecNormalize
 from stable_baselines3.sac.policies import SACPolicy
@@ -24,7 +24,7 @@ from stable_baselines3.sac.policies import SACPolicy
 from config.curriculum import Curriculum
 from config.defaults import (DEFAULT_NUM_DRONES, MODELS_DIR, LIDAR_NUM_LAYERS,
                              LIDAR_NUM_RAYS, LIDAR_RANGE, DEFAULT_LIDAR, eps)
-from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
+from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo, BlendDecayCallback, EarlyStoppingCallback
 from wrappers.pz_parallel_3d import env as make_env
 from wrappers.sb3_reset_fix import SB3VecResetTupleFix
 
@@ -81,11 +81,10 @@ def get_next_checkpoint_dir(base=f"{MODEL_DIR}/sac_drones_", n_drones=1, n_obs=0
 #   [18: ]  lidar hit fractions  (LIDAR_NUM_LAYERS * LIDAR_NUM_RAYS)
 #
 # Action space: [dir_x, dir_y, dir_z, speed]  all in [-1, 1]
-# ============================================================================
 
 class ExpertPolicy:
     """Reactive 3-D expert: steer toward target, dodge obstacles via LiDAR."""
-
+    # TODO IF OBSTACLES ARE NOT BEING AVOIDED, WE NEED TO DECREASE THE SPEED HERE AND INCREASE THE AVOID_STRENGTH
     def __init__(self, avoid_strength: float = 0.6, speed_default: float = 0.6):
         self.avoid_strength = avoid_strength
         self.speed_default = speed_default
@@ -95,24 +94,30 @@ class ExpertPolicy:
 
         # --- target direction ---
         to_target = state[6:9].copy()
+        # compute Euclidean distance to target
         dist = np.linalg.norm(to_target) + eps
+        # normalise into unit vector pointing at target
         dir_target = to_target / dist
 
-        # --- obstacle vector (points FROM drone TO nearest obstacle) ---
+        # --- obstacle vector (points FROM drone to nearest obstacle) ---
         to_obs = state[9:12]
+        # compute Euclidean distance to nearest obstacle
         obs_dist = np.linalg.norm(to_obs) + eps
 
         # --- lidar-based avoidance (if lidar present) ---
         lidar_start = 18
         n_lidar = LIDAR_NUM_LAYERS * LIDAR_NUM_RAYS
+        # initialise avoidance direction vector
         avoid = np.zeros(3, dtype=np.float32)
 
+        # check whether observation contains LiDAR
         if state.shape[0] >= lidar_start + n_lidar and n_lidar > 0:
             lidar = state[lidar_start:lidar_start + n_lidar]
+            # reshape LiDAR to 2D
             lidar = lidar.reshape(LIDAR_NUM_LAYERS, LIDAR_NUM_RAYS)
 
             # use middle layer for horizontal avoidance
-            mid = lidar[LIDAR_NUM_LAYERS // 2]  # shape (NUM_RAYS,)
+            mid = lidar[LIDAR_NUM_LAYERS // 2]
 
             # angles for each ray (full 360° by default)
             angles = np.linspace(0, 2 * np.pi, LIDAR_NUM_RAYS, endpoint=False)
@@ -121,6 +126,8 @@ class ExpertPolicy:
             proximity = np.clip(1.0 - mid, 0, 1)  # 1 = contact, 0 = clear
 
             # repulsion vector: push away from close hits
+            # weight the ray angles by the closeness, sum it to get net "pull" and then negative gives net "push"
+            # (rx, ry) points away from where nearby obstacles are concentrated
             rx = -np.sum(proximity * np.cos(angles))
             ry = -np.sum(proximity * np.sin(angles))
 
@@ -129,16 +136,23 @@ class ExpertPolicy:
             bot_prox = np.clip(1.0 - lidar[-1].mean(), 0, 1)
             rz = bot_prox - top_prox  # push up if bottom blocked, down if top
 
+            # create the avoidance array for both horizontal and vertical repulsion
             avoid = np.array([rx, ry, rz], dtype=np.float32)
+            # compute Euclidean distance
             an = np.linalg.norm(avoid) + 1e-8
+            # if not tiny (noise), then normalise it into a unit vector
             if an > 0.01:
                 avoid = avoid / an
 
         # --- also add repulsion from nearest-obstacle vector ---
         if obs_dist < LIDAR_RANGE:
+            # determine unit vector pointing away from obstacle
             obs_repel = -to_obs / obs_dist
-            weight = max(0, 1.0 - obs_dist / LIDAR_RANGE)
+            # compute closeness of obstacle
+            weight = max(0, 1.0 - obs_dist / LIDAR_RANGE) # 1 = contact, 0 = clear
+            # add to the current avoid vector from LiDAR
             avoid = avoid + weight * obs_repel
+            # compute Euclidean and normalise
             an = np.linalg.norm(avoid) + 1e-8
             if an > 1e-3:
                 avoid /= an
@@ -151,13 +165,14 @@ class ExpertPolicy:
         # --- speed: slow down near obstacles, brake near target ---
         speed = self.speed_default
         if obs_dist < 2.0:
-            speed *= 0.3
+            speed *= 0.2
         if dist < 1.5:
-            speed *= 0.4
+            speed *= 0.3
 
         # map speed from [0,1] into the action-space convention [-1, 1]
         speed_action = float(np.clip(speed * 2.0 - 1.0, -1.0, 1.0))
 
+        # return the [dx, dy, dz, speed] expert action
         return np.array([
             float(np.clip(action_dir[0], -1, 1)),
             float(np.clip(action_dir[1], -1, 1)),
@@ -188,45 +203,27 @@ class ExpertBlendPolicy(SACPolicy):
 
     def _predict(self, obs: torch.Tensor, deterministic: bool = False) -> torch.Tensor:
         # --- RL action from the SAC actor ---
+        # retrieve the SAC action
         rl_action = self.actor(obs, deterministic=deterministic)
 
+        # if blend ratio is zero or less, only follow SAC action
         if self._blend_ratio <= 0.0:
             return rl_action
 
         # --- expert action (per observation in batch) ---
         obs_np = obs.detach().cpu().numpy()
+        # determine the expert action for each observation in the batched sample
         expert_np = np.array(
             [self.expert.expert_action(o) for o in obs_np],
             dtype=np.float32,
         )
+        # create tensor
         expert_t = torch.as_tensor(expert_np, device=obs.device)
 
+        # blend the expert action with the SAC action
         blended = self._blend_ratio * expert_t + (1.0 - self._blend_ratio) * rl_action
+
         return torch.clamp(blended, -1.0, 1.0)
-
-
-# ---- BLEND DECAY CALLBACK ----
-class BlendDecayCallback(BaseCallback):
-    """Linearly anneal expert blend ratio during training."""
-
-    def __init__(self, total_timesteps: int, initial: float, final: float,
-                 decay_frac: float = 0.5, verbose: int = 0):
-        super().__init__(verbose)
-        self.decay_steps = max(1, int(total_timesteps * decay_frac))
-        self.initial = initial
-        self.final = final
-
-    def _on_step(self) -> bool:
-        policy = self.model.policy
-        if not hasattr(policy, "blend_ratio"):
-            return True
-
-        t = min(self.num_timesteps / self.decay_steps, 1.0)
-        policy.blend_ratio = self.initial + t * (self.final - self.initial)
-
-        if self.verbose and self.num_timesteps % 5_000 == 0:
-            print(f"  [blend] step={self.num_timesteps}  ratio={policy.blend_ratio:.3f}")
-        return True
 
 
 # ---- CREATE ENV ----
@@ -353,7 +350,17 @@ def train(device: str = "auto"):
             verbose=1,
         )
 
-        callbacks = CallbackList([stats_cb, ckpt_cb, blend_cb])
+        # TODO TEST THIS STILL
+        early_cb = EarlyStoppingCallback(
+            reach_threshold=0.85,
+            max_collision_rate=0.05,
+            patience=10,
+            min_timesteps=10_000,
+            verbose=1,
+        )
+        early_cb.reset(stage_start_ts=model.num_timesteps)
+
+        callbacks = CallbackList([stats_cb, ckpt_cb, blend_cb, early_cb])
 
         # train
         model.learn(

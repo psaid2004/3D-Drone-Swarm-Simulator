@@ -7,8 +7,8 @@ from typing import Tuple
 # Core environment defaults
 # =============================================================================
 # constants used if curriculum not called, i.e. for test runs
-DEFAULT_NUM_DRONES = 2
-DEFAULT_NUM_OBSTACLES = 0
+DEFAULT_NUM_DRONES = 8
+DEFAULT_NUM_OBSTACLES = 12
 DEFAULT_N_STEPS = 512
 DEFAULT_LIDAR = True
 DEFAULT_RENDER_MODE = None  # if "human" -> shows environment

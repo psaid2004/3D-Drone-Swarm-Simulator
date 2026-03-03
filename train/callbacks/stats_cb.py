@@ -143,17 +143,17 @@ class StepStatsCallback(BaseCallback):
         # ---- scalar logs ----
         self.logger.record("stats/reaches_per_drone", float(reaches))
         self.logger.record("stats/reaches_per_drone_denom", float(denom))
-        self.logger.record("stats/team_reach_any", float(team_any))
-        self.logger.record("stats/team_reach_all", float(team_all))
+        self.logger.record("stats/team_reach_any", float(team_any)) # how many env had every active drone reach its target
+        self.logger.record("stats/team_reach_all", float(team_all)) # equal to above if single drone
         self.logger.record("stats/team_reach_simultaneous", float(team_simul))
-        self.logger.record("stats/collision_steps_rate",
+        self.logger.record("stats/collision_steps_rate", # fraction of agent steps where a collision occurred (needs to decrease over time)
                            float(self._collisions) / float(self._total_steps))
         self.logger.record("stats/wall_hit_steps_rate",
                            float(self._wallhits) / float(self._total_steps))
 
         if self._first_collision_steps:
             steps = np.array(list(self._first_collision_steps.values()), dtype=np.float32)
-            self.logger.record("stats/first_collision_step_mean", float(np.mean(steps)))
+            self.logger.record("stats/first_collision_step_mean", float(np.mean(steps))) # avg timestep within an episode when the first collision happens (higher = better)
             self.logger.record("stats/first_collision_step_std", float(np.std(steps)))
         else:
             self.logger.record("stats/first_collision_step_mean", 0.0)
@@ -192,3 +192,115 @@ class StepStatsCallback(BaseCallback):
                   f"team_any={team_any}, team_all={team_all}, team_simul={team_simul}, "
                   f"collision_rate={self._collisions}/{self._total_steps}, wallhit_rate={self._wallhits}/{self._total_steps}"
             )
+
+
+# ---- BLEND DECAY CALLBACK ----
+class BlendDecayCallback(BaseCallback):
+    """Linearly anneal expert blend ratio during training."""
+
+    def __init__(self, total_timesteps: int, initial: float, final: float,
+                 decay_frac: float = 0.5, verbose: int = 0):
+        super().__init__(verbose)
+        self.decay_steps = max(1, int(total_timesteps * decay_frac))
+        self.initial = initial
+        self.final = final
+
+    def _on_step(self) -> bool:
+        policy = self.model.policy
+        if not hasattr(policy, "blend_ratio"):
+            return True
+
+        t = min(self.num_timesteps / self.decay_steps, 1.0)
+        policy.blend_ratio = self.initial + t * (self.final - self.initial)
+
+        if self.verbose and self.num_timesteps % 5_000 == 0:
+            print(f"  [blend] step={self.num_timesteps}  ratio={policy.blend_ratio:.3f}")
+        return True
+
+
+class EarlyStoppingCallback(BaseCallback):
+    """
+    Stop training early for the current curriculum stage when the agent
+    has consistently reached a performance threshold.
+
+    Monitors `stats/reaches_per_drone` from StepStatsCallback and triggers
+    when the reach rate (reaches / denom) stays above `threshold` for
+    `patience` consecutive rollouts.
+
+    Also supports a collision ceiling: if collision rate drops below
+    `max_collision_rate` AND reach rate is above threshold, the stage
+    is considered solved.
+
+    Usage:
+        early_cb = EarlyStoppingCallback(
+            reach_threshold=0.9,
+            max_collision_rate=0.05,
+            patience=10,
+            verbose=1,
+        )
+        callbacks = CallbackList([stats_cb, ckpt_cb, blend_cb, early_cb])
+    """
+
+    def __init__(
+        self,
+        reach_threshold: float = 0.85,
+        max_collision_rate: float = 0.05,
+        patience: int = 10,
+        min_timesteps: int = 10_000,
+        verbose: int = 0,
+    ):
+        super().__init__(verbose)
+        self.reach_threshold = reach_threshold
+        self.max_collision_rate = max_collision_rate
+        self.patience = patience
+        self.min_timesteps = min_timesteps
+
+        self._consecutive_good = 0
+        self._stage_start_ts = 0
+
+    def reset(self, stage_start_ts: int = 0) -> None:
+        """Call this when entering a new curriculum stage."""
+        self._consecutive_good = 0
+        self._stage_start_ts = stage_start_ts
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> bool:
+        # don't stop before minimum timesteps in this stage
+        steps_in_stage = self.num_timesteps - self._stage_start_ts
+        if steps_in_stage < self.min_timesteps:
+            return True
+
+        # read logged values (set by StepStatsCallback in the same rollout)
+        reaches = self.logger.name_to_value.get("stats/reaches_per_drone", 0.0)
+        denom = self.logger.name_to_value.get("stats/reaches_per_drone_denom", 1.0)
+        collision_rate = self.logger.name_to_value.get("stats/collision_steps_rate", 1.0)
+
+        reach_rate = reaches / max(denom, 1.0)
+
+        meets_reach = reach_rate >= self.reach_threshold
+        meets_collision = collision_rate <= self.max_collision_rate
+
+        if meets_reach and meets_collision:
+            self._consecutive_good += 1
+        else:
+            self._consecutive_good = 0
+
+        if self.verbose and self._consecutive_good > 0:
+            print(
+                f"  [EarlyStop] reach={reach_rate:.2f} (>={self.reach_threshold}), "
+                f"coll={collision_rate:.4f} (<={self.max_collision_rate}), "
+                f"streak={self._consecutive_good}/{self.patience}"
+            )
+
+        if self._consecutive_good >= self.patience:
+            if self.verbose:
+                print(
+                    f"  [EarlyStop] TRIGGERED at timestep {self.num_timesteps} "
+                    f"(stage steps={steps_in_stage}). "
+                    f"Reach rate {reach_rate:.2f}, collision rate {collision_rate:.4f}."
+                )
+            return False  # returning False from _on_rollout_end stops training
+
+        return True
