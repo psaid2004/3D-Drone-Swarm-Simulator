@@ -206,7 +206,7 @@ class ExpertBlendPolicy(SACPolicy):
         # retrieve the SAC action
         rl_action = self.actor(obs, deterministic=deterministic)
 
-        # if blend ratio is zero or less, only follow SAC action
+        # if blend ratio is zero or less, only follow SAC action.
         if self._blend_ratio <= 0.0:
             return rl_action
 
