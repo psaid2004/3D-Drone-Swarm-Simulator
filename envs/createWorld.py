@@ -1,6 +1,7 @@
 import pybullet as p
 import pybullet_data
 import time
+import numpy as np
 from pathlib import Path
 
 class Swarm:
@@ -25,13 +26,25 @@ class Environment:
         self.difficulty = difficulty
         self.seed = seed
         
-        self.stat_objects = {} # mapping object -> object id
-        self.dyn_objects = {} # mapping object -> object id
+        self.objects = [] # list of tuples of the following format (shape, object, dynamic(bool))
+        self.stat_objects = {} # mapping object id -> object
+        self.dyn_objects = {}
         self.drones = []
         self.plane_id = None
     
     def spawn_env(self):
         self.plane_id = p.loadURDF("plane.urdf")
+        self.generate_objects()
+        for obj in self.objects :
+            shape, obj, dyn = obj
+            obj_id = obj.create(shape)
+            if dyn :
+                self.dyn_objects[obj_id] = obj
+            else :
+                self.stat_objects[obj_id] = obj
+            
+    def generate_objects(self):
+        rng = np.random.default_rng()
         
         
     
