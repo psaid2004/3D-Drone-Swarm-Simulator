@@ -3,12 +3,16 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple, List
 
+from envs.createObjects import *
+
 import numpy as np
 from gymnasium import spaces
 from pettingzoo.utils.env import ParallelEnv
 
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
+
+SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 
 
 class DroneSwarm3D(ParallelEnv):
@@ -18,7 +22,8 @@ class DroneSwarm3D(ParallelEnv):
         self,
         num_drones: int = 2,
         active_drones: Optional[int] = None,
-        num_obstacles: int = 4,
+        num_static_obstacles: int = 0,
+        num_dynamic_obstacles: int = 0,
         lidar: bool = False,
         max_steps: int = 500,
         render_mode: Optional[str] = None,
@@ -71,7 +76,8 @@ class DroneSwarm3D(ParallelEnv):
         self.active_drones = int(active_drones) if active_drones is not None else self.num_drones
         self.active_drones = max(1, min(self.active_drones, self.num_drones))
 
-        self.num_obstacles = int(num_obstacles)
+        self.num_static_obstacles = int(num_static_obstacles)
+        self.num_dynamic_obstacles = int(num_dynamic_obstacles)
         self.lidar = bool(lidar)
         self.max_steps = int(max_steps)
         self.render_mode = render_mode
@@ -145,9 +151,8 @@ class DroneSwarm3D(ParallelEnv):
         self._client_id = None
         self._drone_ids: List[int] = []
 
-        self._obstacle_ids: List[int] = []
-        self._obstacle_base_pos: Optional[np.ndarray] = None
-        self._obstacle_phase: Optional[np.ndarray] = None
+        self._obstacles = []
+        # self._obstacle_phase: Optional[np.ndarray] = None
 
         # GUI-only debug visuals
         self._target_body_ids: List[int] = []
@@ -406,73 +411,76 @@ class DroneSwarm3D(ParallelEnv):
             if tid is not None:
                 self._target_text_ids.append(int(tid))
 
+    #TODO change how obstacles are spawned, currently just random
+
     # -------- obstacles (physics client) --------
     def _spawn_obstacles(self) -> None:
-        self._obstacle_ids = []
-        self._obstacle_base_pos = None
-        self._obstacle_phase = None
+        rng = np.random.default_rng()
 
-        if self.num_obstacles <= 0 or self._p is None:
+        self._obstacles = []
+
+        if self.num_static_obstacles + self.num_dynamic_obstacles <= 0 or self._p is None:
             return
+        rng = self.rng
 
-        p = self._p
-        col = self._call_physics(p.createCollisionShape, p.GEOM_SPHERE, radius=self.obstacle_radius)
-        vis = self._call_physics(p.createVisualShape, p.GEOM_SPHERE, radius=self.obstacle_radius, rgbaColor=[1, 0, 0, 1])
+        for _ in range(self.num_static_obstacles):
+            shape = rng.choice(SUPPORTED_SHAPES)
+            x = rng.uniform(-self.world_scale, self.world_scale)
+            y = rng.uniform(-self.world_scale, self.world_scale)
+            z = rng.uniform(self.obstacle_height_range[0], self.obstacle_height_range[1])
+            ori = [0, 0, float(rng.uniform(-np.pi, np.pi))]
+            pos = [x, y, z]
+            size = float(rng.uniform(0.8, 1.2))
 
-        base_positions = []
-        phases = []
+            obj = EnvObject(pos, size, ori)
 
-        for _ in range(self.num_obstacles):
-            x = self.rng.uniform(-self.world_scale, self.world_scale)
-            y = self.rng.uniform(-self.world_scale, self.world_scale)
-            z = self.rng.uniform(self.obstacle_height_range[0], self.obstacle_height_range[1])
+            body = obj.create(shape)
+            self._obstacles.append(obj)
 
-            body = self._call_physics(
-                p.createMultiBody,
-                baseMass=0.0,
-                baseCollisionShapeIndex=col,
-                baseVisualShapeIndex=vis,
-                basePosition=[x, y, z],
-            )
-            self._obstacle_ids.append(int(body))
-            base_positions.append([x, y, z])
-            phases.append(self.rng.uniform(0.0, 2.0 * np.pi))
 
-        self._obstacle_base_pos = np.array(base_positions, dtype=np.float32)
-        self._obstacle_phase = np.array(phases, dtype=np.float32)
+        for _ in range(self.num_dynamic_obstacles):
+            axis = rng.choice([0, 1, 2])
+            displacement = rng.uniform(1, 3)
+            shape = rng.choice(SUPPORTED_SHAPES)
+            x = rng.uniform(-self.world_scale, self.world_scale)
+            y = rng.uniform(-self.world_scale, self.world_scale)
+            z = rng.uniform(self.obstacle_height_range[0], self.obstacle_height_range[1])
+            pos = [x, y, z]
+            ori = [0, 0, float(rng.uniform(-np.pi, np.pi))]
+
+            size = float(rng.uniform(0.8, 1.2))
+            min_pos = pos[axis] - displacement
+            max_pos = pos[axis] + displacement
+            speed = 0.2
+            direction = 1
+
+            obj = Dynamic(axis,min_pos,max_pos,speed,direction,pos, size, ori)
+            body = obj.create(shape)
+            self._obstacles.append(obj)
+
 
     def _update_obstacles(self) -> None:
         if (
-            (not self.obstacle_dynamic)
-            or self._p is None
-            or self._obstacle_base_pos is None
-            or self._obstacle_phase is None
-            or len(self._obstacle_ids) == 0
+            self._p is None
+            or len(self._obstacles) == 0
         ):
             return
 
-        p = self._p
         t = float(self._step_count) * (1.0 / 60.0)
 
-        for k, oid in enumerate(self._obstacle_ids):
-            base = self._obstacle_base_pos[k]
-            ph = float(self._obstacle_phase[k])
-
-            dx = self.obstacle_drift_amp * np.cos(self.obstacle_drift_omega * t + ph)
-            dy = self.obstacle_drift_amp * np.sin(self.obstacle_drift_omega * t + ph)
-
-            pos = [float(base[0] + dx), float(base[1] + dy), float(base[2])]
-            self._call_physics(p.resetBasePositionAndOrientation, oid, posObj=pos, ornObj=[0, 0, 0, 1])
+        for obstacle in self._obstacles:
+            if isinstance(obstacle, Dynamic):
+                obstacle.update_obstacle(t)
 
     def _nearest_obstacle_vector(self, drone_pos: np.ndarray) -> np.ndarray:
-        if self._p is None or len(self._obstacle_ids) == 0:
+        if self._p is None or len(self._obstacles) == 0:
             return np.zeros(3, dtype=np.float32)
 
         p = self._p
         obs_pos = []
-        for oid in self._obstacle_ids:
+        for object in self._obstacles:
             try:
-                pos, _ = self._call_physics(p.getBasePositionAndOrientation, oid)
+                pos, _ = self._call_physics(p.getBasePositionAndOrientation, object.body_id)
                 obs_pos.append(pos)
             except Exception:
                 pass
@@ -491,7 +499,7 @@ class DroneSwarm3D(ParallelEnv):
         Collision check against obstacles ONLY (as your current code does).
         If you later want drone-drone collisions too, add getClosestPoints between drones here.
         """
-        if self._p is None or len(self._obstacle_ids) == 0 or len(self._drone_ids) == 0:
+        if self._p is None or len(self._obstacles) == 0 or len(self._drone_ids) == 0:
             return False
 
         p = self._p
@@ -499,9 +507,9 @@ class DroneSwarm3D(ParallelEnv):
         active_ids = self._drone_ids[: self.active_drones] if len(self._drone_ids) >= self.active_drones else self._drone_ids
 
         for did in active_ids:
-            for oid in self._obstacle_ids:
+            for object in self._obstacles:
                 try:
-                    pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=oid, distance=thresh)
+                    pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=object.body_id, distance=thresh)
                     if pts and len(pts) > 0:
                         return True
                 except Exception:
@@ -976,7 +984,8 @@ def env(
     num_drones=2,
     active_drones=None,
     render_mode="human",
-    num_obstacles=4,
+    num_static_obstacles: int = 4,
+    num_dynamic_obstacles: int = 0,
     max_steps=500,
     lidar=False,
     **kwargs,
@@ -984,7 +993,8 @@ def env(
     return DroneSwarm3D(
         num_drones=num_drones,
         active_drones=active_drones,
-        num_obstacles=num_obstacles,
+        num_static_obstacles=num_static_obstacles,
+        num_dynamic_obstacles=num_dynamic_obstacles,
         lidar=lidar,
         max_steps=max_steps,
         render_mode=render_mode,
