@@ -9,7 +9,6 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 PRINT_EVERY = 5_000  # only print to console every N timesteps
 
-
 @dataclass
 class CurriculumStageInfo:
     stage_idx: int
@@ -17,7 +16,7 @@ class CurriculumStageInfo:
     active_drones: int
     num_obstacles: int
     stage_timesteps: int
-    total_planned_timesteps: int  # sum over all curriculum stages (for progress display)
+    total_planned_timesteps: int
 
 
 class StepStatsCallback(BaseCallback):
@@ -39,6 +38,12 @@ class StepStatsCallback(BaseCallback):
             n_envs: int,
             stage_info: Optional[CurriculumStageInfo] = None,
             print_every: int = PRINT_EVERY,
+            # early-stop tools
+            enable_early_stop: bool = True,
+            reach_threshold: float = 0.85,
+            max_collision_rate: float = 0.05,
+            patience: int = 10,
+            min_timesteps:int = 10000,
             verbose: int = 0,
     ):
         super().__init__(verbose)
@@ -46,33 +51,46 @@ class StepStatsCallback(BaseCallback):
         self.n_envs = int(n_envs)
         self.agents_count = self.n_drones_fixed * self.n_envs
 
-        self.stage_info: Optional[CurriculumStageInfo] = stage_info
+        self.stage_info = stage_info
         self.print_every = int(print_every)
         self._last_print_ts = 0
+
+        self.enable_early_stop = bool(enable_early_stop)
+        self.reach_threshold = float(reach_threshold)
+        self.max_collision_rate = float(max_collision_rate)
+        self.patience = int(patience)
+        self.min_timesteps = int(min_timesteps)
+
+        self._consecutive_good = 0
+        self._stage_start_ts = 0
+
         self._rollout_reset()
+
+
+    def reset(self, stage_start_ts: int = 0) -> None:
+        self._consecutive_good = 0
+        self._stage_start_ts = int(stage_start_ts)
+
 
     # You can call this from training when you enter a new curriculum stage
     def set_stage_info(self, stage_info: CurriculumStageInfo) -> None:
         self.stage_info = stage_info
 
+
     def _rollout_reset(self):
         self._total_steps = 0
         self._collisions = 0
         self._wallhits = 0
-
-        # per agent-slot unique reach
         self._seen_reached_slots = set()
-
-        # per-env reached flags for drones (shape: n_envs x n_drones_fixed)
         self._env_drone_reached_anytime = np.zeros((self.n_envs, self.n_drones_fixed),
                                                    dtype=np.bool_)
         self._team_simul_flag = np.zeros((self.n_envs,), dtype=np.bool_)
-
-        # first collision step per slot
         self._first_collision_steps = {}
+
 
     def _on_rollout_start(self) -> None:
         self._rollout_reset()
+
 
     def _on_step(self) -> bool:
         infos = self.locals["infos"]  # list length = agents_count
@@ -127,6 +145,7 @@ class StepStatsCallback(BaseCallback):
 
         reaches = len(self._seen_reached_slots)
         denom = self.agents_count
+        collision_rate = float(self._collisions) / float(self._total_steps)
 
         team_any = 0
         team_all = 0
@@ -140,6 +159,7 @@ class StepStatsCallback(BaseCallback):
             team_all += 1 if all_ok else 0
             team_simul += 1 if bool(self._team_simul_flag[e]) else 0
 
+
         # ---- scalar logs ----
         self.logger.record("stats/reaches_per_drone", float(reaches))
         self.logger.record("stats/reaches_per_drone_denom", float(denom))
@@ -147,7 +167,7 @@ class StepStatsCallback(BaseCallback):
         self.logger.record("stats/team_reach_all", float(team_all)) # equal to above if single drone
         self.logger.record("stats/team_reach_simultaneous", float(team_simul))
         self.logger.record("stats/collision_steps_rate", # fraction of agent steps where a collision occurred (needs to decrease over time)
-                           float(self._collisions) / float(self._total_steps))
+                           float(collision_rate))
         self.logger.record("stats/wall_hit_steps_rate",
                            float(self._wallhits) / float(self._total_steps))
 
@@ -193,6 +213,33 @@ class StepStatsCallback(BaseCallback):
                   f"collision_rate={self._collisions}/{self._total_steps}, wallhit_rate={self._wallhits}/{self._total_steps}"
             )
 
+        # ---- Early stop decision ----
+        if not self.enable_early_stop:
+            return
+
+        steps_in_stage = self.num_timesteps - self._stage_start_ts
+        if steps_in_stage < self.min_timesteps:
+            return
+
+        reach_rate = float(reaches) / max(denom, 1.0)
+        meets_reach = reach_rate >= self.reach_threshold
+        meets_collision = collision_rate <= self.max_collision_rate
+
+        if meets_reach and meets_collision:
+            self._consecutive_good +=1
+        else:
+            self._consecutive_good = 0
+
+        if self.verbose and self._consecutive_good > 0:
+            print(
+                f"  [EarlyStop] reach={reach_rate:.2f} coll={collision_rate:.4f} streak={self._consecutive_good}/{self.patience}")
+
+        if self._consecutive_good >= self.patience:
+            if self.verbose:
+                print(f"  [EarlyStop] TRIGGERED at {self.num_timesteps} (stage_steps={steps_in_stage})")
+            self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
+            self.model.env.reset()  # optional: clean reset
+
 
 # ---- BLEND DECAY CALLBACK ----
 class BlendDecayCallback(BaseCallback):
@@ -215,92 +262,4 @@ class BlendDecayCallback(BaseCallback):
 
         if self.verbose and self.num_timesteps % 5_000 == 0:
             print(f"  [blend] step={self.num_timesteps}  ratio={policy.blend_ratio:.3f}")
-        return True
-
-
-class EarlyStoppingCallback(BaseCallback):
-    """
-    Stop training early for the current curriculum stage when the agent
-    has consistently reached a performance threshold.
-
-    Monitors `stats/reaches_per_drone` from StepStatsCallback and triggers
-    when the reach rate (reaches / denom) stays above `threshold` for
-    `patience` consecutive rollouts.
-
-    Also supports a collision ceiling: if collision rate drops below
-    `max_collision_rate` AND reach rate is above threshold, the stage
-    is considered solved.
-
-    Usage:
-        early_cb = EarlyStoppingCallback(
-            reach_threshold=0.9,
-            max_collision_rate=0.05,
-            patience=10,
-            verbose=1,
-        )
-        callbacks = CallbackList([stats_cb, ckpt_cb, blend_cb, early_cb])
-    """
-
-    def __init__(
-        self,
-        reach_threshold: float = 0.85,
-        max_collision_rate: float = 0.05,
-        patience: int = 10,
-        min_timesteps: int = 10_000,
-        verbose: int = 0,
-    ):
-        super().__init__(verbose)
-        self.reach_threshold = reach_threshold
-        self.max_collision_rate = max_collision_rate
-        self.patience = patience
-        self.min_timesteps = min_timesteps
-
-        self._consecutive_good = 0
-        self._stage_start_ts = 0
-
-    def reset(self, stage_start_ts: int = 0) -> None:
-        """Call this when entering a new curriculum stage."""
-        self._consecutive_good = 0
-        self._stage_start_ts = stage_start_ts
-
-    def _on_step(self) -> bool:
-        return True
-
-    def _on_rollout_end(self) -> bool:
-        # don't stop before minimum timesteps in this stage
-        steps_in_stage = self.num_timesteps - self._stage_start_ts
-        if steps_in_stage < self.min_timesteps:
-            return True
-
-        # read logged values (set by StepStatsCallback in the same rollout)
-        reaches = self.logger.name_to_value.get("stats/reaches_per_drone", 0.0)
-        denom = self.logger.name_to_value.get("stats/reaches_per_drone_denom", 1.0)
-        collision_rate = self.logger.name_to_value.get("stats/collision_steps_rate", 1.0)
-
-        reach_rate = reaches / max(denom, 1.0)
-
-        meets_reach = reach_rate >= self.reach_threshold
-        meets_collision = collision_rate <= self.max_collision_rate
-
-        if meets_reach and meets_collision:
-            self._consecutive_good += 1
-        else:
-            self._consecutive_good = 0
-
-        if self.verbose and self._consecutive_good > 0:
-            print(
-                f"  [EarlyStop] reach={reach_rate:.2f} (>={self.reach_threshold}), "
-                f"coll={collision_rate:.4f} (<={self.max_collision_rate}), "
-                f"streak={self._consecutive_good}/{self.patience}"
-            )
-
-        if self._consecutive_good >= self.patience:
-            if self.verbose:
-                print(
-                    f"  [EarlyStop] TRIGGERED at timestep {self.num_timesteps} "
-                    f"(stage steps={steps_in_stage}). "
-                    f"Reach rate {reach_rate:.2f}, collision rate {collision_rate:.4f}."
-                )
-            return False  # returning False from _on_rollout_end stops training
-
         return True

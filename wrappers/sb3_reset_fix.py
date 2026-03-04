@@ -22,7 +22,7 @@ class SB3VecResetTupleFix(VecEnvWrapper):
         self.last_reset_info: Optional[Any] = None
 
     def reset(self, **kwargs):
-        out = self.venv.reset(**kwargs)
+        out = self.venv.reset()
         if isinstance(out, tuple) and len(out) == 2:
             obs, info = out
             self.last_reset_info = info

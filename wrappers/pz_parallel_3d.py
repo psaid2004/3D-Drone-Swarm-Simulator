@@ -80,8 +80,9 @@ class DroneSwarm3D(ParallelEnv):
 
         # Action: (vx_dir, vy_dir, vz_dir, speed)
         self._action_space = spaces.Box(
-            low=np.full((4,), -1.0, dtype=np.float32),
-            high=np.full((4,), 1.0, dtype=np.float32),
+            low=-1.0,
+            high=1.0,
+            shape = (4,),
             dtype=np.float32,
         )
 
@@ -174,7 +175,12 @@ class DroneSwarm3D(ParallelEnv):
         self._step_count = 0
         self.agents = self.possible_agents[:]
 
+        # If the underlying VelocityAviary client is disconnected, rebuild it.
+        if not self._pybullet_client_alive():
+            self._rebuild_aviary()
+
         self._env.reset()
+
         self._init_pybullet_handles()
         self._refresh_drone_ids_from_pybullet()
         # retrieve and copy the drone spawn positions
@@ -417,6 +423,46 @@ class DroneSwarm3D(ParallelEnv):
 
         self._drone_ids = ids
 
+
+
+    def _pybullet_client_alive(self) -> bool:
+        """Return True if the VelocityAviary's physics client is still connected."""
+        try:
+            import pybullet as p
+        except Exception:
+            return False
+
+        cid = getattr(self._env, "CLIENT", None)
+        if cid is None:
+            cid = getattr(self._env, "_CLIENT", None)
+
+        if cid is None:
+            return False
+
+        try:
+            return bool(p.isConnected(cid))
+        except Exception:
+            return False
+
+
+    def _rebuild_aviary(self) -> None:
+        """Recreate VelocityAviary from scratch (fresh PyBullet connection)."""
+        try:
+            # best effort close old env (may already be half-dead)
+            self._env.close()
+        except Exception:
+            pass
+
+        self._env = VelocityAviary(
+            drone_model=DroneModel.CF2X,
+            num_drones=self.num_drones,
+            physics=Physics.PYB,
+            gui=(self.render_mode == "human"),
+            record=False,
+        )
+        self._env.SPEED_LIMIT = 2.0
+
+
     # ------ TARGET FUNCTIONS ------
     def make_valid_target(self, min_dist = 0.5, max_attempts = 1000) -> np.ndarray:
         """
@@ -615,7 +661,8 @@ class DroneSwarm3D(ParallelEnv):
 
     def _nearest_obstacle_vector(self, drone_pos: np.ndarray) -> np.ndarray:
         if self._p is None or len(self._obstacle_ids) == 0:
-            return np.zeros(3, dtype=np.float32)
+            # if there are no obstacles, set the distance really far away
+            return np.array([LIDAR_RANGE * 2.0, 0.0, 0.0], dtype=np.float32)
 
         p = self._p
         obs_pos = []
@@ -946,8 +993,8 @@ class DroneSwarm3D(ParallelEnv):
                 dir_vec = v/n if n > 1e-6 else dir_vec
 
                 # speed mapping: u[3] from [-1,1] -> [0,1 (vel_scale)]
-                speed = float((u[3] + 1.0) * 0.5)
-                # speed = VEL_SCALE * speed01  # fraction, NOT m/s
+                speed01 = float((u[3] + 1.0) * 0.5)
+                speed = self._env.SPEED_LIMIT * speed01  # m/s
 
                 # hover bias to fight gravity drift
                 dir_vec[2] += HOVER_BIAS_VZ
@@ -1159,6 +1206,7 @@ class DroneSwarm3D(ParallelEnv):
                     too_close = True
 
         return max_d, min_d, too_far, too_close
+
 
     def render(self):
         return None

@@ -1,5 +1,7 @@
 """
 Run the ExpertPolicy in the 3-D drone env and see whether it ever reaches the target.
+
+python -m train.evaluation.test_expert_blending
 """
 
 import numpy as np
@@ -11,7 +13,7 @@ NUM_EPISODES = 10
 MAX_STEPS = 1000
 WORLD_SCALE = 5
 ACTIVE_DRONES = 1
-NUM_OBSTACLES = 0
+NUM_OBSTACLES = 10
 
 def run():
     expert = ExpertPolicy()
@@ -41,7 +43,7 @@ def run():
             for a in raw.agents:
                 total_rewards[a] += rewards.get(a, 0.0)
                 # check if the env signals "reached" via info or termination
-                if terms.get(a, False):
+                if infos.get(a, {}).get("reached", False):
                     reached[a] = True
 
             # end episode if all done

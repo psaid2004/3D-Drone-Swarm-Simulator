@@ -27,7 +27,7 @@ DEFAULT_SHARED_TARGET = True
 GOAL_RADIUS = 1.0
 GOAL_BONUS = 150
 GOAL_WALL_MARGIN = 3.5  # Minimum distance between the wall and the goal
-MIN_GOAL_DIST = 15.0
+MIN_GOAL_DIST = 6.0
 
 # =============================================================================
 # Swarm cohesion / separation
@@ -61,7 +61,7 @@ LIDAR_SHOW_RAYS_TEST = True
 # =============================================================================
 # Motion
 # =============================================================================
-VEL_SCALE = 15.0
+VEL_SCALE = 2.0
 TAKEOFF_STEPS = 60
 TAKEOFF_VZ = 1.0
 HOVER_BIAS_VZ = 0.0
