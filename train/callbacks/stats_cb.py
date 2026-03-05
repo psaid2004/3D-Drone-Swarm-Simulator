@@ -239,8 +239,9 @@ class StepStatsCallback(BaseCallback):
                 print(f"  [EarlyStop] TRIGGERED at {self.num_timesteps} (stage_steps={steps_in_stage})")
             self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
             self.model.env.reset()  # optional: clean reset
-#
-#
+
+
+
 # # ---- BLEND DECAY CALLBACK ----
 # class BlendDecayCallback(BaseCallback):
 #     """Linearly anneal expert blend ratio during training."""

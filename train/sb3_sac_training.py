@@ -25,7 +25,7 @@ from stable_baselines3.sac.policies import SACPolicy
 from config.curriculum import Curriculum
 from config.defaults import (DEFAULT_NUM_DRONES, MODELS_DIR, LIDAR_NUM_LAYERS,
                              LIDAR_NUM_RAYS, LIDAR_RANGE, DEFAULT_LIDAR, eps)
-from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo, BlendDecayCallback
+from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.pz_parallel_3d import env as make_env
 from wrappers.sb3_reset_fix import SB3VecResetTupleFix
 
@@ -367,15 +367,7 @@ def train(device: str = "auto"):
         )
         stats_cb.reset(stage_start_ts=model.num_timesteps)
 
-        blend_cb = BlendDecayCallback(
-            total_timesteps=total_planned,
-            initial=INITIAL_BLEND,
-            final=FINAL_BLEND,
-            decay_frac=BLEND_DECAY_FRAC,
-            verbose=1,
-        )
-
-        callbacks = CallbackList([stats_cb, ckpt_cb, blend_cb])
+        callbacks = CallbackList([stats_cb, ckpt_cb])
 
         # train
         model.learn(
