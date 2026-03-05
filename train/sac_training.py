@@ -12,21 +12,25 @@ from __future__ import annotations
 import os, time
 import numpy as np
 import torch
+import warnings
 
 import supersuit as ss
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import (
     CallbackList, CheckpointCallback
 )
-from stable_baselines3.common.vec_env import VecNormalize
+from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
 from stable_baselines3.sac.policies import SACPolicy
 
 from config.curriculum import Curriculum
 from config.defaults import (DEFAULT_NUM_DRONES, MODELS_DIR, LIDAR_NUM_LAYERS,
                              LIDAR_NUM_RAYS, LIDAR_RANGE, DEFAULT_LIDAR, eps)
-from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo, BlendDecayCallback, EarlyStoppingCallback
+from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.pz_parallel_3d import env as make_env
 from wrappers.sb3_reset_fix import SB3VecResetTupleFix
+
+warnings.filterwarnings("ignore", message=".*Box low's precision lowered.*")
+warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
 
 # ---- PATHS ----
 MODEL_DIR = MODELS_DIR
@@ -44,7 +48,6 @@ ENTROPY_COEF    = "auto"
 NET_ARCH = dict(pi=[512, 256, 128], qf=[512, 256, 128])
 
 N_ENVS = 1
-
 
 # ---- FILESYSTEM HELPERS ----
 def get_next_model_path(base=f"{MODEL_DIR}/sac_", drones=1, obs=0, ext=".zip"):
@@ -80,10 +83,12 @@ def create_env(num_drones: int, active_drones: int, num_obstacles: int, world_sc
     )
 
     vec = ss.pettingzoo_env_to_vec_env_v1(raw)
-    if N_ENVS > 1:
-        vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
+
+    vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
 
     vec = SB3VecResetTupleFix(vec)
+
+    vec = VecMonitor(vec)
 
     vec = VecNormalize(
         vec,
@@ -93,7 +98,16 @@ def create_env(num_drones: int, active_drones: int, num_obstacles: int, world_sc
         clip_obs=5.0,
         clip_reward=10.0,
     )
+
     return vec
+
+
+def unwrap_vecnormalize(env):
+    while env is not None:
+        if isinstance(env, VecNormalize):
+            return env
+        env = getattr(env, "venv", None)
+    return None
 
 
 # ---- TRAINING LOOP ----
@@ -116,7 +130,7 @@ def train(device: str = "auto"):
 
 
     model = SAC(
-        "", # TODO ADD POLICY
+        "MlpPolicy",
         train_env,
         learning_rate=LEARNING_RATE,
         buffer_size=BUFFER_SIZE,
@@ -145,10 +159,13 @@ def train(device: str = "auto"):
         old_env = model.get_env()
         new_env = create_env(DEFAULT_NUM_DRONES, active_drones, n_obs, world_scale)
 
-        # transfer normalisation stats
-        if isinstance(old_env, VecNormalize) and isinstance(new_env, VecNormalize):
-            new_env.obs_rms = old_env.obs_rms
-            new_env.ret_rms = old_env.ret_rms
+        old_vn = unwrap_vecnormalize(old_env)
+        new_vn = unwrap_vecnormalize(new_env)
+
+        if old_vn is not None and new_vn is not None:
+            new_vn.obs_rms = old_vn.obs_rms
+            new_vn.ret_rms = old_vn.ret_rms
+
         model.set_env(new_env)
 
         # callbacks
@@ -171,20 +188,16 @@ def train(device: str = "auto"):
             n_drones_fixed=DEFAULT_NUM_DRONES,
             n_envs=N_ENVS,
             stage_info=stage_info,
-            verbose=1,
-        )
-
-        # TODO FIX THIS STILL
-        early_cb = EarlyStoppingCallback(
+            enable_early_stop=True,
             reach_threshold=0.85,
             max_collision_rate=0.05,
             patience=10,
             min_timesteps=10_000,
             verbose=1,
         )
-        early_cb.reset(stage_start_ts=model.num_timesteps)
+        stats_cb.reset(stage_start_ts=model.num_timesteps)
 
-        callbacks = CallbackList([stats_cb, ckpt_cb, early_cb])
+        callbacks = CallbackList([stats_cb, ckpt_cb])
 
         # train
         model.learn(
@@ -203,6 +216,8 @@ def train(device: str = "auto"):
         except Exception:
             pass
         train_env = new_env
+
+        old_env.close()
 
     train_env.close()
     print("Training complete.")

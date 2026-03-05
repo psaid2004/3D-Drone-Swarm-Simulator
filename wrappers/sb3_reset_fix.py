@@ -1,9 +1,8 @@
-# wrappers/sb3_reset_fix.py
 from __future__ import annotations
 
 from typing import Any, Optional
-
 import numpy as np
+
 from stable_baselines3.common.vec_env import VecEnvWrapper
 
 
@@ -23,7 +22,7 @@ class SB3VecResetTupleFix(VecEnvWrapper):
         self.last_reset_info: Optional[Any] = None
 
     def reset(self, **kwargs):
-        out = self.venv.reset(**kwargs)
+        out = self.venv.reset()
         if isinstance(out, tuple) and len(out) == 2:
             obs, info = out
             self.last_reset_info = info
