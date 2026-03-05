@@ -239,27 +239,27 @@ class StepStatsCallback(BaseCallback):
                 print(f"  [EarlyStop] TRIGGERED at {self.num_timesteps} (stage_steps={steps_in_stage})")
             self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
             self.model.env.reset()  # optional: clean reset
-
-
-# ---- BLEND DECAY CALLBACK ----
-class BlendDecayCallback(BaseCallback):
-    """Linearly anneal expert blend ratio during training."""
-
-    def __init__(self, total_timesteps: int, initial: float, final: float,
-                 decay_frac: float = 0.5, verbose: int = 0):
-        super().__init__(verbose)
-        self.decay_steps = max(1, int(total_timesteps * decay_frac))
-        self.initial = initial
-        self.final = final
-
-    def _on_step(self) -> bool:
-        policy = self.model.policy
-        if not hasattr(policy, "blend_ratio"):
-            return True
-
-        t = min(self.num_timesteps / self.decay_steps, 1.0)
-        policy.blend_ratio = self.initial + t * (self.final - self.initial)
-
-        if self.verbose and self.num_timesteps % 5_000 == 0:
-            print(f"  [blend] step={self.num_timesteps}  ratio={policy.blend_ratio:.3f}")
-        return True
+#
+#
+# # ---- BLEND DECAY CALLBACK ----
+# class BlendDecayCallback(BaseCallback):
+#     """Linearly anneal expert blend ratio during training."""
+#
+#     def __init__(self, total_timesteps: int, initial: float, final: float,
+#                  decay_frac: float = 0.5, verbose: int = 0):
+#         super().__init__(verbose)
+#         self.decay_steps = max(1, int(total_timesteps * decay_frac))
+#         self.initial = initial
+#         self.final = final
+#
+#     def _on_step(self) -> bool:
+#         policy = self.model.policy
+#         if not hasattr(policy, "blend_ratio"):
+#             return True
+#
+#         t = min(self.num_timesteps / self.decay_steps, 1.0)
+#         policy.blend_ratio = self.initial + t * (self.final - self.initial)
+#
+#         if self.verbose and self.num_timesteps % 5_000 == 0:
+#             print(f"  [blend] step={self.num_timesteps}  ratio={policy.blend_ratio:.3f}")
+#         return True
