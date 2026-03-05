@@ -21,7 +21,7 @@ class DroneSwarm3D(ParallelEnv):
     metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
 
     # ------ Initialisation ------
-    def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None, num_obstacles: int = 5,
+    def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None, num_static_obstacles: int = 5,num_dynamic_obstacles: int = 1,
                  lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 10.0,
                  seed: Optional[int] = None):
 
@@ -72,9 +72,6 @@ class DroneSwarm3D(ParallelEnv):
         self._client_id = None
         self._drone_ids: List[int] = []
         self._obstacles = []
-        self._obstacle_ids: List[int] = []
-        self._obstacle_base_pos: Optional[np.ndarray] = None
-        self._obstacle_phase: Optional[np.ndarray] = None
 
         # GUI-only debug visuals
         self._target_body_ids: List[int] = []
@@ -486,9 +483,9 @@ class DroneSwarm3D(ParallelEnv):
                 continue
 
             obs_pos = []
-            for oid in self._obstacle_ids:
+            for object in self._obstacles:
                 try:
-                    pos, _ = self._call_physics(self._p.getBasePositionAndOrientation, oid)
+                    pos, _ = self._call_physics(self._p.getBasePositionAndOrientation, object.body_id)
                     obs_pos.append(pos)
                 except Exception:
                     pass
@@ -608,9 +605,9 @@ class DroneSwarm3D(ParallelEnv):
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
                 z = self.rng.uniform(OBSTACLE_HEIGHT_RANGE[0], OBSTACLE_HEIGHT_RANGE[1])
 
-                candidate = np.array([x,y,z], dtype=np.float32)
+                candidate = np.array([x, y, z], dtype=np.float32)
 
-                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS + 0.4): # TODO ASK PEDRO ABOUT 0.4
+                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS + 0.4):  # TODO ASK PEDRO ABOUT 0.4
 
                     continue
                 pos = [x, y, z]
@@ -621,9 +618,8 @@ class DroneSwarm3D(ParallelEnv):
 
             obj = EnvObject(pos, size, ori)
 
-            body = obj.create(shape, physics_call= self._call_physics)
+            body = obj.create(shape, physics_call=self._call_physics)
             self._obstacles.append(obj)
-
 
         for _ in range(self.num_dynamic_obstacles):
             pos = []
@@ -675,7 +671,7 @@ class DroneSwarm3D(ParallelEnv):
     def _nearest_obstacle_vector(self, drone_pos: np.ndarray) -> np.ndarray:
         if self._p is None or len(self._obstacles) == 0:
             return np.zeros(3, dtype=np.float32)
-        if self._p is None or len(self._obstacle_ids) == 0:
+        if self._p is None or len(self._obstacles) == 0:
             # if there are no obstacles, set the distance really far away
             return np.array([LIDAR_RANGE * 2.0, 0.0, 0.0], dtype=np.float32)
 
@@ -718,11 +714,11 @@ class DroneSwarm3D(ParallelEnv):
         thresh_drone = COLLISION_DIST
 
         # drone vs obstacle
-        if len(self._obstacle_ids) >0:
+        if len(self._obstacles) >0:
             for i, did in enumerate(active_ids):
-                for oid in self._obstacle_ids:
+                for object in self._obstacles:
                     try:
-                        pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=oid,
+                        pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=object.body_id,
                                                  distance=thresh_obstacle)
                         if pts and len(pts) > 0:
                             collided[i] = True
@@ -1074,7 +1070,7 @@ class DroneSwarm3D(ParallelEnv):
             r_goal_dist = -0.15 * dist
             r_time = -TIME_PEN
             r_ctrl = -CNTRL_PEN * float(np.linalg.norm(act[i]))
-            if len(self._obstacle_ids) > 0:
+            if len(self._obstacles) > 0:
                 d_obs = float(np.linalg.norm(obs_dict[a][9:12]))
                 r_near = -NEAR_OBS_PEN / max(d_obs, 0.10)
             else:

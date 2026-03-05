@@ -12,7 +12,7 @@ def main():
     # --- create environment ---
     n_drones = 1
     n_obstacles = 2
-    n_steps = 10000
+    n_steps = 5000
 
     pz_env = make_env(
         num_drones=n_drones,
