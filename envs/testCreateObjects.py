@@ -5,9 +5,6 @@ import time
 import numpy as np
 from createObjects import *
 
-
-
-
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
 p.setGravity(0, 0, -9.81)
@@ -19,21 +16,26 @@ p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 dynamicObstacles = dict()
 
+
 start = -2
 end = 2
 speed = 0.01  # meters per simulation step
 direction = 1  # 1 = forward, -1 = backward
+
 
 pathParams = {"axis" : 0, "min": start, "max": end, "speed":speed, "direction" :direction}
 
 start_position = [2,0,1]
 size = 1
 orientation = [0,0,0]
-obs_id, obs_path = create_dynamic_cylinder(start_position, size, pathParams)
-dynamicObstacles[obs_id] = obs_path
 
-create_static_wall([0,3,3],1, [0,0,1.57])
+cylinder = Dynamic(0, start, end, speed, direction, start_position, size, [0,0,0])
 
+obs_id = cylinder.create("cylinder")
+dynamicObstacles[obs_id] = pathParams
+
+static_wall = EnvObject([0,3,3], 1, [0,0,1.57])
+static_wall.create("wall")
 
 start = -2
 end = 1
@@ -42,12 +44,16 @@ direction = -1  # 1 = forward, -1 = backward
 
 pathParams = {"axis" : 0, "min": start, "max": end, "speed":speed, "direction" :direction}
 
-obs_id, obs_path = create_dynamic_wall([-2, -2, 1], size, pathParams, [0.2,0,1.57])
-dynamicObstacles[obs_id] = obs_path
+wall_st_pos = [-2, -2, 1]
+
+dynamic_wall = Dynamic(0, start, end, speed, direction, wall_st_pos, size, [0.2,0,1.57])
+obs_id = dynamic_wall.create("wall")
+dynamicObstacles[obs_id] = pathParams
 
 
 start_position = [-2,2,1]
-create_static_box(start_position, size)
+static_box = EnvObject(start_position, size, [0,0,0])
+static_box.create("box")
 
 # 3️⃣ Load a simple ground plane
 plane_id = p.loadURDF("plane.urdf")
@@ -55,8 +61,7 @@ plane_id = p.loadURDF("plane.urdf")
 
 
 # Load URDF
-drone_start_pos = [0, 0, 0.5]  # half a meter above ground
-drone_start_ori = p.getQuaternionFromEuler([0, 0, 0])
+drone = Drone([0, 0, 0.5], [0, 0, 0])
 
 # Use CF2X drone URDF from gym-pybullet-drones
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -65,7 +70,7 @@ URDF_PATH  = ASSETS_DIR / "cf2p.urdf"
 p.setAdditionalSearchPath(str(ASSETS_DIR))
 print(str(URDF_PATH))
 
-drone_id = p.loadURDF(str(URDF_PATH), drone_start_pos, drone_start_ori)
+drone_id = p.loadURDF(str(URDF_PATH), drone.start_pos, drone.rotation)
 
 
 
@@ -101,3 +106,7 @@ for t in range(8000):
 
 # 5️⃣ Disconnect when done
 p.disconnect()
+
+class Simulator:
+    def simulate(self, env, t) :
+        pass
