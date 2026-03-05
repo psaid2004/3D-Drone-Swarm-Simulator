@@ -16,13 +16,14 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from config.defaults import *
 SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 
+#TODO despawn after reaching target, spawn obstacle between target and drone, Dynamic obstacles spawning (should not go out of bounds, or collide)
 
 class DroneSwarm3D(ParallelEnv):
     metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
 
     # ------ Initialisation ------
     def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None, num_static_obstacles: int = 5,num_dynamic_obstacles: int = 1,
-                 lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 10.0,
+                 lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 4.0,
                  seed: Optional[int] = None):
 
         # ---------------- basic config ----------------
@@ -475,7 +476,7 @@ class DroneSwarm3D(ParallelEnv):
             t = np. array([
                 self.rng.uniform(-self.world_scale, self.world_scale),
                 self.rng.uniform(-self.world_scale, self.world_scale),
-                self.rng.uniform(0.8, 2.0)
+                self.rng.uniform(0,self.world_scale),
             ], dtype=np.float32)
 
             drone_positions = self._spawn_positions
@@ -492,14 +493,14 @@ class DroneSwarm3D(ParallelEnv):
 
             obs_pos = np.array(obs_pos, dtype=np.float32)
             if len(obs_pos) > 0:
-                if np.any(np.linalg.norm(obs_pos - t, axis=-1) < (OBSTACLE_RADIUS + min_dist)):
+                if np.any(np.linalg.norm(obs_pos - t, axis=-1) < min_dist):
                     continue
 
             return t
 
         x = self.rng.uniform(-self.world_scale, self.world_scale)
         y = self.rng.uniform(-self.world_scale, self.world_scale)
-        z = self.rng.uniform(0.8, 2.0)
+        z = self.rng.uniform(0, self.world_scale)
 
         return np.array([x, y, z], dtype=np.float32)
 
@@ -603,11 +604,11 @@ class DroneSwarm3D(ParallelEnv):
 
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
-                z = self.rng.uniform(OBSTACLE_HEIGHT_RANGE[0], OBSTACLE_HEIGHT_RANGE[1])
+                z = self.rng.uniform(0, self.world_scale)
 
                 candidate = np.array([x, y, z], dtype=np.float32)
 
-                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS + 0.4):  # TODO ASK PEDRO ABOUT 0.4
+                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
 
                     continue
                 pos = [x, y, z]
@@ -627,11 +628,11 @@ class DroneSwarm3D(ParallelEnv):
 
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
-                z = self.rng.uniform(OBSTACLE_HEIGHT_RANGE[0], OBSTACLE_HEIGHT_RANGE[1])
+                z = self.rng.uniform(0, self.world_scale)
 
                 candidate = np.array([x,y,z], dtype=np.float32)
 
-                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS + 0.4): # TODO ASK PEDRO ABOUT 0.4
+                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
 
                     continue
                 pos = [x, y, z]
@@ -710,8 +711,8 @@ class DroneSwarm3D(ParallelEnv):
         p = self._p
         active_ids = self._drone_ids[: self.active_drones]
 
-        thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
-        thresh_drone = COLLISION_DIST
+        thresh_obstacle = 0
+        thresh_drone = 0
 
         # drone vs obstacle
         if len(self._obstacles) >0:
@@ -721,6 +722,7 @@ class DroneSwarm3D(ParallelEnv):
                         pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=object.body_id,
                                                  distance=thresh_obstacle)
                         if pts and len(pts) > 0:
+                            print("drone collided with ", object.body_id)
                             collided[i] = True
                             break
                     except Exception:
@@ -1034,7 +1036,7 @@ class DroneSwarm3D(ParallelEnv):
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
-            if dist < GOAL_RADIUS:
+            if dist < 0.1:
                 reached_now[i] = True
                 self._reached_once[i] = True
 
