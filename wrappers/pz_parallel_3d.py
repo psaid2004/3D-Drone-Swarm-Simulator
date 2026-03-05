@@ -634,7 +634,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def _update_obstacles(self) -> None:
-        """ Update the dynamic obstacles. """
+        """ Update the dynamic obstacles """
         if (
                 (not OBSTACLE_DYNAMIC)
                 or self._p is None
