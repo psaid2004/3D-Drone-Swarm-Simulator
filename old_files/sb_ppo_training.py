@@ -19,7 +19,7 @@ from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
 from stable_baselines3.common.vec_env import VecNormalize
 
 from config.curriculum import PPO_CURRICULUM
-from config.experiment import (
+from old_files.experiment import (
     DEFAULT_LIDAR,
     DEFAULT_SHARED_TARGET,
     DEFAULT_SWARM_MAX_SEP,

@@ -7,7 +7,7 @@ from stable_baselines3 import PPO
 from tqdm import trange
 from tabulate import tabulate
 
-from config.experiment import (
+from old_files.experiment import (
     DEFAULT_NUM_DRONES,
     DEFAULT_NUM_OBSTACLES,
     DEFAULT_MAX_STEPS,

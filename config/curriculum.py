@@ -1,67 +1,47 @@
-"""config/curriculum.py
-
-Central place for all curriculum definitions.
-
-Why this exists:
-- The project previously had multiple curriculum definitions spread across files.
-- Keeping them in one place makes it easier to tweak training stages without
-  touching the training logic.
-
-IMPORTANT:
-- Values below are copied from the *current* working setup to preserve behavior.
+"""
+The following class contains the curriculum by which training is performed.
 """
 
 from __future__ import annotations
-
 from typing import Dict, List, Tuple
 
-# =============================================================================
-# SB3 PPO curriculum (CURRENT 3D TRAINING)
-# =============================================================================
-# Each stage tuple:
-#   (world_scale, active_drones, num_obstacles, timesteps)
-#
-# These values are taken 1:1 from train/sb_ppo_training.py (before refactor).
-PPO_CURRICULUM: List[Tuple[float, int, int, int]] = [
-    (2.0, 1, 10, 250_000),       #drones learn
-    (2.5, 2, 8,  450_000),       #drones don't die but don't reach often - converge to hover (loss: 40-60) - local min
-    (3.0, 4, 6,  550_000),
-    (3.5, 8, 6,  650_000),
-    (4.5, 8, 8,  900_000),
-]
 
-# =============================================================================
-# LEGACY staged curriculum (kept for backwards compatibility)
-# =============================================================================
-# This dict was previously in train/staged_curriculums.py.
-# It is still exported as `CURRICULUM` so old imports keep working.
-CURRICULUM: Dict[int, List[Tuple[float, int, int, int]]] = {
-    1: [
-        (100, 1, 0, 2_000_000),
-        (40,  1, 3,   700_000),
-        (40,  1, 5,   700_000),
-        (60,  1, 8,   700_000),
-        (100, 1, 10, 2_000_000),
-    ],
-    2: [
-        (40, 2, 0, 1_000_000),
-        (40, 2, 1,   700_000),
-        (40, 2, 2,   700_000),
-        (40, 2, 3,   700_000),
-        (60, 2, 10, 2_000_000),
-    ],
-    4: [
-        (50, 4, 0, 1_000_000),
-        (60, 4, 2, 1_000_000),
-        (60, 4, 4, 1_000_000),
-        (80, 4, 8, 1_000_000),
-        (80, 4, 10, 2_000_000),
-    ],
-    6: [
-        (50,  6, 0, 1_000_000),
-        (60,  6, 2, 1_000_000),
-        (70,  6, 4, 1_500_000),
-        (80,  6, 8, 2_000_000),
-        (100, 6, 10, 3_000_000),
-    ],
-}
+class Curriculum:
+    # SB3 SAC curriculum (CURRENT 3D TRAINING)
+    # Each stage tuple: (world_scale (meters), active_drones, num_obstacles, time steps)
+
+    def __init__(self):
+        # Define the stages of the curriculum
+        self.stages: List[Tuple[float, int, int, int]] = [
+            (5, 1, 0, 200_000),  # Stage 0: one drone, no obstacles
+            (5, 1, 3, 500_000),  # Stage 1: add a few obstacles
+            (6, 1, 5, 500_000),  # Stage 2: larger world, more obstacles
+            (7, 1, 8, 600_000),  # Stage 3: larger world, more obstacles
+            (8, 1, 10, 800_000),  # Stage 4: larger world, more obstacles
+            (6, 2, 0, 300_000),  # Stage 5: two drones, no obstacles
+            (6, 2, 2, 400_000),  # Stage 6: two drones, more obstacles
+            (7, 2, 4, 500_000),  # Stage 7: larger world, more obstacles
+            (7, 2, 5, 700_000),  # Stage 8: two drones, same obstacles
+            (8, 2, 6, 700_000),  # Stage 9: larger world, more obstacles
+            (10, 2, 8, 1_000_000),
+            (7, 4, 0, 400_000),
+            (8, 4, 2, 500_000),
+            (9, 4, 4, 700_000),
+            (10, 4, 6, 800_000),
+            (12, 4, 10, 1_200_000),
+            (10, 4, 8, 1_000_000),
+            (12, 8, 12, 1_500_000),
+        ]
+        self.current_stage = 0
+
+    def get_stage(self):
+        """Return the parameters of the current stage."""
+        return self.stages[self.current_stage]
+
+    def next_stage(self):
+        """Move to the next stage if available."""
+        if self.current_stage < len(self.stages) - 1:
+            self.current_stage += 1
+            print(f"Advancing to Curriculum Stage {self.current_stage}")
+        else:
+            print("Already at final stage.")

@@ -9,10 +9,9 @@ Run:
 import time
 import numpy as np
 
-from config.experiment import (
+from old_files.experiment import (
     DEFAULT_NUM_DRONES,
     DEFAULT_NUM_OBSTACLES,
-    DEFAULT_MAX_STEPS,
     DEFAULT_LIDAR,
     DEFAULT_WORLD_SCALE,
     DEFAULT_VEL_SCALE,
