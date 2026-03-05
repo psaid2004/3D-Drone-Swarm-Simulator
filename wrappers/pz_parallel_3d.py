@@ -22,7 +22,7 @@ class DroneSwarm3D(ParallelEnv):
 
     # ------ Initialisation ------
     def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None, num_static_obstacles: int = 5,num_dynamic_obstacles: int = 1,
-                 lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 10.0,
+                 lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 5.0,
                  seed: Optional[int] = None):
 
         # ---------------- basic config ----------------
@@ -475,7 +475,7 @@ class DroneSwarm3D(ParallelEnv):
             t = np. array([
                 self.rng.uniform(-self.world_scale, self.world_scale),
                 self.rng.uniform(-self.world_scale, self.world_scale),
-                self.rng.uniform(0.8, 2.0)
+                self.rng.uniform(0, self.world_scale),
             ], dtype=np.float32)
 
             drone_positions = self._spawn_positions
@@ -492,14 +492,14 @@ class DroneSwarm3D(ParallelEnv):
 
             obs_pos = np.array(obs_pos, dtype=np.float32)
             if len(obs_pos) > 0:
-                if np.any(np.linalg.norm(obs_pos - t, axis=-1) < (OBSTACLE_RADIUS + min_dist)):
+                if np.any(np.linalg.norm(obs_pos - t, axis=-1) < min_dist):
                     continue
 
             return t
 
         x = self.rng.uniform(-self.world_scale, self.world_scale)
         y = self.rng.uniform(-self.world_scale, self.world_scale)
-        z = self.rng.uniform(0.8, 2.0)
+        z = self.rng.uniform(0.0, self.world_scale)
 
         return np.array([x, y, z], dtype=np.float32)
 
@@ -607,7 +607,7 @@ class DroneSwarm3D(ParallelEnv):
 
                 candidate = np.array([x, y, z], dtype=np.float32)
 
-                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS + 0.4):  # TODO ASK PEDRO ABOUT 0.4
+                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
 
                     continue
                 pos = [x, y, z]
@@ -631,7 +631,7 @@ class DroneSwarm3D(ParallelEnv):
 
                 candidate = np.array([x,y,z], dtype=np.float32)
 
-                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS + 0.4): # TODO ASK PEDRO ABOUT 0.4
+                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
 
                     continue
                 pos = [x, y, z]
@@ -667,6 +667,7 @@ class DroneSwarm3D(ParallelEnv):
         for obstacle in self._obstacles:
             if isinstance(obstacle, Dynamic):
                 obstacle.update_obstacle(t)
+
 
     def _nearest_obstacle_vector(self, drone_pos: np.ndarray) -> np.ndarray:
         if self._p is None or len(self._obstacles) == 0:
@@ -710,8 +711,9 @@ class DroneSwarm3D(ParallelEnv):
         p = self._p
         active_ids = self._drone_ids[: self.active_drones]
 
-        thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
-        thresh_drone = COLLISION_DIST
+        # thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
+        thresh_obstacle = 0.0
+        thresh_drone = 0.0
 
         # drone vs obstacle
         if len(self._obstacles) >0:
@@ -1034,7 +1036,7 @@ class DroneSwarm3D(ParallelEnv):
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
-            if dist < GOAL_RADIUS:
+            if dist < 0.1 :
                 reached_now[i] = True
                 self._reached_once[i] = True
 

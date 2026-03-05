@@ -27,7 +27,6 @@ DEFAULT_SHARED_TARGET = True
 GOAL_RADIUS = 1.0
 GOAL_BONUS = 150
 GOAL_WALL_MARGIN = 3.5  # Minimum distance between the wall and the goal
-MIN_GOAL_DIST = 15.0
 
 # =============================================================================
 # Swarm cohesion / separation
@@ -40,8 +39,8 @@ DEFAULT_TERMINATE_ON_SEPARATION = False
 # =============================================================================
 # Obstacles
 # =============================================================================
-OBSTACLE_RADIUS = 0.30
-OBSTACLE_HEIGHT_RANGE = (0.5, 1.8)
+OBSTACLE_RADIUS = 0.3
+OBSTACLE_HEIGHT_RANGE = (0, WORLD_SCALE)
 OBSTACLE_DYNAMIC = False
 OBSTACLE_DRIFT_AMP = 0.8
 OBSTACLE_DRIFT_OMEGA = 0.35
@@ -69,7 +68,7 @@ HOVER_BIAS_VZ = 0.0
 # =============================================================================
 # Collision
 # =============================================================================
-COLLISION_DIST = 0.12
+COLLISION_DIST = 0.0
 
 # =============================================================================
 # Reward - per-step shaping
