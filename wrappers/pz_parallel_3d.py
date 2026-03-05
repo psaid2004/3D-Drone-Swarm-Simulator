@@ -683,44 +683,6 @@ class DroneSwarm3D(ParallelEnv):
         return d[idx].astype(np.float32)
 
 
-    # def _check_collisions(self) -> bool:
-    #     """Collision check against obstacles and other drones. """
-    #     if self._p is None or len(self._drone_ids) == 0:
-    #         return False
-    #
-    #     p = self._p
-    #
-    #     thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
-    #     thresh_drone = COLLISION_DIST
-    #     active_ids = self._drone_ids[: self.active_drones] if len(
-    #         self._drone_ids) >= self.active_drones else self._drone_ids
-    #
-    #     # drone vs obstacle
-    #     if len(self._obstacle_ids) >0:
-    #         for did in active_ids:
-    #             for oid in self._obstacle_ids:
-    #                 try:
-    #                     pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=oid,
-    #                                              distance=thresh_obstacle)
-    #                     if pts and len(pts) > 0:
-    #                         return True
-    #                 except Exception:
-    #                     continue
-    #
-    #     # drone vs drone
-    #     for i, did1 in enumerate(active_ids):
-    #         for did2 in active_ids[i+1:]:
-    #             try:
-    #                 pts = self._call_physics(p.getClosestPoints, bodyA=did1, bodyB=did2,
-    #                                          distance=thresh_drone)
-    #                 if pts and len(pts) > 0:
-    #                     return True
-    #             except Exception:
-    #                 continue
-    #
-    #     return False
-
-
     def check_collisions_per_drone(self):
         """
         Returns:
