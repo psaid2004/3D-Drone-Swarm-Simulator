@@ -16,6 +16,7 @@ from gym_pybullet_drones.utils.enums import DroneModel, Physics
 from config.defaults import *
 SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 
+#TODO despawn after reaching target, spawn obstacle between target and drone, Dynamic obstacles spawning (should not go out of bounds, or collide)
 
 class DroneSwarm3D(ParallelEnv):
     metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
@@ -603,7 +604,7 @@ class DroneSwarm3D(ParallelEnv):
 
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
-                z = self.rng.uniform(OBSTACLE_HEIGHT_RANGE[0], OBSTACLE_HEIGHT_RANGE[1])
+                z = self.rng.uniform(0, self.world_scale)
 
                 candidate = np.array([x, y, z], dtype=np.float32)
 
@@ -627,7 +628,7 @@ class DroneSwarm3D(ParallelEnv):
 
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
-                z = self.rng.uniform(OBSTACLE_HEIGHT_RANGE[0], OBSTACLE_HEIGHT_RANGE[1])
+                z = self.rng.uniform(0, self.world_scale)
 
                 candidate = np.array([x,y,z], dtype=np.float32)
 
