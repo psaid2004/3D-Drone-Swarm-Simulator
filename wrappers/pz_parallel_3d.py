@@ -23,7 +23,7 @@ class DroneSwarm3D(ParallelEnv):
 
     # ------ Initialisation ------
     def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None, num_static_obstacles: int = 5,num_dynamic_obstacles: int = 1,
-                 lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 4.0,
+                 lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 5.0,
                  seed: Optional[int] = None):
 
         # ---------------- basic config ----------------
@@ -476,7 +476,7 @@ class DroneSwarm3D(ParallelEnv):
             t = np. array([
                 self.rng.uniform(-self.world_scale, self.world_scale),
                 self.rng.uniform(-self.world_scale, self.world_scale),
-                self.rng.uniform(0,self.world_scale),
+                self.rng.uniform(0, self.world_scale),
             ], dtype=np.float32)
 
             drone_positions = self._spawn_positions
@@ -500,7 +500,7 @@ class DroneSwarm3D(ParallelEnv):
 
         x = self.rng.uniform(-self.world_scale, self.world_scale)
         y = self.rng.uniform(-self.world_scale, self.world_scale)
-        z = self.rng.uniform(0, self.world_scale)
+        z = self.rng.uniform(0.0, self.world_scale)
 
         return np.array([x, y, z], dtype=np.float32)
 
@@ -669,6 +669,7 @@ class DroneSwarm3D(ParallelEnv):
             if isinstance(obstacle, Dynamic):
                 obstacle.update_obstacle(t)
 
+
     def _nearest_obstacle_vector(self, drone_pos: np.ndarray) -> np.ndarray:
         if self._p is None or len(self._obstacles) == 0:
             return np.zeros(3, dtype=np.float32)
@@ -711,8 +712,9 @@ class DroneSwarm3D(ParallelEnv):
         p = self._p
         active_ids = self._drone_ids[: self.active_drones]
 
-        thresh_obstacle = 0
-        thresh_drone = 0
+        # thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
+        thresh_obstacle = 0.0
+        thresh_drone = 0.0
 
         # drone vs obstacle
         if len(self._obstacles) >0:
@@ -722,7 +724,6 @@ class DroneSwarm3D(ParallelEnv):
                         pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=object.body_id,
                                                  distance=thresh_obstacle)
                         if pts and len(pts) > 0:
-                            print("drone collided with ", object.body_id)
                             collided[i] = True
                             break
                     except Exception:
@@ -1036,7 +1037,7 @@ class DroneSwarm3D(ParallelEnv):
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
-            if dist < 0.1:
+            if dist < 0.1 :
                 reached_now[i] = True
                 self._reached_once[i] = True
 
