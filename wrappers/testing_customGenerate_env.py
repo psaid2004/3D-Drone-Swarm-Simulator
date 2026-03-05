@@ -9,7 +9,7 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
     return v / norm
 
 def main():
-    # --- create environment ---
+    # --- create environment ----
     n_drones = 2
     n_obstacles = 2
     n_steps = 5000
