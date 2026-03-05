@@ -434,7 +434,7 @@ class DroneSwarm3D(ParallelEnv):
 
             obj = EnvObject(pos, size, ori)
 
-            body = obj.create(shape)
+            body = obj.create(shape, physics_call= self._call_physics)
             self._obstacles.append(obj)
 
 
@@ -455,7 +455,7 @@ class DroneSwarm3D(ParallelEnv):
             direction = 1
 
             obj = Dynamic(axis,min_pos,max_pos,speed,direction,pos, size, ori)
-            body = obj.create(shape)
+            body = obj.create(shape, physics_call= self._call_physics)
             self._obstacles.append(obj)
 
 

@@ -55,15 +55,16 @@ class EnvObject:
         }
     
     # kwargs = keyword arguments
-    def create(self, shape, color=(1, 0, 0, 1)):
+    def create(self, shape, physics_call, color=(1, 0, 0, 1)):
+        self.physics_call = physics_call
         conf = self.SHAPE_CONFIGS[shape]
         geom = conf["geom"]
         
         collision_kwargs = conf["collision_kwargs"](self.size)
         visual_kwargs = conf["visual_kwargs"](self.size)
         
-        collision = p.createCollisionShape(geom, **collision_kwargs)
-        visual = p.createVisualShape(geom, rgbaColor=color, **visual_kwargs)
+        collision = physics_call(p.createCollisionShape,geom, **collision_kwargs)
+        visual = physics_call(p.createVisualShape,geom, rgbaColor=color, **visual_kwargs)
         
         body_kwargs = {
             "baseMass": 0,
@@ -75,7 +76,8 @@ class EnvObject:
         if conf["use_orientation"]:
             body_kwargs["baseOrientation"] = p.getQuaternionFromEuler(self.orientation)
 
-        self.body_id = p.createMultiBody(**body_kwargs)  # store ID in object
+        body = physics_call(p.createMultiBody, **body_kwargs)
+        self.body_id = body  # store ID in object
         return self.body_id
 
 class Dynamic(EnvObject):
@@ -89,12 +91,12 @@ class Dynamic(EnvObject):
 
     def update_obstacle(self, t):
         # t = current simulation time in seconds
-        pos, orn = p.getBasePositionAndOrientation(self.body_id)
+        pos, orn = self.physics_call(p.getBasePositionAndOrientation,self.body_id)
+
         pos = list(pos)
 
         # Smooth oscillation along your chosen axis
         amplitude = (self.max - self.min) / 2
         mid = (self.max + self.min) / 2
         pos[self.axis] = mid + amplitude * np.sin(2 * np.pi * self.speed * t)
-
-        p.resetBasePositionAndOrientation(self.body_id, pos, orn)
+        self.physics_call(p.resetBasePositionAndOrientation, self.body_id, pos, orn)
