@@ -10,17 +10,18 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
 
 def main():
     # --- create environment ----
-    n_drones = 2
+    n_drones = 1
     n_obstacles = 2
     n_steps = 5000
 
     pz_env = make_env(
         num_drones=n_drones,
         render_mode="human",
-        num_static_obstacles = 0,
-        num_dynamic_obstacles = 15,
+        num_static_obstacles = 15,
+        num_dynamic_obstacles = 10,
         max_steps=n_steps,
         lidar=False,
+        world_scale = 3.0
     )
 
     obs_dict, info = pz_env.reset()
@@ -44,8 +45,6 @@ def main():
             action_dict[drone] = np.array([dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32)
 
         obs_dict, reward_dict, term_dict, trunc_dict, info_dict = pz_env.step(action_dict)
-        print("Terminations:", term_dict)
-        print("INFO", info_dict)
 
         # Print status every 50 steps
         if step % 50 == 0:
@@ -53,6 +52,8 @@ def main():
             for d in obs_dict:
                 print(f"  {d} pos: {obs_dict[d][:3]}, reward: {reward_dict[d]:.2f}, collided: {info_dict[d]['collided']}")
 
+
+        print(len(pz_env._obstacles))
         # Stop if all done
         if all(term_dict.values()):
             print(f"Episode ended at step {step}")

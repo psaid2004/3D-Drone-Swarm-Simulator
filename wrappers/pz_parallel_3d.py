@@ -318,6 +318,28 @@ class DroneSwarm3D(ParallelEnv):
         self.ep_rewards.clear()
 
 
+    #Helper function to see if object being created overlaps with another object
+    def obstacleOverlap(self, object):
+        for obs in self._obstacles:
+            if object.isOverlapping(obs):
+                return True
+        return False
+
+    # Helper function used to see if dynamic object are going out of bounds
+    def outOfBounds(self, max_pos,min_pos, axis):
+        if axis != 2:
+            if max_pos >= self.world_scale or min_pos <= -self.world_scale:
+                return True
+            else:
+               return False
+        else:
+            if max_pos >= self.world_scale or min_pos <= 0:
+                return True
+            else:
+                return False
+
+
+
     def is_far_from_drones(self, point: np.ndarray, min_dist:float) -> bool:
         """ Determine if potential obstacle spawn positions is far from the drone spawn positions."""
         if self._spawn_positions is None:
@@ -598,33 +620,36 @@ class DroneSwarm3D(ParallelEnv):
             return
         rng = self.rng
 
+        max_attempts = 10000
         for _ in range(self.num_static_obstacles):
-            pos = []
-            for i in range(1000):
-
+            for _ in range(max_attempts):
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
                 z = self.rng.uniform(0, self.world_scale)
 
                 candidate = np.array([x, y, z], dtype=np.float32)
+                pos = [x, y, z]
 
                 if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
-
                     continue
-                pos = [x, y, z]
+
+                shape = rng.choice(SUPPORTED_SHAPES)
+                ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
+                size = float(rng.uniform(0.8, 1.2))
+
+                obj = EnvObject(pos, size, ori)
+                body = obj.create(shape, physics_call=self._call_physics)
+                if (self.obstacleOverlap(obj)):
+                    self._call_physics(self._p.removeBody, body)
+                    continue
+
+                self._obstacles.append(obj)
                 break
-            shape = rng.choice(SUPPORTED_SHAPES)
-            ori = [0, 0, float(rng.uniform(-np.pi, np.pi))]
-            size = float(rng.uniform(0.8, 1.2))
-
-            obj = EnvObject(pos, size, ori)
-
-            body = obj.create(shape, physics_call=self._call_physics)
-            self._obstacles.append(obj)
 
         for _ in range(self.num_dynamic_obstacles):
-            pos = []
-            for i in range(1000):
+            axis = rng.choice([0, 1, 2])
+
+            for _ in range(max_attempts):
 
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
@@ -632,26 +657,34 @@ class DroneSwarm3D(ParallelEnv):
 
                 candidate = np.array([x,y,z], dtype=np.float32)
 
+                # Check if obstacle is far enough from drones, to prevent spawn killing
                 if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
-
                     continue
+
                 pos = [x, y, z]
+
+                displacement = rng.uniform(1, 3)
+                min_pos = pos[axis] - displacement
+                max_pos = pos[axis] + displacement
+
+                # Check if obstacle is going beyond world borders, if so generate another obstacle
+                if self.outOfBounds(max_pos, min_pos, axis):
+                    continue
+
+                shape = rng.choice(SUPPORTED_SHAPES)
+                ori = [0, 0, float(rng.uniform(-np.pi, np.pi))]
+
+                size = float(rng.uniform(0.8, 1.2))
+                speed = self.rng.uniform(0.8, 1.2)
+                direction = self.rng.choice([-1,1])
+
+                obj = Dynamic(axis,min_pos,max_pos,speed,direction,pos, size, ori)
+                body = obj.create(shape, physics_call= self._call_physics)
+                if (self.obstacleOverlap(obj)):
+                    self._call_physics(self._p.removeBody, body)
+                    continue
+                self._obstacles.append(obj)
                 break
-
-            axis = rng.choice([0, 1, 2])
-            displacement = rng.uniform(1, 3)
-            shape = rng.choice(SUPPORTED_SHAPES)
-            ori = [0, 0, float(rng.uniform(-np.pi, np.pi))]
-
-            size = float(rng.uniform(0.8, 1.2))
-            min_pos = pos[axis] - displacement
-            max_pos = pos[axis] + displacement
-            speed = 0.2
-            direction = 1
-
-            obj = Dynamic(axis,min_pos,max_pos,speed,direction,pos, size, ori)
-            body = obj.create(shape, physics_call= self._call_physics)
-            self._obstacles.append(obj)
 
 
 
@@ -663,7 +696,7 @@ class DroneSwarm3D(ParallelEnv):
         ):
             return
 
-        t = float(self._step_count) * (1.0 / 60.0)
+        t = 1.0 / 60.0
 
         for obstacle in self._obstacles:
             if isinstance(obstacle, Dynamic):
@@ -1037,7 +1070,7 @@ class DroneSwarm3D(ParallelEnv):
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
-            if dist < 0.1 :
+            if dist < 0.15 :
                 reached_now[i] = True
                 self._reached_once[i] = True
 
