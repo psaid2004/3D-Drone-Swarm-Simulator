@@ -622,6 +622,8 @@ class DroneSwarm3D(ParallelEnv):
 
         max_attempts = 10000
         for _ in range(self.num_static_obstacles):
+            shape = rng.choice(SUPPORTED_SHAPES)
+
             for _ in range(max_attempts):
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
@@ -633,7 +635,6 @@ class DroneSwarm3D(ParallelEnv):
                 if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
                     continue
 
-                shape = rng.choice(SUPPORTED_SHAPES)
                 ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
                 size = float(rng.uniform(0.8, 1.2))
 
@@ -648,6 +649,7 @@ class DroneSwarm3D(ParallelEnv):
 
         for _ in range(self.num_dynamic_obstacles):
             axis = rng.choice([0, 1, 2])
+            shape = rng.choice(SUPPORTED_SHAPES)
 
             for _ in range(max_attempts):
 
@@ -671,8 +673,7 @@ class DroneSwarm3D(ParallelEnv):
                 if self.outOfBounds(max_pos, min_pos, axis):
                     continue
 
-                shape = rng.choice(SUPPORTED_SHAPES)
-                ori = [0, 0, float(rng.uniform(-np.pi, np.pi))]
+                ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
 
                 size = float(rng.uniform(0.8, 1.2))
                 speed = self.rng.uniform(0.8, 1.2)
