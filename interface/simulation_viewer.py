@@ -1,14 +1,8 @@
 import queue
-import random
 import threading
-import time
 import importlib
 from functools import partial
 from pathlib import Path
-
-from envs.createObjects import Dynamic, EnvObject
-from wrappers.pz_parallel_3d import env as make_env
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 import sys
@@ -16,19 +10,12 @@ import sys
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-def _load_qt_bindings():
-    for prefix in ("PyQt6", "PyQt5"):
-        try:
-            qt_core = importlib.import_module(f"{prefix}.QtCore")
-            qt_widgets = importlib.import_module(f"{prefix}.QtWidgets")
-            return qt_core, qt_widgets
-        except ImportError:
-            continue
-    raise ImportError("Neither PyQt6 nor PyQt5 is installed")
+from interface.environment_viewer import EnvironmentViewer
 
 
 # Load Qt bindings and assign classes to variables
-_QT_CORE, _QT_WIDGETS = _load_qt_bindings()
+_QT_CORE = importlib.import_module("PyQt6.QtCore")
+_QT_WIDGETS = importlib.import_module("PyQt6.QtWidgets")
 Qt = _QT_CORE.Qt
 QTimer = _QT_CORE.QTimer
 QApplication = _QT_WIDGETS.QApplication
@@ -262,6 +249,31 @@ class SimulationViewer(QWidget):
         self._update_timer.start(100)
         
         self._build_layout()
+
+        self._ui_timer = QTimer(self)
+        self._ui_timer.timeout.connect(self._consume_state_updates)
+        self._ui_timer.start(50)
+
+    def _enqueue_state(self, state):
+        while not self._state_queue.empty():
+            try:
+                self._state_queue.get_nowait()
+            except queue.Empty:
+                break
+        try:
+            self._state_queue.put_nowait(state)
+        except queue.Full:
+            pass
+
+    def _enqueue_stopped(self):
+        self._enqueue_state({"stopped": True})
+
+    def _enqueue_error(self, error_text: str):
+        self._enqueue_state({"error": error_text})
+
+    def _get_object_configs_snapshot(self):
+        with self._config_lock:
+            return [dict(cfg) for cfg in self._object_configs]
 
     def _default_object_config(self, index: int):
         return {
@@ -498,7 +510,7 @@ class SimulationViewer(QWidget):
 
     def _request_restart(self, message: str):
         if self._running:
-            self._restart_event.set()
+            self._env_viewer.request_restart()
             self.status_lbl.setText(message)
 
     def _add_labeled_entry(self, parent: QWidget, label: str, value, on_apply):
@@ -639,22 +651,17 @@ class SimulationViewer(QWidget):
             return
 
         self._running = True
-        self._stop_event.clear()
-        self._restart_event.clear()
-
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.status_lbl.setText("Running (PyBullet GUI)")
-
-        self._sim_thread = threading.Thread(target=self._simulation_loop, daemon=True)
-        self._sim_thread.start()
+        self._env_viewer.start()
 
     def _stop(self):
         if not self._running:
             return
-        self._running = False
-        self._stop_event.set()
 
+        self._running = False
+        self._env_viewer.stop()
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.status_lbl.setText("Stopped")
@@ -662,129 +669,6 @@ class SimulationViewer(QWidget):
     def closeEvent(self, event):
         self._stop()
         super().closeEvent(event)
-
-    def _simulation_loop(self):
-        current_env = None
-        try:
-            while not self._stop_event.is_set():
-                current_env = self._make_env()
-                obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1))
-                self._apply_object_configs(current_env)
-                self._episode += 1
-                self._step = 0
-
-                done = {agent: False for agent in current_env.possible_agents}
-                trunc = {agent: False for agent in current_env.possible_agents}
-
-                while not self._stop_event.is_set():
-                    if self._restart_event.is_set():
-                        self._restart_event.clear()
-                        break
-
-                    act_dict = {agent: current_env.action_space(agent).sample() for agent in obs_dict}
-                    obs_dict, _, done, trunc, _ = current_env.step(act_dict)
-                    self._step += 1
-
-                    self._publish_state(current_env)
-                    time.sleep(1 / 30)
-
-                    if all(done[a] or trunc[a] for a in done):
-                        break
-
-                current_env.close()
-                current_env = None
-
-        except Exception as exc:
-            self._state_queue.put({"error": str(exc)})
-        finally:
-            if current_env is not None:
-                try:
-                    current_env.close()
-                except Exception:
-                    pass
-            self._state_queue.put({"stopped": True})
-
-    def _make_env(self):
-        with self._config_lock:
-            configs = [dict(cfg) for cfg in self._object_configs]
-
-        static_count = sum(1 for cfg in configs if cfg.get("kind") == "static")
-        dynamic_count = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
-
-        return make_env(
-            num_drones=8,
-            num_static_obstacles=static_count,
-            num_dynamic_obstacles=dynamic_count,
-            max_steps=5000,
-            lidar=True,
-            render_mode="human",
-        )
-
-    def _apply_object_configs(self, env_instance):
-        with self._config_lock:
-            configs = [dict(cfg) for cfg in self._object_configs]
-
-        p = getattr(env_instance, "_p", None)
-        if p is None:
-            return
-
-        old_obstacles = list(getattr(env_instance, "_obstacles", []))
-        for obj in old_obstacles:
-            body_id = getattr(obj, "body_id", None)
-            if body_id is None:
-                continue
-            try:
-                env_instance._call_physics(p.removeBody, body_id)
-            except Exception:
-                continue
-
-        new_obstacles = []
-        for cfg in configs:
-            pos = [float(cfg["x"]), float(cfg["y"]), float(cfg["z"])]
-            ori = [0.0, 0.0, float(cfg["yaw"])]
-            size = max(0.1, float(cfg["size"]))
-            shape = str(cfg["shape"]) if str(cfg["shape"]) in SHAPES else "box"
-
-            if cfg.get("kind") == "dynamic":
-                axis = int(cfg.get("axis", 0))
-                min_pos = float(cfg.get("min", -1.0))
-                max_pos = float(cfg.get("max", 1.0))
-                if min_pos > max_pos:
-                    min_pos, max_pos = max_pos, min_pos
-                speed = max(0.0, float(cfg.get("speed", 0.2)))
-                direction = -1 if int(cfg.get("direction", 1)) < 0 else 1
-                obj = Dynamic(axis, min_pos, max_pos, speed, direction, pos, size, ori)
-            else:
-                obj = EnvObject(pos, size, ori)
-
-            try:
-                obj.create(shape, physics_call=env_instance._call_physics)
-                new_obstacles.append(obj)
-            except Exception:
-                continue
-
-        env_instance._obstacles = new_obstacles
-        env_instance.num_static_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "static")
-        env_instance.num_dynamic_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
-
-    def _publish_state(self, env_instance):
-        payload = {
-            "episode": self._episode,
-            "step": self._step,
-            "drones": len(getattr(env_instance, "agents", [])),
-            "obstacles": len(getattr(env_instance, "_obstacles", [])),
-        }
-
-        while not self._state_queue.empty():
-            try:
-                self._state_queue.get_nowait()
-            except queue.Empty:
-                break
-
-        try:
-            self._state_queue.put_nowait(payload)
-        except queue.Full:
-            pass
 
     def _consume_state_updates(self):
         latest = None
@@ -798,7 +682,11 @@ class SimulationViewer(QWidget):
             return
 
         if latest.get("stopped"):
-            self._stop()
+            if self._running:
+                self._running = False
+                self.start_btn.setEnabled(True)
+                self.stop_btn.setEnabled(False)
+                self.status_lbl.setText("Stopped")
             return
 
         if "error" in latest:
@@ -811,10 +699,10 @@ class SimulationViewer(QWidget):
     def _update_telemetry(self, state):
         self.telemetry_lbl.setText(
             self._telemetry_text(
-                episode=int(state["episode"]),
-                step=int(state["step"]),
-                drones=int(state["drones"]),
-                obstacles=int(state["obstacles"]),
+                episode=int(state.get("episode", 0)),
+                step=int(state.get("step", 0)),
+                drones=int(state.get("drones", 0)),
+                obstacles=int(state.get("obstacles", 0)),
             )
         )
 
