@@ -16,19 +16,9 @@ import sys
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-def _load_qt_bindings():
-    for prefix in ("PyQt6", "PyQt5"):
-        try:
-            qt_core = importlib.import_module(f"{prefix}.QtCore")
-            qt_widgets = importlib.import_module(f"{prefix}.QtWidgets")
-            return qt_core, qt_widgets
-        except ImportError:
-            continue
-    raise ImportError("Neither PyQt6 nor PyQt5 is installed")
-
-
 # Load Qt bindings and assign classes to variables
-_QT_CORE, _QT_WIDGETS = _load_qt_bindings()
+_QT_CORE = importlib.import_module("PyQt6.QtCore")
+_QT_WIDGETS = importlib.import_module("PyQt6.QtWidgets")
 Qt = _QT_CORE.Qt
 QTimer = _QT_CORE.QTimer
 QApplication = _QT_WIDGETS.QApplication
