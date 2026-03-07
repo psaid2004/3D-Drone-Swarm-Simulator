@@ -45,6 +45,8 @@ QWidget = _QT_WIDGETS.QWidget
 QPushButton = _QT_WIDGETS.QPushButton
 QGroupBox = _QT_WIDGETS.QGroupBox
 QSpinBox = _QT_WIDGETS.QSpinBox
+QCheckBox = _QT_WIDGETS.QCheckBox
+QStackedWidget = _QT_WIDGETS.QStackedWidget
 
 # Constants for object configuration
 SHAPES = ("box", "wall", "sphere", "cylinder")
@@ -52,31 +54,214 @@ KINDS = ("static", "dynamic")
 AXIS_LABEL_TO_INT = {"x": 0, "y": 1, "z": 2}
 AXIS_INT_TO_LABEL = {0: "x", 1: "y", 2: "z"}
 
+class LandingPage(QWidget):
+    def __init__(self, switch_to_simulation_callback):
+        super().__init__()
+        self.switch_to_simulation = switch_to_simulation_callback
+        self.init_ui()
+        
+    def init_ui(self):
+        layout = QVBoxLayout()
+        #layout.setAlignment(Qt.AlignCenter)
+        
+        # Title
+        title = QLabel("Drone Swarm Simulator")
+        title.setStyleSheet("font-size: 32px; font-weight: bold; margin-bottom: 30px;")
+        #title.setAlignment(Qt.AlignCenter)
+        
+        # Subtitle
+        subtitle = QLabel("Multi-Agent Reinforcement Learning Environment")
+        subtitle.setStyleSheet("font-size: 16px; color: gray; margin-bottom: 50px;")
+        #subtitle.setAlignment(Qt.AlignCenter)
+        
+        # Configuration panel
+        config_frame = QFrame()
+        config_frame.setFrameShape(QFrame.Shape.Box)
+        config_frame.setMaximumWidth(500)
+        config_layout = QVBoxLayout(config_frame)
+        
+        config_title = QLabel("Quick Configuration")
+        config_title.setStyleSheet("font-weight: bold; font-size: 18px;")
+        config_layout.addWidget(config_title)
+        
+        # Number of drones
+        drone_layout = QHBoxLayout()
+        drone_layout.addWidget(QLabel("Number of Drones:"))
+        self.drone_spinbox = QSpinBox()
+        self.drone_spinbox.setRange(1, 10)
+        self.drone_spinbox.setValue(2)
+        drone_layout.addWidget(self.drone_spinbox)
+        drone_layout.addStretch()
+        config_layout.addLayout(drone_layout)
+        
+        # Number of obstacles
+        obstacle_layout = QHBoxLayout()
+        obstacle_layout.addWidget(QLabel("Number of Obstacles:"))
+        self.obstacle_spinbox = QSpinBox()
+        self.obstacle_spinbox.setRange(0, 50)
+        self.obstacle_spinbox.setValue(15)
+        obstacle_layout.addWidget(self.obstacle_spinbox)
+        obstacle_layout.addStretch()
+        config_layout.addLayout(obstacle_layout)
+        
+        # Max steps
+        steps_layout = QHBoxLayout()
+        steps_layout.addWidget(QLabel("Max Steps:"))
+        self.steps_spinbox = QSpinBox()
+        self.steps_spinbox.setRange(100, 10000)
+        self.steps_spinbox.setValue(5000)
+        self.steps_spinbox.setSingleStep(100)
+        steps_layout.addWidget(self.steps_spinbox)
+        steps_layout.addStretch()
+        config_layout.addLayout(steps_layout)
+        
+        # Render mode
+        render_layout = QHBoxLayout()
+        render_layout.addWidget(QLabel("Render Mode:"))
+        self.render_combo = QComboBox()
+        self.render_combo.addItems(["human", "none"])
+        render_layout.addWidget(self.render_combo)
+        render_layout.addStretch()
+        config_layout.addLayout(render_layout)
+        
+        # Lidar option
+        self.lidar_checkbox = QCheckBox("Enable Lidar")
+        config_layout.addWidget(self.lidar_checkbox)
+        
+        config_layout.addStretch()
+        
+        self.start_btn = QPushButton("Launch Simulation")
+        self.start_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-size: 16px;
+                padding: 10px;
+                min-width: 200px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        self.start_btn.clicked.connect(self.on_start_clicked)
+        
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(config_frame)
+        layout.addSpacing(30)
+        layout.addWidget(self.start_btn)
+        
+        self.setLayout(layout)
+    
+    def on_start_clicked(self):
+        config = {
+            'num_drones': self.drone_spinbox.value(),
+            'num_obstacles': self.obstacle_spinbox.value(),
+            'max_steps': self.steps_spinbox.value(),
+            'render_mode': self.render_combo.currentText(),
+            'lidar': self.lidar_checkbox.isChecked()
+        }
+        self.switch_to_simulation(config)
 
-class SimulationViewer(QMainWindow):
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Drone Simulation")
-        self.resize(1680, 1024)
-        self.setMinimumSize(980, 640)
+        self.setWindowTitle("Drone Swarm Simulator")
+        self.setGeometry(100, 100, 1200, 800)
+        
+        # Create stacked widget
+        self.stacked_widget = QStackedWidget()
+        self.setCentralWidget(self.stacked_widget)
+        
+        # Create pages
+        self.landing_page = LandingPage(self.switch_to_simulation)
+        self.simulation_viewer = None  # Will be created when needed
+        
+        # Add pages to stack
+        self.stacked_widget.addWidget(self.landing_page)
+        
+        # Show landing page first
+        self.stacked_widget.setCurrentWidget(self.landing_page)
+    
+    def switch_to_simulation(self, config):
+        # Create simulation viewer with config
+        self.simulation_viewer = SimulationViewer(config)
+        self.stacked_widget.addWidget(self.simulation_viewer)
+        self.stacked_widget.setCurrentWidget(self.simulation_viewer)
+    
+    def switch_to_landing(self):
+        self.stacked_widget.setCurrentWidget(self.landing_page)
+        # Clean up simulation viewer if needed
+        if self.simulation_viewer:
+            self.stacked_widget.removeWidget(self.simulation_viewer)
+            self.simulation_viewer = None
 
+class SimulationViewer(QWidget):
+    def __init__(self, config=None):
+        super().__init__()
+        self.config = config or {}
+        
+        # Initialize all attributes
+        self._object_configs = []
+        self._config_lock = threading.Lock()
         self._running = False
-        self._sim_thread = None
-        self._stop_event = threading.Event()
-        self._restart_event = threading.Event()
-        self._state_queue = queue.Queue(maxsize=5)
-
         self._episode = 0
         self._step = 0
-
-        self._config_lock = threading.Lock()
-        self._object_configs = [self._default_object_config(i) for i in range(4)]
-
+        self._stop_event = threading.Event()
+        self._restart_event = threading.Event()
+        self._state_queue = queue.Queue(maxsize=1)
+        self._sim_thread = None
+        
+        # Initialize with default objects
+        default_objects = [
+            {
+                "name": "Static Box",
+                "kind": "static",
+                "shape": "box",
+                "x": 2.0,
+                "y": 0.0,
+                "z": 0.5,
+                "size": 0.5,
+                "yaw": 0.0,
+                "axis": 0,
+                "min": -2.0,
+                "max": 2.0,
+                "speed": 0.2,
+                "direction": 1
+            },
+            {
+                "name": "Dynamic Sphere",
+                "kind": "dynamic",
+                "shape": "sphere",
+                "x": -2.0,
+                "y": 0.0,
+                "z": 0.5,
+                "size": 0.5,
+                "yaw": 0.0,
+                "axis": 1,
+                "min": -2.0,
+                "max": 2.0,
+                "speed": 0.3,
+                "direction": -1
+            }
+        ]
+        
+        # Use config if provided, otherwise use defaults
+        if config and config.get('num_obstacles', 0) > 0:
+            for i in range(config.get('num_obstacles', 2)):
+                obj = default_objects[i % len(default_objects)].copy()
+                obj["name"] = f"Object {i + 1}"
+                self._object_configs.append(obj)
+        else:
+            self._object_configs = default_objects.copy()
+        
+        # Start a timer to consume state updates
+        self._update_timer = QTimer()
+        self._update_timer.timeout.connect(self._consume_state_updates)
+        self._update_timer.start(100)
+        
         self._build_layout()
-
-        self._ui_timer = QTimer(self)
-        self._ui_timer.timeout.connect(self._consume_state_updates)
-        self._ui_timer.start(50)
 
     def _default_object_config(self, index: int):
         return {
@@ -96,9 +281,7 @@ class SimulationViewer(QMainWindow):
         }
 
     def _build_layout(self):
-        root = QWidget()
-        self.setCentralWidget(root)
-        root_layout = QVBoxLayout(root)
+        root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
@@ -192,7 +375,7 @@ class SimulationViewer(QMainWindow):
         root_layout.addWidget(body, 1)
 
         self._rebuild_object_controls()
-
+ 
     def _telemetry_text(self, episode: int, step: int, drones: int, obstacles: int) -> str:
         return (
             f"Episode     : {episode}\n"
@@ -200,6 +383,7 @@ class SimulationViewer(QMainWindow):
             f"Live drones : {drones}\n"
             f"Obstacles   : {obstacles}\n"
         )
+        
     def _on_object_spinbox(self, value: int):
         """Handle spin box value changes"""
         # Remove this line: self.object_count_value_lbl.setText(str(value))
@@ -207,16 +391,55 @@ class SimulationViewer(QMainWindow):
         self._rebuild_object_controls()
         self._request_restart(f"Restarting with updated object count: {value}")
         
-    def _sync_object_config_count(self, count: int):
-        with self._config_lock:
-            current = list(self._object_configs)
-            if count > len(current):
-                for i in range(len(current), count):
-                    current.append(self._default_object_config(i))
-            elif count < len(current):
-                current = current[:count]
-            self._object_configs = current
+    def _ensure_config_fields(self, config):
+        """Ensure config has all required fields with defaults"""
+        defaults = {
+            "name": "Object",
+            "kind": "static",
+            "shape": "box",
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "size": 0.5,
+            "yaw": 0.0,
+            "axis": 0,
+            "min": -1.0,
+            "max": 1.0,
+            "speed": 0.2,
+            "direction": 1
+        }
+        
+        for key, default_value in defaults.items():
+            if key not in config:
+                config[key] = default_value
+        
+        return config
 
+    def _sync_object_config_count(self, count: int):
+        current_count = len(self._object_configs)
+        if count > current_count:
+            # Add new configs with all default fields
+            for i in range(current_count, count):
+                new_config = {
+                    "name": f"Object {i + 1}",
+                    "kind": "static",
+                    "shape": "box",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "size": 0.5,
+                    "yaw": 0.0,
+                    "axis": 0,
+                    "min": -1.0,
+                    "max": 1.0,
+                    "speed": 0.2,
+                    "direction": 1
+                }
+                self._object_configs.append(new_config)
+        elif count < current_count:
+            # Remove excess configs
+            self._object_configs = self._object_configs[:count]
+            
     def _coerce_float(self, text: str, fallback: float):
         try:
             return float(text)
@@ -228,6 +451,11 @@ class SimulationViewer(QMainWindow):
             return int(float(text))
         except Exception:
             return int(fallback)
+
+    def go_back(self):
+        main_window = self.window()
+        if isinstance(main_window, MainWindow):
+            main_window.switch_to_landing()
 
     def _set_object_field(self, index: int, key: str, raw_value):
         with self._config_lock:
@@ -324,28 +552,83 @@ class SimulationViewer(QMainWindow):
             self.scroll_layout.addStretch(1)
             return
 
-        for i, cfg in enumerate(configs):
+        for i, raw_cfg in enumerate(configs):
+            # Ensure config has all required fields
+            cfg = self._ensure_config_fields(raw_cfg)
+            
             card = QGroupBox(f"Object {i + 1}")
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(8, 8, 8, 8)
             card_layout.setSpacing(4)
 
-            card_layout.addWidget(self._add_labeled_entry(card, "Name", cfg["name"], partial(self._set_object_field, i, "name")))
-            card_layout.addWidget(self._add_option_menu(card, "Type", cfg["kind"], KINDS, partial(self._set_object_field, i, "kind")))
-            card_layout.addWidget(self._add_option_menu(card, "Shape", cfg["shape"], SHAPES, partial(self._set_object_field, i, "shape")))
+            # Name field
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Name", cfg["name"], 
+                partial(self._set_object_field, i, "name")
+            ))
+            
+            # Type dropdown
+            card_layout.addWidget(self._add_option_menu(
+                card, "Type", cfg["kind"], KINDS, 
+                partial(self._set_object_field, i, "kind")
+            ))
+            
+            # Shape dropdown
+            card_layout.addWidget(self._add_option_menu(
+                card, "Shape", cfg["shape"], SHAPES, 
+                partial(self._set_object_field, i, "shape")
+            ))
 
-            card_layout.addWidget(self._add_labeled_entry(card, "X", cfg["x"], partial(self._set_object_field, i, "x")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Y", cfg["y"], partial(self._set_object_field, i, "y")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Z", cfg["z"], partial(self._set_object_field, i, "z")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Size", cfg["size"], partial(self._set_object_field, i, "size")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Yaw", cfg["yaw"], partial(self._set_object_field, i, "yaw")))
+            # Position fields
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "X", cfg["x"], 
+                partial(self._set_object_field, i, "x")
+            ))
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Y", cfg["y"], 
+                partial(self._set_object_field, i, "y")
+            ))
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Z", cfg["z"], 
+                partial(self._set_object_field, i, "z")
+            ))
+            
+            # Size and Yaw
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Size", cfg["size"], 
+                partial(self._set_object_field, i, "size")
+            ))
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Yaw", cfg["yaw"], 
+                partial(self._set_object_field, i, "yaw")
+            ))
 
+            # Dynamic motion fields
             axis_label = AXIS_INT_TO_LABEL.get(int(cfg["axis"]), "x")
-            card_layout.addWidget(self._add_option_menu(card, "Axis", axis_label, ("x", "y", "z"), partial(self._set_object_field, i, "axis")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Min", cfg["min"], partial(self._set_object_field, i, "min")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Max", cfg["max"], partial(self._set_object_field, i, "max")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Speed", cfg["speed"], partial(self._set_object_field, i, "speed")))
-            card_layout.addWidget(self._add_labeled_entry(card, "Dir", cfg["direction"], partial(self._set_object_field, i, "direction")))
+            card_layout.addWidget(self._add_option_menu(
+                card, "Axis", axis_label, ("x", "y", "z"), 
+                partial(self._set_object_field, i, "axis")
+            ))
+            
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Min", cfg["min"], 
+                partial(self._set_object_field, i, "min")
+            ))
+            
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Max", cfg["max"], 
+                partial(self._set_object_field, i, "max")
+            ))
+            
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Speed", cfg["speed"], 
+                partial(self._set_object_field, i, "speed")
+            ))
+            
+            card_layout.addWidget(self._add_labeled_entry(
+                card, "Dir", cfg["direction"], 
+                partial(self._set_object_field, i, "direction")
+            ))
 
             self.scroll_layout.addWidget(card)
 
@@ -432,8 +715,8 @@ class SimulationViewer(QMainWindow):
             num_drones=8,
             num_static_obstacles=static_count,
             num_dynamic_obstacles=dynamic_count,
-            max_steps=500,
-            lidar=False,
+            max_steps=5000,
+            lidar=True,
             render_mode="human",
         )
 
@@ -538,8 +821,8 @@ class SimulationViewer(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    viewer = SimulationViewer()
-    viewer.show()
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec())
 
 
