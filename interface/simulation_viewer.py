@@ -44,6 +44,7 @@ QVBoxLayout = _QT_WIDGETS.QVBoxLayout
 QWidget = _QT_WIDGETS.QWidget
 QPushButton = _QT_WIDGETS.QPushButton
 QGroupBox = _QT_WIDGETS.QGroupBox
+QSpinBox = _QT_WIDGETS.QSpinBox
 
 # Constants for object configuration
 SHAPES = ("box", "wall", "sphere", "cylinder")
@@ -143,17 +144,11 @@ class SimulationViewer(QMainWindow):
         side_title.setStyleSheet("font-weight: 700;")
 
         count_label = QLabel("Object count")
-        self.object_count_value_lbl = QLabel(str(len(self._object_configs)))
+        self.object_spinbox = QSpinBox()
+        self.object_spinbox.setRange(0, 100)  # You can set max to whatever you want
+        self.object_spinbox.setValue(len(self._object_configs))
+        self.object_spinbox.valueChanged.connect(self._on_object_spinbox)
 
-        self.object_slider = QSlider(Qt.Orientation.Horizontal)
-        self.object_slider.setRange(0, 20)
-        self.object_slider.setValue(len(self._object_configs))
-        self.object_slider.valueChanged.connect(self._on_object_slider)
-
-        count_row = QHBoxLayout()
-        count_row.addWidget(count_label)
-        count_row.addStretch(1)
-        count_row.addWidget(self.object_count_value_lbl)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -164,8 +159,8 @@ class SimulationViewer(QMainWindow):
         self.scroll_area.setWidget(self.scroll_host)
 
         left_layout.addWidget(side_title)
-        left_layout.addLayout(count_row)
-        left_layout.addWidget(self.object_slider)
+        left_layout.addWidget(count_label)
+        left_layout.addWidget(self.object_spinbox)
         left_layout.addWidget(self.scroll_area)
 
         self.info_panel = QFrame()
@@ -205,13 +200,13 @@ class SimulationViewer(QMainWindow):
             f"Live drones : {drones}\n"
             f"Obstacles   : {obstacles}\n"
         )
-
-    def _on_object_slider(self, value: int):
-        self.object_count_value_lbl.setText(str(value))
+    def _on_object_spinbox(self, value: int):
+        """Handle spin box value changes"""
+        # Remove this line: self.object_count_value_lbl.setText(str(value))
         self._sync_object_config_count(int(value))
         self._rebuild_object_controls()
-        self._request_restart("Restarting with updated object count...")
-
+        self._request_restart(f"Restarting with updated object count: {value}")
+        
     def _sync_object_config_count(self, count: int):
         with self._config_lock:
             current = list(self._object_configs)
