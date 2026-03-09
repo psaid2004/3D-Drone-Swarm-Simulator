@@ -50,7 +50,7 @@ class DroneSwarm3D(ParallelEnv):
 
         # episode state
         self._step_count = 0
-        self._targets: Optional[np.ndarray] = None
+        self._targets = []
         self._prev_dists: Optional[np.ndarray] = None
         self.last_reward = np.zeros(self.num_drones, dtype=np.float32)
 
@@ -75,8 +75,6 @@ class DroneSwarm3D(ParallelEnv):
         self._obstacles = []
 
         # GUI-only debug visuals
-        self._target_body_ids: List[int] = []
-        self._target_text_ids: List[int] = []
         self._lidar_line_ids: Dict[int, List[int]] = {}
 
         self._init_pybullet_handles()
@@ -198,9 +196,9 @@ class DroneSwarm3D(ParallelEnv):
 
         # reset environment
         self._spawn_obstacles()
-        self._targets = self._make_targets()
         self._clear_debug_visuals()
-        self._spawn_target_markers()
+        self._targets = self._make_targets()
+
 
         # bookkeeping
         self._prev_dists = np.zeros((self.num_drones,), dtype=np.float32)
@@ -214,7 +212,7 @@ class DroneSwarm3D(ParallelEnv):
             else:
                 pos = obs0[self.possible_agents[i]][0:3]
                 tgt = self._targets[i]
-                self._prev_dists[i] = float(np.linalg.norm(tgt - pos))
+                self._prev_dists[i] = float(np.linalg.norm(tgt.start_pos - pos))
 
         info_dict = {a: {} for a in self.agents}
 
@@ -246,7 +244,7 @@ class DroneSwarm3D(ParallelEnv):
             vel = np.array(state[10:13], dtype=np.float32)
 
             # compute distance to assigned target
-            target = self._targets[i]
+            target = self._targets[i].start_pos
             to_target = (target - pos).astype(np.float32)
 
             # compute distance to nearest obstacle, swarm centre and drone
@@ -502,24 +500,12 @@ class DroneSwarm3D(ParallelEnv):
             ], dtype=np.float32)
 
             drone_positions = self._spawn_positions
-            if np.any(np.linalg.norm(drone_positions - t, axis=1) < min_dist):
+            possible_target = Target(t, 0.1, physics_call= self._call_physics, call_gui=self._call_gui)
+            if (possible_target.isValidPosition(drone_positions, self._obstacles,min_dist)):
+                possible_target.spawn_target()
+                return possible_target
+            else:
                 continue
-
-            obs_pos = []
-            for object in self._obstacles:
-                try:
-                    pos, _ = self._call_physics(self._p.getBasePositionAndOrientation, object.body_id)
-                    obs_pos.append(pos)
-                except Exception:
-                    pass
-
-            obs_pos = np.array(obs_pos, dtype=np.float32)
-            if len(obs_pos) > 0:
-                if np.any(np.linalg.norm(obs_pos - t, axis=-1) < min_dist):
-                    continue
-
-            return t
-
         x = self.rng.uniform(-self.world_scale, self.world_scale)
         y = self.rng.uniform(-self.world_scale, self.world_scale)
         z = self.rng.uniform(0.0, self.world_scale)
@@ -535,77 +521,12 @@ class DroneSwarm3D(ParallelEnv):
             t = self.make_valid_target()
 
             # repeat shared target for all drones
-            return np.repeat(t[None, :], repeats=self.num_drones, axis=0).astype(np.float32)
+            targets = [t] * self.num_drones
+            return targets
 
-        for _ in range(self.num_drones):
-            t = self.make_valid_target()
-            targets.append(t)
 
+        #TODO add logic for when more than 1 target exists
         return np.array(targets, dtype=np.float32)
-
-
-    def _spawn_target_markers(self) -> None:
-        """ Spawn the target markers on the GUI. """
-        if self._p is None or self._targets is None or self.render_mode != "human":
-            return
-        p = self._p
-
-        vis = self._call_gui(
-            p.createVisualShape,
-            p.GEOM_SPHERE,
-            radius=0.10,
-            rgbaColor=[0.1, 1.0, 0.1, 0.9],
-        )
-        if vis is None:
-            return
-
-        tgt = self._targets[0] if DEFAULT_SHARED_TARGET else None
-
-        if DEFAULT_SHARED_TARGET and tgt is not None:
-            body = self._call_gui(
-                p.createMultiBody,
-                baseMass=0.0,
-                baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=vis,
-                basePosition=[float(tgt[0]), float(tgt[1]), float(tgt[2])],
-            )
-            if body is not None:
-                self._target_body_ids.append(int(body))
-
-            tid = self._call_gui(
-                p.addUserDebugText,
-                "T",
-                [float(tgt[0]), float(tgt[1]), float(tgt[2] + 0.15)],
-                textColorRGB=[0.2, 1.0, 0.2],
-                textSize=1.4,
-                lifeTime=0,
-            )
-            if tid is not None:
-                self._target_text_ids.append(int(tid))
-            return
-
-        for i in range(self.num_drones):
-            tgt_i = self._targets[i]
-            body = self._call_gui(
-                p.createMultiBody,
-                baseMass=0.0,
-                baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=vis,
-                basePosition=[float(tgt_i[0]), float(tgt_i[1]), float(tgt_i[2])],
-            )
-            if body is not None:
-                self._target_body_ids.append(int(body))
-
-            tid = self._call_gui(
-                p.addUserDebugText,
-                f"T{i}",
-                [float(tgt_i[0]), float(tgt_i[1]), float(tgt_i[2] + 0.15)],
-                textColorRGB=[0.2, 1.0, 0.2],
-                textSize=1.2,
-                lifeTime=0,
-            )
-            if tid is not None:
-                self._target_text_ids.append(int(tid))
 
 
     # ------ OBSTACLE FUNCTIONS --------
@@ -620,11 +541,14 @@ class DroneSwarm3D(ParallelEnv):
             return
         rng = self.rng
 
+        # A max number of attemps for creating an obstacle
         max_attempts = 10000
         for _ in range(self.num_static_obstacles):
             shape = rng.choice(SUPPORTED_SHAPES)
 
             for _ in range(max_attempts):
+
+                # Generate its starting position
                 x = self.rng.uniform(-self.world_scale, self.world_scale)
                 y = self.rng.uniform(-self.world_scale, self.world_scale)
                 z = self.rng.uniform(0, self.world_scale)
@@ -632,6 +556,7 @@ class DroneSwarm3D(ParallelEnv):
                 candidate = np.array([x, y, z], dtype=np.float32)
                 pos = [x, y, z]
 
+                # Check that it is far away from drones
                 if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
                     continue
 
@@ -640,6 +565,8 @@ class DroneSwarm3D(ParallelEnv):
 
                 obj = EnvObject(pos, size, ori)
                 body = obj.create(shape, physics_call=self._call_physics)
+
+                # Check if the obstacle is overlapping with any other obstacle
                 if (self.obstacleOverlap(obj)):
                     self._call_physics(self._p.removeBody, body)
                     continue
@@ -681,6 +608,8 @@ class DroneSwarm3D(ParallelEnv):
 
                 obj = Dynamic(axis,min_pos,max_pos,speed,direction,pos, size, ori)
                 body = obj.create(shape, physics_call= self._call_physics)
+
+                # Check if the obstacle is overlapping with any other obstacle
                 if (self.obstacleOverlap(obj)):
                     self._call_physics(self._p.removeBody, body)
                     continue
@@ -781,20 +710,10 @@ class DroneSwarm3D(ParallelEnv):
     # -------- GUI-ONLY VISUALS --------
     def _clear_debug_visuals(self) -> None:
         if self._p is None or self.render_mode != "human":
-            self._target_body_ids = []
-            self._target_text_ids = []
             self._lidar_line_ids = {}
             return
 
         p = self._p
-
-        for bid in self._target_body_ids:
-            self._call_gui(p.removeBody, bid)
-        self._target_body_ids = []
-
-        for tid in self._target_text_ids:
-            self._call_gui(p.removeUserDebugItem, tid)
-        self._target_text_ids = []
 
         for _, line_ids in list(self._lidar_line_ids.items()):
             for lid in line_ids:
@@ -1067,7 +986,7 @@ class DroneSwarm3D(ParallelEnv):
                 continue
 
             pos = obs_dict[a][0:3]
-            target = self._targets[i] if self._targets is not None else np.zeros(3,
+            target = self._targets[i].start_pos if self._targets is not None else np.zeros(3,
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
@@ -1095,7 +1014,7 @@ class DroneSwarm3D(ParallelEnv):
                 continue
 
             pos = obs_dict[a][0:3]
-            target = self._targets[i] if self._targets is not None else np.zeros(3,
+            target = self._targets[i].start_pos if self._targets is not None else np.zeros(3,
                                                                                  dtype=np.float32)
 
             dist = float(np.linalg.norm(target - pos))
