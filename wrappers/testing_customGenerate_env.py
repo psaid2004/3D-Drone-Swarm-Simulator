@@ -10,18 +10,18 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
 
 def main():
     # --- create environment ----
-    n_drones = 1
+    n_drones = 2
     n_obstacles = 2
     n_steps = 5000
 
     pz_env = make_env(
         num_drones=n_drones,
         render_mode="human",
-        num_static_obstacles = 15,
-        num_dynamic_obstacles = 10,
+        num_static_obstacles = 5,
+        num_dynamic_obstacles = 0,
         max_steps=n_steps,
         lidar=False,
-        world_scale = 3.0
+        world_scale = 2.0
     )
 
     obs_dict, info = pz_env.reset()
