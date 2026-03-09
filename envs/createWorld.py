@@ -2,7 +2,7 @@ import pybullet as p
 import pybullet_data
 import time
 import numpy as np
-from createObjects import *
+from envs.createObjects import *
 from pathlib import Path
 
 SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
@@ -55,20 +55,21 @@ class Environment:
 # Load URDF
 
 
-env = Environment("easy")
-env.spawn_env()
+if __name__ == "__main__":
+    env = Environment("easy")
+    env.spawn_env()
 
-drone = Drone([0, 0, 0.5], [0, 0, 0])
+    drone = Drone([0, 0, 0.5], [0, 0, 0])
 
-# Use CF2X drone URDF from gym-pybullet-drones
-PROJECT_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = PROJECT_DIR / "assets"
-URDF_PATH  = ASSETS_DIR / "cf2p.urdf"
-p.setAdditionalSearchPath(str(ASSETS_DIR))
-print(str(URDF_PATH))
+    # Use CF2X drone URDF from gym-pybullet-drones
+    PROJECT_DIR = Path(__file__).resolve().parent
+    ASSETS_DIR = PROJECT_DIR / "assets"
+    URDF_PATH  = ASSETS_DIR / "cf2p.urdf"
+    p.setAdditionalSearchPath(str(ASSETS_DIR))
+    print(str(URDF_PATH))
 
-drone_id = p.loadURDF(str(URDF_PATH), drone.start_pos, drone.rotation)
+    drone_id = p.loadURDF(str(URDF_PATH), drone.start_pos, drone.rotation)
 
-while p.isConnected():
-    p.stepSimulation()
-    time.sleep(1/240)
+    while p.isConnected():
+        p.stepSimulation()
+        time.sleep(1/240)

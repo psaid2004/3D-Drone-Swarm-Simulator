@@ -3,14 +3,14 @@ import threading
 import importlib
 from functools import partial
 from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 import sys
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from interface.environment_viewer import EnvironmentViewer
+from interface.qt_terminal import CommandTerminal
 
 
 # Load Qt bindings and assign classes to variables
@@ -131,9 +131,20 @@ class SimulationViewer(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop)
 
+        speed_title = QLabel("Speed")
+        self.speed_spinbox = QSpinBox()
+        self.speed_spinbox.setRange(10, 200)
+        self.speed_spinbox.setSingleStep(10)
+        self.speed_spinbox.setSuffix("%")
+        self.speed_spinbox.setValue(100)
+        self.speed_spinbox.valueChanged.connect(self._on_speed_changed)
+
         top_layout.addWidget(title)
         top_layout.addStretch(1)
         top_layout.addWidget(self.status_lbl)
+        top_layout.addSpacing(10)
+        top_layout.addWidget(speed_title)
+        top_layout.addWidget(self.speed_spinbox)
         top_layout.addSpacing(10)
         top_layout.addWidget(self.stop_btn)
         top_layout.addWidget(self.start_btn)
@@ -199,6 +210,8 @@ class SimulationViewer(QMainWindow):
 
         root_layout.addWidget(top_bar)
         root_layout.addWidget(body, 1)
+        self.console = CommandTerminal(root)
+        root_layout.addWidget(self.console)
 
         self._rebuild_object_controls()
 
@@ -209,6 +222,11 @@ class SimulationViewer(QMainWindow):
             f"Live drones : {drones}\n"
             f"Obstacles   : {obstacles}\n"
         )
+
+    def _on_speed_changed(self, value: int):
+        return 0
+
+
     def _on_object_spinbox(self, value: int):
         """Handle spin box value changes"""
         # Remove this line: self.object_count_value_lbl.setText(str(value))
@@ -365,9 +383,10 @@ class SimulationViewer(QMainWindow):
             return
 
         self._running = True
+        self._on_speed_changed(int(self.speed_spinbox.value()))
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.status_lbl.setText("Running (PyBullet GUI)")
+        self.status_lbl.setText(f"Running (PyBullet GUI) @ {self._env_viewer.get_speed_multiplier():.2f}x")
         self._env_viewer.start()
 
     def _stop(self):
@@ -411,6 +430,7 @@ class SimulationViewer(QMainWindow):
         self._update_telemetry(latest)
 
     def _update_telemetry(self, state):
+        speed = float(state.get("speed_multiplier", self._env_viewer.get_speed_multiplier()))
         self.telemetry_lbl.setText(
             self._telemetry_text(
                 episode=int(state.get("episode", 0)),
@@ -418,6 +438,7 @@ class SimulationViewer(QMainWindow):
                 drones=int(state.get("drones", 0)),
                 obstacles=int(state.get("obstacles", 0)),
             )
+            + f"Speed       : {speed:.2f}x\n"
         )
 
 

@@ -5,9 +5,8 @@ import time
 
 from envs.createObjects import Dynamic, EnvObject
 from wrappers.pz_parallel_3d import env as make_env
+from envs.createWorld import SUPPORTED_SHAPES 
 
-
-SHAPES = ("box", "wall", "sphere", "cylinder")
 
 
 class EnvironmentViewer:
@@ -24,6 +23,8 @@ class EnvironmentViewer:
 
         self._episode = 0
         self._step = 0
+        self._speed_lock = threading.Lock()
+        self._speed_multiplier = 1.0
 
     @property
     def running(self):
@@ -47,6 +48,14 @@ class EnvironmentViewer:
     def request_restart(self):
         if self._running:
             self._restart_event.set()
+
+    def set_speed_multiplier(self, speed_multiplier: float):
+        with self._speed_lock:
+            self._speed_multiplier = max(0.1, float(speed_multiplier))
+
+    def get_speed_multiplier(self) -> float:
+        with self._speed_lock:
+            return float(self._speed_multiplier)
 
     def _simulation_loop(self):
         current_env = None
@@ -78,9 +87,10 @@ class EnvironmentViewer:
                             "step": self._step,
                             "drones": len(getattr(current_env, "agents", [])),
                             "obstacles": len(getattr(current_env, "_obstacles", [])),
+                            "speed_multiplier": self.get_speed_multiplier(),
                         }
                     )
-                    time.sleep(1 / 30)
+                    time.sleep((1 / 30) / self.get_speed_multiplier())
 
                     if all(done[a] or trunc[a] for a in done):
                         break
@@ -133,7 +143,7 @@ class EnvironmentViewer:
             ori = [0.0, 0.0, float(cfg["yaw"])]
             size = max(0.1, float(cfg["size"]))
             shape = str(cfg.get("shape", "box"))
-            if shape not in SHAPES:
+            if shape not in SUPPORTED_SHAPES:
                 shape = "box"
 
             if cfg.get("kind") == "dynamic":
