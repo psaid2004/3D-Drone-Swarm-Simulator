@@ -147,6 +147,7 @@ class DroneSwarm3D(ParallelEnv):
             physics=Physics.PYB,
             gui=(self.render_mode == "human"),
             record=False,
+            user_debug_gui=False,
         )
 
         self._env.SPEED_LIMIT = 2.0 # m/s
@@ -367,6 +368,7 @@ class DroneSwarm3D(ParallelEnv):
             physics=Physics.PYB,
             gui=(self.render_mode == "human"),
             record=False,
+            user_debug_gui=False,
         )
         self._env.SPEED_LIMIT = 2.0
 
