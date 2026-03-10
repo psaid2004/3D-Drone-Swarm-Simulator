@@ -19,7 +19,10 @@ class Swarm:
 class Drone:
     def __init__(self, start_pos, euler_angles):
         self.start_pos = start_pos
-        self.rotation = p.getQuaternionFromEuler(euler_angles)   
+        self.rotation = p.getQuaternionFromEuler(euler_angles)
+
+
+
     
     
 class EnvObject:
@@ -92,6 +95,8 @@ class EnvObject:
         else:
             return False
 
+
+
 class Dynamic(EnvObject):
     def __init__(self, axis, min, max, speed, direction, start_pos, size, orientation):
         self.axis = axis
@@ -131,3 +136,48 @@ class Dynamic(EnvObject):
             return True
         else:
             return False
+
+
+class Target():
+    def __init__(self, start_pos, radius, physics_call, call_gui):
+        self.start_pos = start_pos
+        self.radius = radius
+        self.physics_call = physics_call
+        self.call_gui = call_gui
+
+    def isValidPosition(self, dronePositions, obstacles, min_dist):
+        if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
+            return False
+
+        obs_pos = []
+        for object in obstacles:
+            try:
+                pos, _ = self.physics_call(p.getBasePositionAndOrientation, object.body_id)
+                obs_pos.append(pos)
+            except Exception:
+                pass
+
+        obs_pos = np.array(obs_pos, dtype=np.float32)
+        if len(obs_pos) > 0:
+            if np.any(np.linalg.norm(obs_pos - self.start_pos, axis=-1) < min_dist):
+                return False
+
+        return True
+
+    def spawn_target(self):
+        vis = self.call_gui(
+            p.createVisualShape,
+            p.GEOM_SPHERE,
+            radius=self.radius,
+            rgbaColor=[0.1, 1.0, 0.1, 0.9],
+        )
+
+
+        body = self.call_gui(
+                p.createMultiBody,
+                baseMass=0.0,
+                baseCollisionShapeIndex=-1,
+                baseVisualShapeIndex=vis,
+                basePosition=[float(self.start_pos[0]), float(self.start_pos[1]), float(self.start_pos[2])],
+            )
+        return body
