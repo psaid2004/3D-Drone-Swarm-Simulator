@@ -188,6 +188,13 @@ class SimulationViewer(QWidget):
     def __init__(self, config=None):
         super().__init__()
         self.config = config or {}
+
+        self._env_viewer = EnvironmentViewer(
+            object_configs_getter=self._get_object_configs_snapshot,
+            on_state=self._enqueue_state,
+            on_stopped=self._enqueue_stopped,
+            on_error=self._enqueue_error,
+        )
         
         # Initialize all attributes
         self._object_configs = []
@@ -293,7 +300,12 @@ class SimulationViewer(QWidget):
         }
 
     def _build_layout(self):
-        root_layout = QVBoxLayout(self)
+        root = QWidget()
+        self.setLayout(QVBoxLayout())
+        self.layout().setContentsMargins(0, 0, 0, 0)
+        self.layout().setSpacing(0)
+        self.layout().addWidget(root)
+        root_layout = QVBoxLayout(root)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
@@ -411,6 +423,7 @@ class SimulationViewer(QWidget):
 
     def _on_speed_changed(self, value: int):
         return 0
+
 
 
     def _on_object_spinbox(self, value: int):
