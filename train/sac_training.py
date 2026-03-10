@@ -24,8 +24,8 @@ from stable_baselines3.sac.policies import SACPolicy # TODO FIGURE OUT WHETHER T
 from config.curriculum import Curriculum
 from config.defaults import *
 from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
-from wrappers.pz_parallel_3d import DroneSwarm3D
-from wrappers.sb3_reset_fix import SB3VecResetTupleFix
+from wrappers.env_3d import DroneSwarm3D
+from wrappers.env_reset_fix import SB3VecResetTupleFix
 
 warnings.filterwarnings("ignore", message=".*Box low's precision lowered.*")
 warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")

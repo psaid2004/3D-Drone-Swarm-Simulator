@@ -168,6 +168,8 @@ def compute_terminations(env, step_state) -> Tuple[dict, dict]:
         )
         trunc_dict[agent] = bool(step_state.time_limit)
 
+    return term_dict, trunc_dict
+
 
 def build_info_dict(env, step_state) -> dict:
     """ Build info dictionary. """
