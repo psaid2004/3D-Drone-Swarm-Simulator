@@ -1,6 +1,15 @@
 """
 This file defines DEFAULTS (constants). Training / evaluation scripts import these values.
 """
+# =============================================================================
+# DEFAULT OBSERVATION SLICES
+# =============================================================================
+POS_SLICE = slice(0, 3) # position vector
+VEL_SLICE = slice(3, 6) # velocity vector
+TARGET_SLICE = slice(6, 9) # vector to target
+OBS_SLICE = slice(9, 12) # vector to nearest obstacle
+CENTROID_SLICE = slice(12, 15) # vector to nearest centroid
+TEAMMATE_SLICE = slice(15, 18) # vector to nearest teammate
 
 # =============================================================================
 # Swarm Spawn Variables
