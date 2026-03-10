@@ -10,11 +10,15 @@ from envs.createWorld import SUPPORTED_SHAPES
 
 
 class EnvironmentViewer:
-    def __init__(self, object_configs_getter, on_state, on_stopped, on_error):
+    def __init__(self, object_configs_getter, on_state, on_stopped, on_error, num_drones = 0, max_steps = 5000, lidar = False, render_mode = "human"):
         self._get_object_configs = object_configs_getter
         self._on_state = on_state
         self._on_stopped = on_stopped
         self._on_error = on_error
+        self._num_drones = max(1, int(num_drones))
+        self._max_steps = max(1, int(max_steps))
+        self._lidar = bool(lidar)
+        self._render_mode = render_mode
 
         self._running = False
         self._sim_thread = None
@@ -114,12 +118,12 @@ class EnvironmentViewer:
         dynamic_count = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
 
         return make_env(
-            num_drones=8,
+            num_drones=self._num_drones,
             num_static_obstacles=static_count,
             num_dynamic_obstacles=dynamic_count,
-            max_steps=5000,
-            lidar=False,
-            render_mode="human",
+            max_steps=self._max_steps,
+            lidar=self._lidar,
+            render_mode=self._render_mode,
         )
 
     def _apply_object_configs(self, env_instance, configs):

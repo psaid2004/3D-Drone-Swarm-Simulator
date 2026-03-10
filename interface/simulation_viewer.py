@@ -18,6 +18,8 @@ _QT_CORE = importlib.import_module("PyQt6.QtCore")
 _QT_WIDGETS = importlib.import_module("PyQt6.QtWidgets")
 Qt = _QT_CORE.Qt
 QTimer = _QT_CORE.QTimer
+QPropertyAnimation = _QT_CORE.QPropertyAnimation
+QEasingCurve = _QT_CORE.QEasingCurve
 QApplication = _QT_WIDGETS.QApplication
 QComboBox = _QT_WIDGETS.QComboBox
 QFrame = _QT_WIDGETS.QFrame
@@ -26,6 +28,7 @@ QLabel = _QT_WIDGETS.QLabel
 QLineEdit = _QT_WIDGETS.QLineEdit
 QMainWindow = _QT_WIDGETS.QMainWindow
 QScrollArea = _QT_WIDGETS.QScrollArea
+QSplitter = _QT_WIDGETS.QSplitter
 QSlider = _QT_WIDGETS.QSlider
 QVBoxLayout = _QT_WIDGETS.QVBoxLayout
 QWidget = _QT_WIDGETS.QWidget
@@ -40,6 +43,7 @@ SHAPES = ("box", "wall", "sphere", "cylinder")
 KINDS = ("static", "dynamic")
 AXIS_LABEL_TO_INT = {"x": 0, "y": 1, "z": 2}
 AXIS_INT_TO_LABEL = {0: "x", 1: "y", 2: "z"}
+LEFT_SIDEBAR_WIDTH = 400
 
 class LandingPage(QWidget):
     def __init__(self, switch_to_simulation_callback):
@@ -188,12 +192,18 @@ class SimulationViewer(QWidget):
     def __init__(self, config=None):
         super().__init__()
         self.config = config or {}
+        self.console = None
+        self._console_visible = False
 
         self._env_viewer = EnvironmentViewer(
             object_configs_getter=self._get_object_configs_snapshot,
             on_state=self._enqueue_state,
             on_stopped=self._enqueue_stopped,
             on_error=self._enqueue_error,
+            num_drones=int(self.config.get("num_drones", 8)),
+            max_steps=int(self.config.get("max_steps", 5000)),
+            lidar=bool(self.config.get("lidar", False)),
+            render_mode=str(self.config.get("render_mode", "human")),
         )
         
         # Initialize all attributes
@@ -306,6 +316,8 @@ class SimulationViewer(QWidget):
         self.layout().setSpacing(0)
         self.layout().addWidget(root)
         root_layout = QVBoxLayout(root)
+        self._root = root
+        self._root_layout = root_layout
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
@@ -329,6 +341,10 @@ class SimulationViewer(QWidget):
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop)
 
+        self.console_btn = QPushButton("Open console")
+        self.console_btn.setFixedWidth(120)
+        self.console_btn.clicked.connect(self._toggle_console)
+
         speed_title = QLabel("Speed")
         self.speed_spinbox = QSpinBox()
         self.speed_spinbox.setRange(10, 200)
@@ -344,6 +360,8 @@ class SimulationViewer(QWidget):
         top_layout.addWidget(speed_title)
         top_layout.addWidget(self.speed_spinbox)
         top_layout.addSpacing(10)
+        top_layout.addWidget(self.console_btn)
+        top_layout.addSpacing(10)
         top_layout.addWidget(self.stop_btn)
         top_layout.addWidget(self.start_btn)
 
@@ -351,10 +369,13 @@ class SimulationViewer(QWidget):
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
+        self.body_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.body_splitter.setHandleWidth(8)
 
         self.left_sidebar = QFrame()
         self.left_sidebar.setFrameShape(QFrame.Shape.Box)
-        self.left_sidebar.setFixedWidth(390)
+        self.left_sidebar.setMinimumWidth(0)
+        self.left_sidebar.setMaximumWidth(LEFT_SIDEBAR_WIDTH)
         left_layout = QVBoxLayout(self.left_sidebar)
         left_layout.setContentsMargins(12, 12, 12, 10)
 
@@ -363,7 +384,7 @@ class SimulationViewer(QWidget):
 
         count_label = QLabel("Object count")
         self.object_spinbox = QSpinBox()
-        self.object_spinbox.setRange(0, 100)  # You can set max to whatever you want
+        self.object_spinbox.setRange(0, 100)  # You can set max to whatever you want (simulation might get slow with too many)
         self.object_spinbox.setValue(len(self._object_configs))
         self.object_spinbox.valueChanged.connect(self._on_object_spinbox)
 
@@ -403,15 +424,29 @@ class SimulationViewer(QWidget):
         info_layout.addWidget(self.telemetry_lbl)
         info_layout.addStretch(1)
 
-        body_layout.addWidget(self.left_sidebar)
-        body_layout.addWidget(self.info_panel, 1)
+        self.body_splitter.addWidget(self.left_sidebar)
+        self.body_splitter.addWidget(self.info_panel)
+        self.body_splitter.setCollapsible(0, True)
+        self.body_splitter.setCollapsible(1, False)
+        self.body_splitter.setStretchFactor(0, 0)
+        self.body_splitter.setStretchFactor(1, 1)
+        self.body_splitter.setSizes([LEFT_SIDEBAR_WIDTH, max(600, self.width() - LEFT_SIDEBAR_WIDTH)])
+
+        body_layout.addWidget(self.body_splitter)
 
         root_layout.addWidget(top_bar)
         root_layout.addWidget(body, 1)
-        self.console = CommandTerminal(root)
-        root_layout.addWidget(self.console)
 
         self._rebuild_object_controls()
+
+    def _toggle_console(self):
+        if self.console is None:
+            self.console = CommandTerminal(self._root)
+            self._root_layout.addWidget(self.console)
+
+        self._console_visible = not self._console_visible
+        self.console.setVisible(self._console_visible)
+        self.console_btn.setText("Hide console" if self._console_visible else "Open console")
  
     def _telemetry_text(self, episode: int, step: int, drones: int, obstacles: int) -> str:
         return (
