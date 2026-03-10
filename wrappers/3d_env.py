@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import csv
 from typing import Dict, Optional, Tuple, List
-
-from envs.createObjects import *
+from pathlib import Path
 
 import numpy as np
 from gymnasium import spaces
 from pettingzoo.utils.env import ParallelEnv
-from pathlib import Path
 
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
+from envs.createObjects import Target, EnvObject, Dynamic
 
 from config.defaults import *
 
@@ -21,58 +20,117 @@ class DroneSwarm3D(ParallelEnv):
 
     metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
 
-    # ------ Initialisation ------
     def __init__(
             self,
-            world_scale,
-            num_drones_per_swarm,
-            num_static_obstacles,
-            num_dynamic_obstacles,
-            max_steps,
+            world_scale: float,
+            num_drones_per_swarm: int,
+            num_static_obstacles: int,
+            num_dynamic_obstacles: int,
+            max_steps: int,
             num_swarms: int = 1,
             lidar: bool = False,
             render_mode: Optional[str] = None,
             seed: Optional[int] = None
     ):
 
+        self._init_config(
+            world_scale=world_scale,
+            num_drones_per_swarm=num_drones_per_swarm,
+            num_static_obstacles=num_static_obstacles,
+            num_dynamic_obstacles=num_dynamic_obstacles,
+            max_steps=max_steps,
+            num_swarms=num_swarms,
+            lidar=lidar,
+            render_mode=render_mode,
+        )
+
+        self._init_rng(seed)
+        self._init_agents()
+        self._init_episode_state()
+        self._init_simulator()
+        self._init_spaces()
+        self._init_logging()
+
+
+    def _init_config(
+            self,
+            world_scale: float,
+            num_drones_per_swarm: int,
+            num_static_obstacles: int,
+            num_dynamic_obstacles: int,
+            max_steps: int,
+            num_swarms: int,
+            lidar: bool,
+            render_mode: Optional[str],
+    ):
+        """ Store environment configuration. """
         self.world_scale = float(world_scale)
-        self.total_num_drones = int(num_drones_per_swarm) * int(num_swarms) # TODO FUTURE IMPLEMENTATION SHOULD CONSIDER NUM SWARMS - ASSUMPTION OF 1 SWARM HERE
-        self.total_num_drones = max(1, self.total_num_drones) # ensure at least one drone in environment
+        self.num_swarms = int(num_swarms)
+        self.num_drones_per_swarm = int(num_drones_per_swarm)
+
+        # ensure at least one drone in environment
+        self.total_num_drones = max(
+            1,
+            self.num_drones_per_swarm * self.num_swarms
+        ) # TODO FUTURE IMPLEMENTATION SHOULD CONSIDER NUM SWARMS - ASSUMPTION OF 1 SWARM HERE
+
         self.num_static_obstacles = int(num_static_obstacles)
         self.num_dynamic_obstacles = int(num_dynamic_obstacles)
         self.max_steps = int(max_steps)
-        self.num_swarms = num_swarms
         self.lidar = bool(lidar)
         self.render_mode = render_mode
 
+
+    def _init_rng(self, seed: Optional[int]) -> None:
+        """ Create per-environment random number generator. """
+        self.rng = np.random.default_rng(seed)
+
+
+    def _init_agents(self) -> None:
+        """ Initialize PettingZoo agents. """
+        self.possible_agents = [f"drone_{i}" for i in
+                                range(self.total_num_drones)]  # fixed list of all drone names in env
+        self.agents = self.possible_agents[:]  # current active list in episode (used to control dead / despawned drones)
+
+
+    def _init_episode_state(self) -> None:
+        """ Initialise per-episode bookkeeping. """
+        # boolean array representing death status of each drone
         self.dead = np.zeros(self.total_num_drones, dtype=np.bool_)
-        self.wall_hits = 0
-        self.ep_done = False
-        self.ep_idx = 0
+        self.wall_hits = 0 # TODO THIS IS NEVER BEING UPDATED ANYWHERE
 
-        self.rng = np.random.default_rng(seed) # this is np_random from 2D
+        # boolean array of target reached memory: once reached, stays True until reset
+        self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
-        self.possible_agents = [f"drone_{i}" for i in range(self.total_num_drones)]
-        self.agents = self.possible_agents[:]
+        # target for each drone; self._targets[i] belongs to drone i
+        self._targets: list[Target] = []
 
-        # episode state
-        self._step_count = 0
-        self._targets = []
-        self._prev_dists: Optional[np.ndarray] = None
+        # distance of each drone to its target in previous step (used for reward computation)
+        self._prev_dists = np.zeros(self.total_num_drones, dtype=np.float32)
+        # reward value of each drone in previous step
         self.last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
 
-        # persistent reach memory (per episode):
-        # once a drone reaches, it stays reached until reset
-        self._reached_once: Optional[np.ndarray] = None
+        self._step_count = 0
+        self.ep_idx = 0
+        self.ep_rewards: list[float] = []
+
+        self.collision_count = 0
+        self.reached_total = 0
+        self.ep_done = False # TODO THIS IS NEVER BEING UPDATED ANYWHERE
+
+
+    def _init_simulator(self) -> None:
+        """ Create drone simulator and PyBullet handles. """
+        # list of drone's initial position
         self.spawn_positions = self.generate_spawn()
 
-        # define the pybullet env
+        # --- Pybullet env ---
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
             num_drones=self.total_num_drones,
             initial_xyzs=self.spawn_positions,
             physics=Physics.PYB,
-            gui=(render_mode == "human"),
+            gui=(self.render_mode == "human"),
             record=False,
         )
 
@@ -87,6 +145,10 @@ class DroneSwarm3D(ParallelEnv):
         self._lidar_line_ids: Dict[int, List[int]] = {}
 
         self._init_pybullet_handles()
+
+
+    def _init_spaces(self) -> None:
+        """ Create action and observation spaces. """
 
         # Action: (vx_dir, vy_dir, vz_dir, speed)
         self._action_space = spaces.Box(
@@ -105,6 +167,7 @@ class DroneSwarm3D(ParallelEnv):
 
         # total observations
         obs_dim = self._base_obs_dim + self._lidar_dim
+
         self._obs_space = spaces.Box(
             low=np.full((obs_dim,), -1e9, dtype=np.float32),
             high=np.full((obs_dim,), 1e9, dtype=np.float32),
@@ -114,10 +177,12 @@ class DroneSwarm3D(ParallelEnv):
         if self.lidar:
             self._lidar_dirs_body = self._precompute_lidar_dirs_body()
 
-        # csv logging
+
+    def _init_logging(self) -> None:
+        """ Create CSV log file if missing. """
+
         self.log_path = Path("episode_stats.csv")
 
-        # create file + header
         if not self.log_path.exists():
             with open(str(self.log_path), "w", newline = "") as f:
                 writer = csv.writer(f)
@@ -129,7 +194,7 @@ class DroneSwarm3D(ParallelEnv):
                     "walls_hits",
                     "mean_reward"
                 ])
-        self.ep_rewards = []
+
 
     def generate_spawn(
             self
@@ -558,7 +623,7 @@ class DroneSwarm3D(ParallelEnv):
         return np.array([x,y,z], dtype=np.float32)
 
     # ------ TARGET FUNCTIONS ------
-    def make_valid_target(self, min_dist = 0.5, max_attempts = 1000) -> np.ndarray:
+    def make_valid_target(self, min_dist = 0.5, max_attempts = 1000) -> Target:
         """
         Make a valid target for all drones, i.e. a target that does not collide with the drone itself, other obstacles
         or other drones.
@@ -568,7 +633,7 @@ class DroneSwarm3D(ParallelEnv):
 
             drone_positions = self._spawn_positions
             possible_target = Target(t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
-            if (possible_target.isValidPosition(drone_positions, self._obstacles,min_dist)):
+            if possible_target.isValidPosition(drone_positions, self._obstacles, min_dist):
                 possible_target.spawn_target()
                 return possible_target
             else:
@@ -579,7 +644,7 @@ class DroneSwarm3D(ParallelEnv):
         return Target(backup, GOAL_RADIUS, physics_call = self._call_physics, call_gui = self._call_gui)
 
 
-    def _make_targets(self) -> np.ndarray:
+    def _make_targets(self) -> list[Target]:
         """ Make a target for all drones."""
         targets = []
 
@@ -592,7 +657,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
         #TODO add logic for when more than 1 target exists
-        return np.array(targets, dtype=np.float32)
+        return targets
 
 
     # ------ OBSTACLE FUNCTIONS --------
@@ -1046,7 +1111,7 @@ class DroneSwarm3D(ParallelEnv):
 
             if not self.dead[i] and dist < GOAL_REACH_DISTANCE :
                 reached_now[i] = True
-                self._reached_once[i] = True
+                self._reached_once[i] = True # TODO I FEEL LIKE IF IT DIED SHOULD BE UPDATED HERE?
 
             # allow a crashed drone to stop moving
             if self.dead[i] and a in actions:
