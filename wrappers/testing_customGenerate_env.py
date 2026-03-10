@@ -1,6 +1,7 @@
 import time
 import numpy as np
-from wrappers.pz_parallel_3d import env as make_env
+from wrappers.pz_parallel_3d import DroneSwarm3D
+
 
 def safe_unit(v: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(v)
@@ -10,19 +11,18 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
 
 def main():
     # --- create environment ----
-    n_drones = 2
-    n_obstacles = 2
+    n_drones = 5
     n_steps = 5000
 
-    pz_env = make_env(
-        num_drones=n_drones,
-        render_mode="human",
-        num_static_obstacles = 5,
-        num_dynamic_obstacles = 0,
+    pz_env = DroneSwarm3D(
+        world_scale = 4.0,
+        num_drones_per_swarm=n_drones,
+        num_static_obstacles = 2,
+        num_dynamic_obstacles = 2,
         max_steps=n_steps,
+        num_swarms=1,
         lidar=False,
-        world_scale = 2.0
-    )
+        render_mode="human")
 
     obs_dict, info = pz_env.reset()
 

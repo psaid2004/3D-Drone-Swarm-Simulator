@@ -10,7 +10,6 @@ Run:
 from __future__ import annotations
 
 import os, time
-import numpy as np
 import torch
 import warnings
 
@@ -20,20 +19,16 @@ from stable_baselines3.common.callbacks import (
     CallbackList, CheckpointCallback
 )
 from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
-from stable_baselines3.sac.policies import SACPolicy
+from stable_baselines3.sac.policies import SACPolicy # TODO FIGURE OUT WHETHER THIS SHOULD BE USED INSTEAD
 
 from config.curriculum import Curriculum
-from config.defaults import (DEFAULT_NUM_DRONES, MODELS_DIR, LIDAR_NUM_LAYERS,
-                             LIDAR_NUM_RAYS, LIDAR_RANGE, DEFAULT_LIDAR, eps)
+from config.defaults import *
 from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
-from wrappers.pz_parallel_3d import env as make_env
+from wrappers.pz_parallel_3d import DroneSwarm3D
 from wrappers.sb3_reset_fix import SB3VecResetTupleFix
 
 warnings.filterwarnings("ignore", message=".*Box low's precision lowered.*")
 warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
-
-# ---- PATHS ----
-MODEL_DIR = MODELS_DIR
 
 # ---- SAC HYPERPARAMETERS ----
 GAMMA           = 0.99
@@ -50,7 +45,7 @@ NET_ARCH = dict(pi=[512, 256, 128], qf=[512, 256, 128])
 N_ENVS = 1
 
 # ---- FILESYSTEM HELPERS ----
-def get_next_model_path(base=f"{MODEL_DIR}/sac_", drones=1, obs=0, ext=".zip"):
+def get_next_model_path(base=f"{MODELS_DIR}/sac_", drones=1, obs=0, ext=".zip"):
     """Find a new model filename that does not overwrite an existing model."""
     k = 0
     while os.path.isfile(f"{base}{k}_{drones}_{obs}{ext}"):
@@ -72,17 +67,21 @@ def get_next_checkpoint_dir(base=f"{MODEL_DIR}/sac_drones_", n_drones=1, n_obs=0
 def create_env(num_drones: int, active_drones: int, num_obstacles: int, world_scale: float):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
-    raw = make_env(
-        num_drones=num_drones,
-        active_drones=active_drones,
-        num_obstacles=num_obstacles,
-        max_steps=1000,
-        lidar=DEFAULT_LIDAR,
-        render_mode=None,
-        world_scale=world_scale,
-    )
+    env = DroneSwarm3D( # TODO FIX
+        world_scale = world_scale,
+        num_drones_per_swarm = num_drones,
+        num_static_obstacles =(num_obstacles/2),
+        num_dynamic_obstacles,
+        max_steps,
+        num_swarms: int = 1,
+        lidar: bool = False,
+        render_mode: Optional[str] = None,
+        seed: Optional[int] = None,
+    ),
 
-    vec = ss.pettingzoo_env_to_vec_env_v1(raw)
+    # TODO SEPARATE REWARD FUNCTION FROM ENV WRAPPER
+    # TODO FIX THE CURRICULUM TO ACCEPT DYNAMIC AND STATIC OBSTACLES
+    vec = ss.pettingzoo_env_to_vec_env_v1(env)
 
     vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
 

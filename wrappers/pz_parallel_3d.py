@@ -14,54 +14,63 @@ from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
 
 from config.defaults import *
-SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 
-#TODO despawn after reaching target, spawn obstacle between target and drone, Dynamic obstacles spawning (should not go out of bounds, or collide)
+#TODO despawn after reaching target, spawn obstacle between target and drone?
 
 class DroneSwarm3D(ParallelEnv):
+
     metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
 
     # ------ Initialisation ------
-    def __init__(self, num_drones: int = 4, active_drones: Optional[int] = None, num_static_obstacles: int = 5,num_dynamic_obstacles: int = 1,
-                 lidar: bool = False, max_steps: int = 1000, render_mode: Optional[str] = None, world_scale: float = 5.0,
-                 seed: Optional[int] = None):
+    def __init__(
+            self,
+            world_scale,
+            num_drones_per_swarm,
+            num_static_obstacles,
+            num_dynamic_obstacles,
+            max_steps,
+            num_swarms: int = 1,
+            lidar: bool = False,
+            render_mode: Optional[str] = None,
+            seed: Optional[int] = None
+    ):
 
-        # ---------------- basic config ----------------
-        self.num_drones = int(num_drones)
-        self.active_drones = int(active_drones) if active_drones is not None else self.num_drones
-        self.active_drones = max(1, min(self.active_drones, self.num_drones))
-
+        self.world_scale = float(world_scale)
+        self.total_num_drones = int(num_drones_per_swarm) * int(num_swarms) # TODO FUTURE IMPLEMENTATION SHOULD CONSIDER NUM SWARMS - ASSUMPTION OF 1 SWARM HERE
+        self.total_num_drones = max(1, self.total_num_drones) # ensure at least one drone in environment
         self.num_static_obstacles = int(num_static_obstacles)
         self.num_dynamic_obstacles = int(num_dynamic_obstacles)
-        self.lidar = bool(lidar)
         self.max_steps = int(max_steps)
+        self.num_swarms = num_swarms
+        self.lidar = bool(lidar)
         self.render_mode = render_mode
-        self.world_scale = float(world_scale)
 
-        self.dead = np.zeros(self.num_drones, dtype=np.bool_)
+        self.dead = np.zeros(self.total_num_drones, dtype=np.bool_)
         self.wall_hits = 0
         self.ep_done = False
         self.ep_idx = 0
 
         self.rng = np.random.default_rng(seed) # this is np_random from 2D
 
-        self.possible_agents = [f"drone_{i}" for i in range(self.num_drones)]
+        self.possible_agents = [f"drone_{i}" for i in range(self.total_num_drones)]
         self.agents = self.possible_agents[:]
 
         # episode state
         self._step_count = 0
         self._targets = []
         self._prev_dists: Optional[np.ndarray] = None
-        self.last_reward = np.zeros(self.num_drones, dtype=np.float32)
+        self.last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
 
         # persistent reach memory (per episode):
         # once a drone reaches, it stays reached until reset
         self._reached_once: Optional[np.ndarray] = None
+        self.spawn_positions = self.generate_spawn()
 
         # define the pybullet env
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
-            num_drones=self.num_drones,
+            num_drones=self.total_num_drones,
+            initial_xyzs=self.spawn_positions,
             physics=Physics.PYB,
             gui=(render_mode == "human"),
             record=False,
@@ -122,7 +131,61 @@ class DroneSwarm3D(ParallelEnv):
                 ])
         self.ep_rewards = []
 
+    def generate_spawn(
+            self
+    ):
 
+        edge = self.rng.integers(0, 4)
+        center = []
+
+        if edge == 0:  # +X edge
+            center = [self.world_scale - SWARM_EDGE_MARGIN,
+                self.rng.uniform(-self.world_scale + SWARM_EDGE_MARGIN, self.world_scale -SWARM_EDGE_MARGIN),
+                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+            ]
+
+        elif edge == 1:  # -X edge
+            center = [
+                -self.world_scale + SWARM_EDGE_MARGIN,
+                self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
+                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+            ]
+
+        elif edge == 2:  # +Y edge
+            center = [
+                self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
+                self.world_scale - SWARM_EDGE_MARGIN,
+                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+            ]
+
+        else:  # -Y edge
+            center = [
+                self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
+                -self.world_scale + SWARM_EDGE_MARGIN,
+                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+            ]
+
+        positions = []
+
+        while len(positions) < self.total_num_drones:
+            x = self.rng.uniform(center[0]- SWARM_RADIUS, center[0] + SWARM_RADIUS)
+            y = self.rng.uniform(center[1] - SWARM_RADIUS, center[1] + SWARM_RADIUS)
+            z = self.rng.uniform(center[2] - SWARM_RADIUS, center[2] + SWARM_RADIUS)
+
+            candidate = np.array([x,y,z])
+
+
+            # enforce min separation
+            valid = True
+            for p in positions:
+                if np.linalg.norm(candidate - p) < SWARM_MIN_SEPARATION:
+                    valid = False
+                    break
+
+            if valid:
+                positions.append(candidate)
+
+        return np.array(positions, dtype=np.float32)
     def _init_pybullet_handles(self) -> None:
         try:
             import pybullet as p
@@ -192,7 +255,7 @@ class DroneSwarm3D(ParallelEnv):
         self.dead[:] = False
         self.collision_count = 0
         self.reached_total = 0
-        self._reached_once = np.zeros((self.num_drones,), dtype=np.bool_)
+        self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
         # reset environment
         self._spawn_obstacles()
@@ -201,13 +264,13 @@ class DroneSwarm3D(ParallelEnv):
 
 
         # bookkeeping
-        self._prev_dists = np.zeros((self.num_drones,), dtype=np.float32)
-        self.last_reward = np.zeros(self.num_drones, dtype=np.float32)
-        self._status = np.zeros(self.num_drones, dtype=np.int32)
+        self._prev_dists = np.zeros((self.total_num_drones,), dtype=np.float32)
+        self.last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
+        self._status = np.zeros(self.total_num_drones, dtype=np.int32)
 
         obs0 = self._build_obs_dict()
-        for i in range(self.num_drones):
-            if i >= self.active_drones:
+        for i in range(self.total_num_drones):
+            if i >= self.total_num_drones:
                 self._prev_dists[i] = 0.0
             else:
                 pos = obs0[self.possible_agents[i]][0:3]
@@ -234,7 +297,7 @@ class DroneSwarm3D(ParallelEnv):
 
         for i, a in enumerate(self.possible_agents):
             # if drone not active, give it observation zero and skip the rest
-            if i >= self.active_drones:
+            if i >= self.total_num_drones:
                 obs_dict[a] = np.zeros((self._base_obs_dim + self._lidar_dim,), dtype=np.float32)
                 continue
 
@@ -268,8 +331,8 @@ class DroneSwarm3D(ParallelEnv):
 
     def _active_positions(self) -> np.ndarray:
         """ Retrieve all the active drone positions. """
-        pos = np.zeros((self.active_drones, 3), dtype=np.float32)
-        for i in range(self.active_drones):
+        pos = np.zeros((self.total_num_drones, 3), dtype=np.float32)
+        for i in range(self.total_num_drones):
             state = self._env._getDroneStateVector(i)
             pos[i] = np.array(state[0:3], dtype=np.float32)
 
@@ -321,6 +384,7 @@ class DroneSwarm3D(ParallelEnv):
         for obs in self._obstacles:
             if object.isOverlapping(obs):
                 return True
+
         return False
 
     # Helper function used to see if dynamic object are going out of bounds
@@ -476,9 +540,10 @@ class DroneSwarm3D(ParallelEnv):
         except Exception:
             pass
 
+        #TODO Ask stella about neighbourhood radius
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
-            num_drones=self.num_drones,
+            num_drones=self.total_num_drones,
             physics=Physics.PYB,
             gui=(self.render_mode == "human"),
             record=False,
@@ -500,7 +565,7 @@ class DroneSwarm3D(ParallelEnv):
             ], dtype=np.float32)
 
             drone_positions = self._spawn_positions
-            possible_target = Target(t, 0.1, physics_call= self._call_physics, call_gui=self._call_gui)
+            possible_target = Target(t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
             if (possible_target.isValidPosition(drone_positions, self._obstacles,min_dist)):
                 possible_target.spawn_target()
                 return possible_target
@@ -517,11 +582,11 @@ class DroneSwarm3D(ParallelEnv):
         """ Make a target for all drones."""
         targets = []
 
-        if DEFAULT_SHARED_TARGET:
+        if self.num_swarms == 1:
             t = self.make_valid_target()
 
             # repeat shared target for all drones
-            targets = [t] * self.num_drones
+            targets = [t] * self.total_num_drones
             return targets
 
 
@@ -557,7 +622,7 @@ class DroneSwarm3D(ParallelEnv):
                 pos = [x, y, z]
 
                 # Check that it is far away from drones
-                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
+                if not self.is_far_from_drones(candidate, MIN_SPAWN_DIST_FROM_DRONE):
                     continue
 
                 ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
@@ -587,7 +652,7 @@ class DroneSwarm3D(ParallelEnv):
                 candidate = np.array([x,y,z], dtype=np.float32)
 
                 # Check if obstacle is far enough from drones, to prevent spawn killing
-                if not self.is_far_from_drones(candidate, OBSTACLE_RADIUS):
+                if not self.is_far_from_drones(candidate, MIN_SPAWN_DIST_FROM_DRONE):
                     continue
 
                 pos = [x, y, z]
@@ -667,13 +732,13 @@ class DroneSwarm3D(ParallelEnv):
         """
         if self._p is None or len(self._obstacles) == 0 or len(self._drone_ids) == 0:
             return False
-        collided = np.zeros(self.num_drones, dtype=np.bool_)
+        collided = np.zeros(self.total_num_drones, dtype=np.bool_)
 
         if self._p is None or len(self._drone_ids) == 0:
             return collided
 
         p = self._p
-        active_ids = self._drone_ids[: self.active_drones]
+        active_ids = self._drone_ids[: self.total_num_drones]
 
         # thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
         thresh_obstacle = 0.0
@@ -884,7 +949,7 @@ class DroneSwarm3D(ParallelEnv):
 
         # memory of who already reached the goal
         if self._reached_once is None:
-            self._reached_once = np.zeros((self.num_drones,), dtype=np.bool_)
+            self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
         # ---------------------------------------------------------------------
         # 2. Freeze drones that already reached the goal:
         # - IMPORTANT: to make speed=0 in the mapping, we must set u[3] = -1
@@ -892,7 +957,7 @@ class DroneSwarm3D(ParallelEnv):
         #     speed01 = (u[3] + 1) * 0.5
         # ---------------------------------------------------------------------
         for i, a in enumerate(self.possible_agents):
-            if i < self.active_drones and self._reached_once[i] and a in actions:
+            if i < self.total_num_drones and self._reached_once[i] and a in actions:
                 actions[a] = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
 
         # ---------------------------------------------------------------------
@@ -900,12 +965,12 @@ class DroneSwarm3D(ParallelEnv):
         # Policy output = [dir_x, dir_y, dir_z, speed] in [-1, 1]
         # Simulator expects: direction (unit vector) and speed (m/s)
         # ---------------------------------------------------------------------
-        act = np.zeros((self.num_drones, 4), dtype=np.float32)
+        act = np.zeros((self.total_num_drones, 4), dtype=np.float32)
 
         for i, a in enumerate(self.possible_agents):
 
             # inactive drones -> just hover
-            if i >= self.active_drones:
+            if i >= self.total_num_drones:
                 act[i] = np.array([0.0, 0.0, 1.0, 0.0], dtype=np.float32)
                 continue
 
@@ -950,7 +1015,7 @@ class DroneSwarm3D(ParallelEnv):
         time_limit = (self._step_count >= self.max_steps)
 
         collisions = self.check_collisions_per_drone()
-        all_collided = np.all(collisions[:self.active_drones])
+        all_collided = np.all(collisions[:self.total_num_drones])
 
         positions = self._active_positions()
         max_sep, min_sep, too_far, too_close = self._pairwise_sep_stats(positions)
@@ -959,7 +1024,7 @@ class DroneSwarm3D(ParallelEnv):
         swarm_term = (too_far and DEFAULT_TERMINATE_ON_COHESION_BREAK) or (
                 too_close and DEFAULT_TERMINATE_ON_SEPARATION)
 
-        all_active_reached = all(bool(self._reached_once[i]) for i in range(self.active_drones))
+        all_active_reached = all(bool(self._reached_once[i]) for i in range(self.total_num_drones))
         episode_done = bool(all_collided or all_active_reached or swarm_term) # episode ends if everyone crashed, all active reached or spread too far
 
         self.dead = np.logical_or(self.dead, collisions)
@@ -975,14 +1040,14 @@ class DroneSwarm3D(ParallelEnv):
 
         # Track distances to goal for progress-reward
         if self._prev_dists is None:
-            self._prev_dists = np.zeros((self.num_drones,), dtype=np.float32)
+            self._prev_dists = np.zeros((self.total_num_drones,), dtype=np.float32)
 
         # detect newly-reached goals for one-time bonuses in reward
         was_reached = self._reached_once.copy()
-        reached_now = np.zeros((self.num_drones,), dtype=np.bool_)
+        reached_now = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
         for i, a in enumerate(self.possible_agents):
-            if i >= self.active_drones:
+            if i >= self.total_num_drones:
                 continue
 
             pos = obs_dict[a][0:3]
@@ -990,7 +1055,7 @@ class DroneSwarm3D(ParallelEnv):
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
-            if dist < 0.15 :
+            if dist < GOAL_REACH_DISTANCE :
                 reached_now[i] = True
                 self._reached_once[i] = True
 
@@ -1007,7 +1072,7 @@ class DroneSwarm3D(ParallelEnv):
 
         for i, a in enumerate(self.possible_agents):
 
-            if i >= self.active_drones:
+            if i >= self.total_num_drones:
                 reward_dict[a] = 0.0
                 trunc_dict[a] = time_limit
                 term_dict[a] = episode_done
@@ -1063,7 +1128,7 @@ class DroneSwarm3D(ParallelEnv):
 
         for i, a in enumerate(self.possible_agents):
 
-            if i >= self.active_drones:
+            if i >= self.total_num_drones:
                 info_dict[a] = {
                     "step": int(self._step_count),
                     "active": False,
@@ -1097,13 +1162,13 @@ class DroneSwarm3D(ParallelEnv):
 
         self.agents = self.possible_agents[:]
 
-        step_mean_reward = float(np.mean([reward_dict[a] for a in self.possible_agents[:self.active_drones]]))
+        step_mean_reward = float(np.mean([reward_dict[a] for a in self.possible_agents[:self.total_num_drones]]))
         self.ep_rewards.append(step_mean_reward)
 
-        self.collision_count += int(np.sum(collisions[:self.active_drones]))
+        self.collision_count += int(np.sum(collisions[:self.total_num_drones]))
 
         # count “first time reach”
-        self.reached_total += int(np.sum(just_reached[:self.active_drones]))
+        self.reached_total += int(np.sum(just_reached[:self.total_num_drones]))
 
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
 
@@ -1152,24 +1217,3 @@ class DroneSwarm3D(ParallelEnv):
         except Exception:
             pass
 
-
-def env(
-    num_drones=2,
-    active_drones=None,
-    render_mode="human",
-    num_static_obstacles: int = 4,
-    num_dynamic_obstacles: int = 0,
-    max_steps=500,
-    lidar=False,
-    **kwargs,
-):
-    return DroneSwarm3D(
-        num_drones=num_drones,
-        active_drones=active_drones,
-        num_static_obstacles=num_static_obstacles,
-        num_dynamic_obstacles=num_dynamic_obstacles,
-        lidar=lidar,
-        max_steps=max_steps,
-        render_mode=render_mode,
-        **kwargs,
-    )
