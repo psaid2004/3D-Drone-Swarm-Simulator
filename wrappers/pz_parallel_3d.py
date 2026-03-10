@@ -550,6 +550,12 @@ class DroneSwarm3D(ParallelEnv):
         )
         self._env.SPEED_LIMIT = 2.0
 
+    def generate_xyz(self):
+        # Generate its starting position
+        x = self.rng.uniform(-self.world_scale, self.world_scale)
+        y = self.rng.uniform(-self.world_scale, self.world_scale)
+        z = self.rng.uniform(0, self.world_scale)
+        return np.array([x,y,z], dtype=np.float32)
 
     # ------ TARGET FUNCTIONS ------
     def make_valid_target(self, min_dist = 0.5, max_attempts = 1000) -> np.ndarray:
@@ -558,11 +564,7 @@ class DroneSwarm3D(ParallelEnv):
         or other drones.
         """
         for _ in range(max_attempts):
-            t = np. array([
-                self.rng.uniform(-self.world_scale, self.world_scale),
-                self.rng.uniform(-self.world_scale, self.world_scale),
-                self.rng.uniform(0, self.world_scale),
-            ], dtype=np.float32)
+            t = self.generate_xyz()
 
             drone_positions = self._spawn_positions
             possible_target = Target(t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
@@ -571,11 +573,10 @@ class DroneSwarm3D(ParallelEnv):
                 return possible_target
             else:
                 continue
-        x = self.rng.uniform(-self.world_scale, self.world_scale)
-        y = self.rng.uniform(-self.world_scale, self.world_scale)
-        z = self.rng.uniform(0.0, self.world_scale)
 
-        return np.array([x, y, z], dtype=np.float32)
+        backup = self.generate_xyz()
+
+        return Target(backup, GOAL_RADIUS, physics_call = self._call_physics, call_gui = self._call_gui)
 
 
     def _make_targets(self) -> np.ndarray:
@@ -613,13 +614,7 @@ class DroneSwarm3D(ParallelEnv):
 
             for _ in range(max_attempts):
 
-                # Generate its starting position
-                x = self.rng.uniform(-self.world_scale, self.world_scale)
-                y = self.rng.uniform(-self.world_scale, self.world_scale)
-                z = self.rng.uniform(0, self.world_scale)
-
-                candidate = np.array([x, y, z], dtype=np.float32)
-                pos = [x, y, z]
+                candidate = self.generate_xyz()
 
                 # Check that it is far away from drones
                 if not self.is_far_from_drones(candidate, MIN_SPAWN_DIST_FROM_DRONE):
@@ -628,7 +623,7 @@ class DroneSwarm3D(ParallelEnv):
                 ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
                 size = float(rng.uniform(0.8, 1.2))
 
-                obj = EnvObject(pos, size, ori)
+                obj = EnvObject(candidate, size, ori)
                 body = obj.create(shape, physics_call=self._call_physics)
 
                 # Check if the obstacle is overlapping with any other obstacle
@@ -645,33 +640,27 @@ class DroneSwarm3D(ParallelEnv):
 
             for _ in range(max_attempts):
 
-                x = self.rng.uniform(-self.world_scale, self.world_scale)
-                y = self.rng.uniform(-self.world_scale, self.world_scale)
-                z = self.rng.uniform(0, self.world_scale)
-
-                candidate = np.array([x,y,z], dtype=np.float32)
+                candidate = self.generate_xyz()
 
                 # Check if obstacle is far enough from drones, to prevent spawn killing
                 if not self.is_far_from_drones(candidate, MIN_SPAWN_DIST_FROM_DRONE):
                     continue
 
-                pos = [x, y, z]
-
                 displacement = rng.uniform(1, 3)
-                min_pos = pos[axis] - displacement
-                max_pos = pos[axis] + displacement
+                min_pos = candidate[axis] - displacement
+                max_pos = candidate[axis] + displacement
 
                 # Check if obstacle is going beyond world borders, if so generate another obstacle
                 if self.outOfBounds(max_pos, min_pos, axis):
                     continue
 
+                # Generate other attributes with some variability
                 ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
-
                 size = float(rng.uniform(0.8, 1.2))
                 speed = self.rng.uniform(0.8, 1.2)
                 direction = self.rng.choice([-1,1])
 
-                obj = Dynamic(axis,min_pos,max_pos,speed,direction,pos, size, ori)
+                obj = Dynamic(axis,min_pos,max_pos,speed,direction,candidate, size, ori)
                 body = obj.create(shape, physics_call= self._call_physics)
 
                 # Check if the obstacle is overlapping with any other obstacle
@@ -741,8 +730,8 @@ class DroneSwarm3D(ParallelEnv):
         active_ids = self._drone_ids[: self.total_num_drones]
 
         # thresh_obstacle = OBSTACLE_RADIUS + COLLISION_DIST
-        thresh_obstacle = 0.0
-        thresh_drone = 0.0
+        thresh_obstacle = 0.01
+        thresh_drone = 0.01
 
         # drone vs obstacle
         if len(self._obstacles) >0:
@@ -1055,7 +1044,7 @@ class DroneSwarm3D(ParallelEnv):
                                                                                  dtype=np.float32)
             dist = float(np.linalg.norm(target - pos))
 
-            if dist < GOAL_REACH_DISTANCE :
+            if not self.dead[i] and dist < GOAL_REACH_DISTANCE :
                 reached_now[i] = True
                 self._reached_once[i] = True
 
@@ -1117,7 +1106,7 @@ class DroneSwarm3D(ParallelEnv):
                 r -= 0.2 * COLLISION_PEN # small team penalty if one drone crashes
 
             reward_dict[a] = float(r)
-            term_dict[a] = bool(self.dead[i] or episode_done) # allow only crashed drone to terminate
+            term_dict[a] = bool(self.dead[i] or episode_done or  self._reached_once[i]) # allow crashed drone to terminate or if they have reached the goal
             trunc_dict[a] = bool(time_limit)
 
         # keep fixed agent list
@@ -1147,7 +1136,8 @@ class DroneSwarm3D(ParallelEnv):
             info_dict[a] = {
                 "step": int(self._step_count),
                 "active": True,
-                "collided": bool(collisions[i]),
+                "collided": bool(self.dead[i]),        # ever collided
+                "collision_now": bool(collisions[i]),  # collided this step
                 "reached": bool(self._reached_once[i]),
                 "reached_now": bool(reached_now[i]),
                 "just_reached": bool(just_reached[i]),

@@ -12,10 +12,10 @@ SWARM_MIN_SEPARATION = 0.15  # Min distance between drones in the swarm
 # =============================================================================
 # Goal
 # =============================================================================
-GOAL_RADIUS = 0.1 # actual radius of the goal
+GOAL_RADIUS = 1 # actual radius of the goal
 #TODO USE THIS FOR SPAWNING TARGETS
 GOAL_EDGE_MARGIN = 3.5  # Minimum distance between the wall and the goal
-GOAL_REACH_DISTANCE = 0.15 # How close drone needs to be around goal to be a successful reach
+GOAL_REACH_DISTANCE = 0.9 # How close drone needs to be around goal to be a successful reach
 
 
 # =============================================================================
