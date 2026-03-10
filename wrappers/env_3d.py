@@ -24,6 +24,7 @@ from wrappers.stats_trackers import EpisodeStatsTracker
 from config.defaults import *
 
 #TODO despawn after reaching target, spawn obstacle between target and drone?
+# TODO STELLA: MAKE SURE THAT SWARM LOGIC ONLY CONSIDERS NON-DESPAWNED DRONES
 
 class DroneSwarm3D(ParallelEnv):
 
@@ -114,6 +115,7 @@ class DroneSwarm3D(ParallelEnv):
 
         # boolean array of target reached memory: once reached, stays True until reset
         self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
+        self.despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
         # target for each drone; self._targets[i] belongs to drone i
         self._targets: list[Target] = []
@@ -376,7 +378,7 @@ class DroneSwarm3D(ParallelEnv):
         self._init_pybullet_handles()
 
 
-    # ----------------------------- SPAWN DRONES, OBSTACLES AND TARGETS -----------------------------
+    # ----------------------------- (DE)SPAWN DRONES, OBSTACLES AND TARGETS -----------------------------
 
 
     def generate_drone_swarm_spawn(self):
@@ -601,6 +603,79 @@ class DroneSwarm3D(ParallelEnv):
         return np.all(d >= min_dist)
 
 
+    def despawn_drone_in_gui(self, drone_idx: int) -> None:
+        """Helper function to despawn a drone if it reached the target. """
+        if self._p is None or not (0 <= drone_idx < len(self._drone_ids)):
+            return
+
+        p = self._p
+        body_id = self._drone_ids[drone_idx]
+
+        # "despawning" happens by moving drone far away
+        far_position = [1000.0 + 10.0 * drone_idx, 1000.0, -100.0]
+        far_orientation = [0.0, 0.0, 0.0, 1.0]
+
+        try:
+            self._call_physics(
+                p.resetBasePositionAndOrientation,
+                body_id,
+                far_position,
+                far_orientation,
+            )
+        except:
+            pass
+
+        try:
+            self._call_physics(
+                p.resetBaseVelocity,
+                body_id,
+                [0.0, 0.0, 0.0], # make drone stop moving at far position
+                [0.0, 0.0, 0.0],
+            )
+        except Exception:
+            pass
+
+        # disable collisions against everything
+        try:
+            self._call_physics(
+                p.setCollisionFilterGroupMask,
+                body_id, -1, 0, 0)
+        except Exception:
+            pass
+
+        # make drone invisible on gui
+        try:
+            num_joints = self._call_physics(
+                p.getNumJoints,
+                body_id)
+        except Exception:
+            num_joints = 0
+
+        for link_idx in range(-1, num_joints):
+            try:
+                self._call_physics(
+                    p.changeVisualShape,
+                    body_id,
+                    link_idx,
+                    rgbaColor=[1.0, 1.0, 1.0, 0.0],
+                )
+            except Exception:
+                pass
+
+        # remove lidar lines for despawned drone
+        for lid in self._lidar_line_ids.get(drone_idx, []):
+            self._call_gui(p.removeUserDebugItem, lid)
+        self._lidar_line_ids[drone_idx] = []
+
+
+    def despawn_newly_reached_drones(self, just_reached: np.ndarray) -> None:
+        """ Helper function to despawn a drone if it reached the target. """
+        for i in range(len(just_reached)):
+            if bool(just_reached[i] and not bool(self.despawned[i])):
+                self.despawn_drone_in_gui(i)
+                self.despawned[i] = True
+
+
     # ----------------------------- OBSERVATION / ENVIRONMENT RETRIEVAL METHODS -----------------------------
 
     def _build_obs_dict(self) -> Dict[str, np.ndarray]:
@@ -617,6 +692,12 @@ class DroneSwarm3D(ParallelEnv):
         centroid = self._swarm_centroid(positions)
 
         for i, a in enumerate(self.possible_agents):
+
+            # check if agent already despawned
+            if self._despawned[i]:
+                obs_dict[a] = np.zeros((self._base_obs_dim + self._lidar_dim,), dtype=np.float32)
+                continue
+
             # if drone not active, give it observation zero and skip the rest
             if i >= self.total_num_drones:
                 obs_dict[a] = np.zeros((self._base_obs_dim + self._lidar_dim,), dtype=np.float32)
@@ -987,6 +1068,9 @@ class DroneSwarm3D(ParallelEnv):
         # 8. Info dict (for callbacks & logging)
         info_dict = build_info_dict(self, step_state)
 
+        # despawn newly reached drones
+        self.despawn_newly_reached_drones(step_state.just_reached)
+
         self.agents = self.possible_agents[:]
         self.stats.record_step(
             reward_dict,
@@ -1017,7 +1101,10 @@ class DroneSwarm3D(ParallelEnv):
         self._step_count = 0
         self.agents = self.possible_agents[:]
 
-        # If the underlying VelocityAviary client is disconnected, rebuild it.
+        # remove episode-specific GUI/custom bodies from previous episode
+        self._clear_episode_artifacts()
+
+        # if underlying VelocityAviary client is disconnected, rebuild it
         if not self._pybullet_client_alive():
             self._rebuild_aviary()
 
@@ -1025,25 +1112,29 @@ class DroneSwarm3D(ParallelEnv):
 
         self._init_pybullet_handles()
         self._refresh_drone_ids_from_pybullet()
-        # retrieve and copy the drone spawn positions
+        self.restore_drone_visuals_and_collisions()
+
+        # actual spawn positions after reset
         self._spawn_positions = self._active_positions().copy()
 
+        # reset episode bookkeeping
         self.ep_done = False
         self.dead[:] = False
         self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
+        self._despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
         self.stats.reset_episode()
-
-        # reset environment
-        self._spawn_obstacles()
-        self._clear_debug_visuals()
-        self._targets = self._make_targets()
 
         self._prev_dists = np.zeros((self.total_num_drones,), dtype=np.float32)
         self.last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
         self._status = np.zeros(self.total_num_drones, dtype=np.int32)
 
+        # refresh episode content
+        self._spawn_obstacles()
+        self._targets = self._make_targets()
+
         obs0 = self._build_obs_dict()
+
         for i in range(self.total_num_drones):
             pos = obs0[self.possible_agents[i]][POS_SLICE]
             tgt = self._targets[i]
@@ -1052,6 +1143,87 @@ class DroneSwarm3D(ParallelEnv):
         info_dict = {a: {} for a in self.agents}
 
         return obs0, info_dict
+
+
+    def _clear_episode_artifacts(self) -> None:
+        """Helper for resetting episode artifacts."""
+        self._clear_debug_visuals()
+        self.remove_all_obstacles()
+        self.remove_targets()
+
+
+    def remove_all_obstacles(self) -> None:
+        """Helper for removing obstacles from current episode environment."""
+        if self._p is None:
+            self._obstacles = []
+            return
+
+        for obj in self._obstacles:
+            try:
+                if getattr(obj, "body_id", None) is not None:
+                    self._call_physics(self._p.removeBody, obj.body_id)
+            except Exception:
+                pass
+
+        self._obstacles = []
+
+
+    def remove_targets(self) -> None:
+        """Helper for removing targets from current episode environment."""
+        if self._p is None or not self._targets:
+            self._targets = []
+            return
+
+        seen = set()
+        for tgt in self._targets:
+            if tgt is None:
+                continue
+
+            body_id = getattr(tgt, "body_id", None)
+            if body_id is None or body_id in seen:
+                continue
+
+            seen.add(body_id)
+            try:
+                self._call_physics(self._p.removeBody, body_id)
+            except Exception:
+                pass
+
+        self._targets = []
+
+
+    def restore_drone_visuals_and_collisions(self) -> None:
+        """ Helper for restoring visuals and collisions from perviously despawned drones. """
+        if self._p is None:
+            return
+
+        p = self._p
+
+        for i, body_id in enumerate(self._drone_ids[:self.total_num_drones]):
+            try:
+                self._call_physics(
+                    p.setCollisionFilterGroupMask,
+                    body_id, -1, 1, 1)
+            except Exception:
+                pass
+
+            try:
+                num_joints = self._call_physics(
+                    p.getNumJoints,
+                    body_id)
+            except Exception:
+                num_joints = 0
+
+            for link_idx in range(-1, num_joints):
+                try:
+                    self._call_physics(
+                        p.changeVisualShape,
+                        body_id,
+                        link_idx,
+                        rgbaColor=[1.0, 1.0, 1.0, 1.0],
+                    )
+                except Exception:
+                    pass
 
 
     def _clear_debug_visuals(self) -> None:
