@@ -23,6 +23,7 @@ from stable_baselines3.sac.policies import SACPolicy # TODO FIGURE OUT WHETHER T
 
 from config.curriculum import Curriculum
 from config.defaults import *
+from config.sac_defaults import *
 from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.env_3d import DroneSwarm3D
 from wrappers.env_reset_fix import SB3VecResetTupleFix
@@ -30,19 +31,6 @@ from wrappers.env_reset_fix import SB3VecResetTupleFix
 warnings.filterwarnings("ignore", message=".*Box low's precision lowered.*")
 warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
 
-# ---- SAC HYPERPARAMETERS ----
-GAMMA           = 0.99
-BATCH_SIZE      = 256
-BUFFER_SIZE     = 300_000
-LEARNING_STARTS = 1_000       # random exploration before training begins
-TRAIN_FREQ      = 1           # env steps between gradient updates
-GRADIENT_STEPS  = 1           # gradient updates per train_freq
-LEARNING_RATE   = 3e-4
-ENTROPY_COEF    = "auto"
-
-NET_ARCH = dict(pi=[512, 256, 128], qf=[512, 256, 128])
-
-N_ENVS = 1
 
 # ---- FILESYSTEM HELPERS ----
 def get_next_model_path(base=f"{MODELS_DIR}/sac_", drones=1, obs=0, ext=".zip"):
@@ -54,7 +42,7 @@ def get_next_model_path(base=f"{MODELS_DIR}/sac_", drones=1, obs=0, ext=".zip"):
     return f"{base}{k}_{drones}_{obs}{ext}"
 
 
-def get_next_checkpoint_dir(base=f"{MODEL_DIR}/sac_drones_", n_drones=1, n_obs=0):
+def get_next_checkpoint_dir(base=f"{MODELS_DIR}/sac_drones_", n_drones=1, n_obs=0):
     """Find a new checkpoint directory name that does not overwrite an existing directory."""
     k = 0
     while os.path.isdir(f"{base}{k}_{n_drones}_{n_obs}"):
@@ -64,23 +52,23 @@ def get_next_checkpoint_dir(base=f"{MODEL_DIR}/sac_drones_", n_drones=1, n_obs=0
 
 
 # ---- CREATE ENV ----
-def create_env(num_drones: int, active_drones: int, num_obstacles: int, world_scale: float):
+def create_env(
+        world_scale: float,
+        num_drones: int,
+        num_static_obstacles: int,
+        num_dynamic_obstacles: int,
+        num_timesteps: int,
+):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
-    env = DroneSwarm3D( # TODO FIX
+    env = DroneSwarm3D(
         world_scale = world_scale,
-        num_drones_per_swarm = num_drones,
-        num_static_obstacles =(num_obstacles/2),
-        num_dynamic_obstacles,
-        max_steps,
-        num_swarms: int = 1,
-        lidar: bool = False,
-        render_mode: Optional[str] = None,
-        seed: Optional[int] = None,
-    ),
+        num_drones_per_swarm=num_drones,
+        num_static_obstacles=num_static_obstacles,
+        num_dynamic_obstacles=num_dynamic_obstacles,
+        max_steps=num_timesteps,
+    )
 
-    # TODO SEPARATE REWARD FUNCTION FROM ENV WRAPPER
-    # TODO FIX THE CURRICULUM TO ACCEPT DYNAMIC AND STATIC OBSTACLES
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
 
     vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")

@@ -30,9 +30,7 @@ class DroneSwarm3D(ParallelEnv):
 
     metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
 
-
     # ----------------------------- Initialise Custom 3D Environment -----------------------------
-
 
     def __init__(
             self,
@@ -394,6 +392,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def generate_drone_swarm_spawn(self):
+        max_attempts = 1000
 
         for i in range(max_attempts):
             edge = self.rng.integers(0, 4)
@@ -494,8 +493,6 @@ class DroneSwarm3D(ParallelEnv):
                 targets.extend(drone_targets)
 
             return targets
-
-
 
         #TODO add logic for when more than 1 target exists
         return targets
