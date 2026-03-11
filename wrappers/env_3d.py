@@ -110,7 +110,6 @@ class DroneSwarm3D(ParallelEnv):
         """ Initialise per-episode bookkeeping. """
         # boolean array representing death status of each drone
         self.dead = np.zeros(self.total_num_drones, dtype=np.bool_)
-        self.wall_hits = 0 # TODO THIS IS NEVER BEING UPDATED ANYWHERE
 
         # boolean array of target reached memory: once reached, stays True until reset
         self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
@@ -128,9 +127,6 @@ class DroneSwarm3D(ParallelEnv):
         self._step_count = 0
         self.ep_idx = 0
         self.ep_rewards: list[float] = []
-
-        self.collision_count = 0
-        self.reached_total = 0
 
 
     def _init_simulator(self) -> None:
@@ -862,11 +858,16 @@ class DroneSwarm3D(ParallelEnv):
             - obstacle
             - another drone
             - world boundary (wall)
+
+        Also returns the specific collision types
         """
-        collided = np.zeros(self.total_num_drones, dtype=np.bool_)
+        wall_collisions = np.zeros(self.total_num_drones, dtype=np.bool_)
+        obstacle_collisions = np.zeros(self.total_num_drones, dtype=np.bool_)
+        drone_collisions = np.zeros(self.total_num_drones, dtype=np.bool_)
 
         if self._p is None or len(self._drone_ids) == 0:
-            return collided
+            collided = wall_collisions | obstacle_collisions | drone_collisions
+            return collided, wall_collisions, obstacle_collisions, drone_collisions
 
         p = self._p
         active_ids = self._drone_ids[: self.total_num_drones]
@@ -883,14 +884,14 @@ class DroneSwarm3D(ParallelEnv):
                 state = self._env._getDroneStateVector(i)
                 pos_i = np.array(state[POS_SLICE], dtype=np.float32)
                 if self.drone_out_of_bounds(pos_i):
-                    collided[i] = True
+                    wall_collisions[i] = True
             except Exception:
                 continue
 
         # drone vs obstacle
         if len(self._obstacles) >0:
             for i, did in enumerate(active_ids):
-                if collided[i] or self.dead[i] or self._reached_once[i] or self._despawned[i]:
+                if self.dead[i] or self._reached_once[i] or self._despawned[i]:
                     continue
 
                 for object in self._obstacles:
@@ -898,7 +899,7 @@ class DroneSwarm3D(ParallelEnv):
                         pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=object.body_id,
                                                  distance=thresh_obstacle)
                         if pts and len(pts) > 0:
-                            collided[i] = True
+                            obstacle_collisions[i] = True
                             break
                     except Exception:
                         continue
@@ -915,12 +916,13 @@ class DroneSwarm3D(ParallelEnv):
                     pts = self._call_physics(p.getClosestPoints, bodyA=did1, bodyB=did2,
                                              distance=thresh_drone)
                     if pts and len(pts) > 0:
-                        collided[i] = True
-                        collided[j] = True
+                        drone_collisions[i] = True
+                        drone_collisions[j] = True
                 except Exception:
                     continue
 
-        return collided
+        collided = wall_collisions | obstacle_collisions | drone_collisions
+        return collided, wall_collisions, obstacle_collisions, drone_collisions
 
 
     @staticmethod

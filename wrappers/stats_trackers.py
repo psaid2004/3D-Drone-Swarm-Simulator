@@ -8,9 +8,11 @@ class EpisodeStatsTracker:
         self.log_path: Path = Path(log_path)
         self.ep_idx = 0
         self.ep_rewards = []
-        self.collision_count = 0
+        self.total_collision_count = 0
         self.reached_total = 0
-        self.wall_hits = 0
+        self.wall_collisions = 0
+        self.drone_collisions = 0
+        self.obstacle_collisions = 0
         self._ensure_file()
 
     def _ensure_file(self) -> None:
@@ -30,9 +32,11 @@ class EpisodeStatsTracker:
 
     def reset_episode(self) -> None:
         self.ep_rewards.clear()
-        self.collision_count = 0
+        self.total_collision_count = 0
         self.reached_total = 0
-        self.wall_hits = 0
+        self.wall_collisions = 0
+        self.drone_collisions = 0
+        self.obstacle_collisions = 0
 
 
     def record_step(
@@ -53,7 +57,11 @@ class EpisodeStatsTracker:
         step_mean_reward = float(np.mean(contributing_drones) if contributing_drones else 0.0)
         self.ep_rewards.append(step_mean_reward)
 
-        self.collision_count += int(np.sum(step_state.collisions[:total_num_drones]))
+        self.total_collision_count += int(np.sum(step_state.collisions[:total_num_drones]))
+        self.wall_collisions += int(np.sum(step_state.wall_collisions[:total_num_drones]))
+        self.drone_collisions += int(np.sum(step_state.drone_collisions[:total_num_drones]))
+        self.obstacle_collisions += int(np.sum(step_state.obstacle_collisions[:total_num_drones]))
+
         self.reached_total += int(np.sum(step_state.just_reached[:total_num_drones]))
 
 
@@ -67,9 +75,11 @@ class EpisodeStatsTracker:
             writer.writerow([
                 self.ep_idx,
                 step_count,
-                self.collision_count,
+                self.total_collision_count,
                 self.reached_total,
-                self.wall_hits,
+                self.wall_collisions,
+                self.drone_collisions,
+                self.obstacle_collisions,
                 mean_reward,
             ])
 

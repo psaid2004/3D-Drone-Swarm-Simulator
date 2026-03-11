@@ -83,9 +83,12 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
 
     time_limit = bool(env._step_count >= env.max_steps)
 
-    collisions = env.check_collisions_per_drone()
+    collisions, wall_collisions, obstacle_collisions, drone_collisions = env.check_collisions_per_drone()
     if isinstance(collisions, bool):
         collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
+        wall_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
+        obstacle_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
+        drone_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
 
     # mark drones that are dead
     env.dead = np.logical_or(env.dead, collisions)
@@ -151,6 +154,9 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
     return StepState(
         time_limit=time_limit,
         collisions=collisions,
+        wall_collisions=wall_collisions,
+        obstacle_collisions=obstacle_collisions,
+        drone_collisions=drone_collisions,
         all_collided=all_collided,
         positions=positions,
         max_sep=float(max_sep),
@@ -212,6 +218,9 @@ def build_info_dict(env, step_state) -> dict:
             "active": True,
             "collided": bool(env.dead[i]),  # ever collided
             "collision_now": bool(step_state.collisions[i]),  # collided this step
+            "wall_collision_now": bool(step_state.wall_collisions[i]),
+            "obstacle_collision_now": bool(step_state.obstacle_collisions[i]),
+            "drone_collision_now": bool(step_state.drone_collisions[i]),
             "reached": bool(env._reached_once[i]),
             "reached_now": bool(step_state.reached_now[i]),
             "just_reached": bool(step_state.just_reached[i]),

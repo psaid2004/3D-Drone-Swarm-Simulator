@@ -8,7 +8,10 @@ from config.defaults import (
     CNTRL_PEN,
     NEAR_OBS_PEN,
     GOAL_BONUS,
-    COLLISION_PEN,
+    DRONE_COLLISION_PEN,
+    OBSTACLE_COLLISION_PEN,
+    WALL_COLLISION_PEN,
+    SHARED_COLLISION_PEN,
     POS_SLICE,
     OBS_SLICE,
 )
@@ -24,8 +27,14 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             continue
 
         # one-time collision penalty
-        if step_state.collisions[i]:
-            reward_dict[agent] = float(-COLLISION_PEN)
+        if step_state.wall_collisions[i]:
+            reward_dict[agent] = float(-WALL_COLLISION_PEN)
+            continue
+        if step_state.drone_collisions[i]:
+            reward_dict[agent] = float(-DRONE_COLLISION_PEN)
+            continue
+        if step_state.obstacle_collisions[i]:
+            reward_dict[agent] = float(-OBSTACLE_COLLISION_PEN)
             continue
 
         # one-time goal reached reward
@@ -71,7 +80,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # small team penalty if any collisions occur
         if np.any(step_state.collisions):
-            r -= 0.2 * COLLISION_PEN
+            r -= 0.2 * SHARED_COLLISION_PEN
 
         reward_dict[agent] = float(r)
 

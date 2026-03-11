@@ -6,7 +6,13 @@ import numpy as np
 @dataclass
 class StepState:
     time_limit: bool
+
     collisions: np.ndarray
+    wall_collisions: np.ndarray
+    obstacle_collisions: np.ndarray
+    drone_collisions: np.ndarray
+
+
     all_collided: bool
 
     positions: np.ndarray

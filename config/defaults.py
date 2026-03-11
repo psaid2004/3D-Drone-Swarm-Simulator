@@ -89,7 +89,10 @@ SEPARATION_PEN = 3.0
 # =============================================================================
 REACH_BONUS = 150.0
 TRUNC_PEN = 300.0
-COLLISION_PEN = 30.0
+SHARED_COLLISION_PEN = 30.0 # small group penalty if any collision occurs
+WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
+OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
+DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
 ZERO_SPEED_PEN = 1.0
 GOAL_BONUS = 150 # one-time bonus for reaching the goal
 
