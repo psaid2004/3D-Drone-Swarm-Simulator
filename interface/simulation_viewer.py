@@ -216,7 +216,7 @@ class SimulationViewer(QWidget):
         self._restart_event = threading.Event()
         self._state_queue = queue.Queue(maxsize=1)
         self._sim_thread = None
-        
+
         # Initialize with default objects
         default_objects = [
             {
@@ -345,6 +345,27 @@ class SimulationViewer(QWidget):
         self.console_btn.setFixedWidth(120)
         self.console_btn.clicked.connect(self._toggle_console)
 
+        timeline_frame = QFrame()
+        timeline_frame.setFrameShape(QFrame.Shape.Box)
+        timeline_layout = QHBoxLayout(timeline_frame)
+        timeline_layout.setContentsMargins(12, 6, 12, 6)
+
+        timeline_scroll = QScrollArea()
+        timeline_scroll.setWidgetResizable(True)
+        timeline_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        timeline_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        timeline_scroll.setWidget(timeline_frame)
+        
+        self.time_start_lbl = QLabel("00:00")
+        self.time_now_lbl = QLabel("00:00")
+
+        self.timeline_slider = QSlider(Qt.Orientation.Horizontal)
+        self.timeline_slider.setMinimum(0)
+        self.timeline_slider.setMaximum(1)
+        self.timeline_slider.setValue(0)
+        self.timeline_slider.setTracking(True)
+
+
         speed_title = QLabel("Speed")
         self.speed_spinbox = QSpinBox()
         self.speed_spinbox.setRange(10, 200)
@@ -355,6 +376,9 @@ class SimulationViewer(QWidget):
 
         top_layout.addWidget(title)
         top_layout.addStretch(1)
+        timeline_layout.addWidget(self.time_start_lbl)
+        timeline_layout.addWidget(self.timeline_slider, 1)
+        timeline_layout.addWidget(self.time_now_lbl)
         top_layout.addWidget(self.status_lbl)
         top_layout.addSpacing(10)
         top_layout.addWidget(speed_title)
@@ -384,10 +408,9 @@ class SimulationViewer(QWidget):
 
         count_label = QLabel("Object count")
         self.object_spinbox = QSpinBox()
-        self.object_spinbox.setRange(0, 100)  # You can set max to whatever you want (simulation might get slow with too many)
+        self.object_spinbox.setRange(0, 100) 
         self.object_spinbox.setValue(len(self._object_configs))
         self.object_spinbox.valueChanged.connect(self._on_object_spinbox)
-
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -435,6 +458,7 @@ class SimulationViewer(QWidget):
         body_layout.addWidget(self.body_splitter)
 
         root_layout.addWidget(top_bar)
+        root_layout.addWidget(timeline_scroll)
         root_layout.addWidget(body, 1)
 
         self._rebuild_object_controls()
@@ -458,8 +482,6 @@ class SimulationViewer(QWidget):
 
     def _on_speed_changed(self, value: int):
         return 0
-
-
 
     def _on_object_spinbox(self, value: int):
         """Handle spin box value changes"""
