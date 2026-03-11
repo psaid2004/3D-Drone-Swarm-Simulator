@@ -680,6 +680,14 @@ class DroneSwarm3D(ParallelEnv):
                 self._despawned[i] = True
 
 
+    def despawn_newly_collided_drones(self, collisions: np.ndarray) -> None:
+        """ Helper function to despawn a drone if it collided with an obstacle and drone. """
+        for i in range(len(collisions)):
+            if bool(collisions[i] and not bool(self._despawned[i])):
+                self.despawn_drone_in_gui(i)
+                self._despawned[i] = True
+
+
     # ----------------------------- OBSERVATION / ENVIRONMENT RETRIEVAL METHODS -----------------------------
 
     def _build_obs_dict(self) -> Dict[str, np.ndarray]:
@@ -1255,7 +1263,7 @@ class DroneSwarm3D(ParallelEnv):
                         p.changeVisualShape,
                         body_id,
                         link_idx,
-                        rgbaColor=[1.0, 1.0, 1.0, 1.0],
+                        rgbaColor=[0.0, 0.0, 0.0, 1.0],
                     )
                 except Exception:
                     pass

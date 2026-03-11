@@ -86,6 +86,9 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
     if isinstance(collisions, bool):
         collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
 
+    # despawn drones that have just collided
+    env.despawn_newly_collided_drones(collisions)
+
     all_collided = bool(np.all(collisions[:env.total_num_drones]))
 
     positions = env._active_positions()
