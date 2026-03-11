@@ -700,7 +700,7 @@ class DroneSwarm3D(ParallelEnv):
             self._targets = self._make_targets()
 
         # compute drone positions and swarm centre
-        positions = self._active_positions()
+        positions = self.active_drone_positions()
         centroid = self._swarm_centroid(positions)
 
         for i, a in enumerate(self.possible_agents):
@@ -718,7 +718,7 @@ class DroneSwarm3D(ParallelEnv):
             # get raw state vector from simulator, and extract position and velocity
             state = self._env._getDroneStateVector(i)
             pos = np.array(state[POS_SLICE], dtype=np.float32)
-            vel = np.array(state[10:13], dtype=np.float32)
+            vel = np.array(state[10:13], dtype=np.float32) # TODO IS VEL 10:13?
 
             # compute distance to assigned target
             target = self._targets[i].start_pos
@@ -727,7 +727,7 @@ class DroneSwarm3D(ParallelEnv):
             # compute distance to nearest obstacle, swarm centre and drone
             to_obs = self._nearest_obstacle_vector(pos)
             to_centroid = (centroid - pos).astype(np.float32)
-            to_nearest_teammate = self._nearest_teammate_vector(i, positions)
+            to_nearest_teammate = self._nearest_active_teammate_vector(i)
 
             # form the base observation vector
             base = np.concatenate([pos, vel, to_target, to_obs, to_centroid, to_nearest_teammate],
@@ -743,13 +743,38 @@ class DroneSwarm3D(ParallelEnv):
         return obs_dict
 
 
-    def _active_positions(self) -> np.ndarray:
-        """ Retrieve all the active drone positions. """
+    def all_drone_positions(self) -> np.ndarray:
+        """ Retrieve all the drone positions (whether dead, despawned or active). """
         positions = np.zeros((self.total_num_drones, 3), dtype=np.float32)
 
         for i in range(self.total_num_drones):
             state = self._env._getDroneStateVector(i)
             positions[i] = np.array(state[0:3], dtype=np.float32)
+
+        return positions
+
+
+    def active_drone_mask(self) -> np.ndarray:
+        """ Drones that should still influence the ongoing episodes (i.e. not dead or despawned)."""
+        return ~(self.dead | self._reached_once | self._despawned)
+
+
+    def active_drone_indices(self) -> list[int]:
+        """ Retrieve all active drone indices."""
+        return [i for i, active in enumerate(self.active_drone_mask()) if active]
+
+
+    def active_drone_positions(self) -> np.ndarray:
+        """ Retrieve all active drone positions."""
+        idx = self.active_drone_indices()
+
+        if len(idx) == 0:
+            return np.zeros((0,3), dtype=np.float32)
+
+        positions = np.zeros((len(idx), 3), dtype=np.float32)
+        for k, i in enumerate(idx):
+            state = self._env._getDroneStateVector(int(i))
+            positions[k] = np.array(state[POS_SLICE], dtype=np.float32)
 
         return positions
 
@@ -763,35 +788,37 @@ class DroneSwarm3D(ParallelEnv):
         return positions.mean(axis=0).astype(np.float32)
 
 
-    @staticmethod
-    def _nearest_teammate_vector(i: int, positions: np.ndarray) -> np.ndarray:
+    def _nearest_active_teammate_vector(self, i: int) -> np.ndarray:
         """ Retrieve the vector to the nearest teammate to drone i."""
-        # if only one drone, return zero array
-        if positions.shape[0] <= 1:
+        if self.dead[i] or self._reached_once[i] or self._despawned[i]:
             return np.zeros(3, dtype=np.float32)
 
-        # retrieve position of drone i
-        pos_i = positions[i]
+        state_i = self._env._getDroneStateVector(i)
+        pos_i = np.array(state_i[POS_SLICE], dtype=np.float32)
 
-        # compute distance from drone i to all drones
-        d = positions - pos_i[None, :]
+        candidate_neighbours = []
+        for j in range(self.total_num_drones):
+            if j == i:
+                continue
+            if self.dead[j] or self._reached_once[j] or self._despawned[j]:
+                continue
+            state_j = self._env._getDroneStateVector(j)
+            pos_j = np.array(state_j[POS_SLICE], dtype=np.float32)
+            candidate_neighbours.append(pos_j)
+
+        if len(candidate_neighbours) == 0:
+            return np.zeros(3, dtype=np.float32)
+
+        candidate_neighbours = np.array(candidate_neighbours, dtype=np.float32)
+        d = candidate_neighbours - pos_i[None, :]
         dist = np.linalg.norm(d, axis=1) + 1e-8
 
-        # smallest distance is to itself, so ignore with small number
-        dist[i] = 1e9
-
-        # find idx of nearest drone
-        j = int(np.argmin(dist))
-
         # return vector distance to nearest drone
-        return (positions[j] - pos_i).astype(np.float32)
+        return d[int(np.argmin(dist))].astype(np.float32)
 
 
     def _nearest_obstacle_vector(self, drone_pos: np.ndarray) -> np.ndarray:
         """ Retrieve the vector to the nearest obstacle. """
-
-        if self._p is None or len(self._obstacles) == 0: # TODO PEDRO THERE SHOULD ONLY BE ONE OF THESE - DONT KNOW WHICH ONE YOU NEED
-            return np.zeros(3, dtype=np.float32)
 
         if self._p is None or len(self._obstacles) == 0:
             # if there are no obstacles, set the distance really far away
@@ -1088,6 +1115,7 @@ class DroneSwarm3D(ParallelEnv):
             self.possible_agents,
             self.total_num_drones,
             step_state,
+            self.active_drone_mask()
         )
 
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict

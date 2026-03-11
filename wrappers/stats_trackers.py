@@ -6,7 +6,7 @@ import numpy as np
 class EpisodeStatsTracker:
     def __init__(self, log_path: str = 'episode_stats.csv'):
         self.log_path: Path = Path(log_path)
-        self.ep_idx = 0,
+        self.ep_idx = 0
         self.ep_rewards = []
         self.collision_count = 0
         self.reached_total = 0
@@ -39,10 +39,18 @@ class EpisodeStatsTracker:
             self,
             reward_dict: dict,
             possible_agents: list[str],
-            total_num_drones: int, step_state
+            total_num_drones: int,
+            step_state,
+            active_mask: np.ndarray,
     ) -> None:
-        step_mean_reward = float(np.mean([reward_dict[a] for a in possible_agents[:total_num_drones]]))
+        # only consider drones that contributed to the episode (not previously dead or despawned drones)
+        contributing_drones = []
 
+        for i, a in enumerate(possible_agents[:total_num_drones]):
+            if active_mask[i] or step_state.just_reached[i] or step_state.collisions[i]:
+                contributing_drones.append(reward_dict[a])
+
+        step_mean_reward = float(np.mean(contributing_drones) if contributing_drones else 0.0)
         self.ep_rewards.append(step_mean_reward)
 
         self.collision_count += int(np.sum(step_state.collisions[:total_num_drones]))

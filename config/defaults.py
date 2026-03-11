@@ -73,8 +73,8 @@ COLLISION_DIST = 0.0
 # =============================================================================
 # Reward - per-step shaping
 # =============================================================================
-PROG_COEF = 4.5
-TIME_PEN = 0.05
+PROG_COEF = 4.5 # reward coeff for progressing closer to goal
+TIME_PEN = 0.05 # small time penalty each step
 CNTRL_PEN = 0.01
 NEAR_OBS_PEN = 0.6
 
@@ -91,7 +91,7 @@ REACH_BONUS = 150.0
 TRUNC_PEN = 300.0
 COLLISION_PEN = 30.0
 ZERO_SPEED_PEN = 1.0
-GOAL_BONUS = 150
+GOAL_BONUS = 150 # one-time bonus for reaching the goal
 
 # =============================================================================
 # Avoid division by zero

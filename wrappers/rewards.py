@@ -9,6 +9,8 @@ from config.defaults import (
     NEAR_OBS_PEN,
     GOAL_BONUS,
     COLLISION_PEN,
+    POS_SLICE,
+    OBS_SLICE,
 )
 
 def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[str, float]:
@@ -21,25 +23,39 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             reward_dict[agent] = 0.0
             continue
 
-        pos = obs_dict[agent][0:3]
+        # one-time collision penalty
+        if step_state.collisions[i]:
+            reward_dict[agent] = float(-COLLISION_PEN)
+            continue
+
+        # one-time goal reached reward
+        if step_state.just_reached[i]:
+            reward_dict[agent] = float(GOAL_BONUS)
+            continue
+
+        # if drone already inactive, no more updates to rewards
+        if env.dead[i] or env._reached_once[i] or env._despawned[i]:
+            reward_dict[agent] = 0.0
+            continue
+
+        pos = obs_dict[agent][POS_SLICE]
         target = (
             env._targets[i].start_pos
             if env._targets is not None
             else np.zeros(3, dtype=np.float32)
         )
-
         dist = float(np.linalg.norm(target - pos))
         prev = float(env._prev_dists[i])
         env._prev_dists[i] = dist
 
         r_progress = PROG_COEF * (prev - dist)
-        r_goal_dist = -0.15 * dist
+        r_goal_dist = -0.15 * dist # TODO WHAT IS THIS?
         r_time = -TIME_PEN
-        r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i]))
+        r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i])) # TODO WHAT IS THIS?
 
         if len(env._obstacles) > 0:
-            d_obs = float(np.linalg.norm(obs_dict[agent][9:12]))
-            r_near = -NEAR_OBS_PEN / max(d_obs, 0.10)
+            d_obs = float(np.linalg.norm(obs_dict[agent][OBS_SLICE]))
+            r_near = -NEAR_OBS_PEN / max(d_obs, 0.10) #  TODO WHY LIKE THIS?
         else:
             r_near = 0.0
 
@@ -53,12 +69,8 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             + step_state.sep_pen
         )
 
-        if step_state.just_reached[i]:
-            r += GOAL_BONUS
-
-        if step_state.collisions[i]:
-            r -= COLLISION_PEN
-        elif np.any(step_state.collisions):
+        # small team penalty if any collisions occur
+        if np.any(step_state.collisions):
             r -= 0.2 * COLLISION_PEN
 
         reward_dict[agent] = float(r)
