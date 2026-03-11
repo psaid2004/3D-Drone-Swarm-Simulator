@@ -24,7 +24,6 @@ from wrappers.stats_trackers import EpisodeStatsTracker
 from config.defaults import *
 
 #TODO despawn after reaching target, spawn obstacle between target and drone?
-# TODO STELLA: MAKE SURE THAT SWARM LOGIC ONLY CONSIDERS NON-DESPAWNED DRONES
 
 class DroneSwarm3D(ParallelEnv):
 
@@ -132,7 +131,6 @@ class DroneSwarm3D(ParallelEnv):
 
         self.collision_count = 0
         self.reached_total = 0
-        self.ep_done = False # TODO THIS IS NEVER BEING UPDATED ANYWHERE
 
 
     def _init_simulator(self) -> None:
@@ -587,6 +585,19 @@ class DroneSwarm3D(ParallelEnv):
             else:
                 return False
 
+    def drone_out_of_bounds(self, pos:np.ndarray) -> bool:
+        """ Helper function to see if drones are going out of bounds (considered as a collision)."""
+        x,y,z = float(pos[0]), float(pos[1]), float(pos[2])
+
+        return (
+            x <= -self.world_scale
+            or x >= self.world_scale
+            or y <= -self.world_scale
+            or y >= self.world_scale
+            or z <= 0.0
+            or z >= self.world_scale
+        )
+
 
     def generate_xyz(self):
         """ Generate the starting position. """
@@ -847,8 +858,10 @@ class DroneSwarm3D(ParallelEnv):
     def check_collisions_per_drone(self):
         """
         Returns:
-            collided[i] is True if drone i collided with anything
-
+            collided[i] is True if drone i collided with anything:
+            - obstacle
+            - another drone
+            - world boundary (wall)
         """
         collided = np.zeros(self.total_num_drones, dtype=np.bool_)
 
@@ -861,9 +874,25 @@ class DroneSwarm3D(ParallelEnv):
         thresh_obstacle = 0.01
         thresh_drone = 0.01
 
+        # drone vs wall
+        for i in range(self.total_num_drones):
+            if self.dead[i] or self._reached_once[i] or self._despawned[i]:
+                continue
+
+            try:
+                state = self._env._getDroneStateVector(i)
+                pos_i = np.array(state[POS_SLICE], dtype=np.float32)
+                if self.drone_out_of_bounds(pos_i):
+                    collided[i] = True
+            except Exception:
+                continue
+
         # drone vs obstacle
         if len(self._obstacles) >0:
             for i, did in enumerate(active_ids):
+                if collided[i] or self.dead[i] or self._reached_once[i] or self._despawned[i]:
+                    continue
+
                 for object in self._obstacles:
                     try:
                         pts = self._call_physics(p.getClosestPoints, bodyA=did, bodyB=object.body_id,
@@ -876,7 +905,12 @@ class DroneSwarm3D(ParallelEnv):
 
         # drone vs drone
         for i, did1 in enumerate(active_ids):
+            if self.dead[i] or self._reached_once[i] or self._despawned[i]:
+                continue
+
             for j, did2 in enumerate(active_ids[i+1:], start = i+1):
+                if self.dead[j] or self._reached_once[j] or self._despawned[j]:
+                    continue
                 try:
                     pts = self._call_physics(p.getClosestPoints, bodyA=did1, bodyB=did2,
                                              distance=thresh_drone)
@@ -1157,7 +1191,6 @@ class DroneSwarm3D(ParallelEnv):
         self.set_drone_spawn_positions_in_aviary(self._spawn_positions)
 
         # reset episode bookkeeping
-        self.ep_done = False
         self.dead[:] = False
         self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
         self._despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)

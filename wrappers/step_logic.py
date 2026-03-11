@@ -156,7 +156,6 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
         max_sep=float(max_sep),
         min_sep=float(min_sep),
         too_far=bool(too_far),
-        too_close=bool(too_close),
         swarm_term=swarm_term,
         reached_now=reached_now,
         just_reached=just_reached,
