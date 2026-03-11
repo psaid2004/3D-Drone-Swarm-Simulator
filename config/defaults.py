@@ -26,7 +26,6 @@ GOAL_RADIUS = 1 # actual radius of the goal
 GOAL_EDGE_MARGIN = 3.5  # Minimum distance between the wall and the goal
 GOAL_REACH_DISTANCE = 0.9 # How close drone needs to be around goal to be a successful reach
 
-
 # =============================================================================
 # Swarm cohesion / separation
 # =============================================================================
@@ -60,10 +59,9 @@ LIDAR_SHOW_RAYS_TEST = True
 # Motion
 # =============================================================================
 VEL_SCALE = 15.0
-TAKEOFF_STEPS = 60
-TAKEOFF_VZ = 1.0
-HOVER_BIAS_VZ = 0.0
-# TODO MORE STEP FUNCTION DEFAULTS TO FIGURE OUT ALSO ALL OF THE BELOW
+# TAKEOFF_STEPS = 30 # first 30 steps of episode is purely drone takeoff
+# TAKEOFF_VZ = 1.0 # takeoff velocity of drone during first takeoff steps
+# HOVER_BIAS_VZ = 0.0 # add constant upward bias to counter gravity drift
 
 # =============================================================================
 # Collision

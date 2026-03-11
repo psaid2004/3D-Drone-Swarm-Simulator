@@ -15,14 +15,18 @@ from config.defaults import (
 )
 
 
-def freeze_reached_actions(env, actions: Dict[str, np.ndarray]) -> None:
-    """ Freeze/ despawn drones that have reached the target. """ # TODO MAKE LOGIC CORRECT
+def freeze_inactive_actions(env, actions: Dict[str, np.ndarray]) -> None:
+    """Freeze actions for drones that are no longer active in the episode."""
 
     # - IMPORTANT: to make speed=0 in the mapping, we must set u[3] = -1
     #   because u[3] in [-1,1] maps to speed01 in [0,1] by:
     #     speed01 = (u[3] + 1) * 0.5
+
     for i, a in enumerate(env.possible_agents):
-        if i < env.total_num_drones and env._reached_once[i] and a in actions:
+        if i >= env.total_num_drones:
+            continue
+
+        if (env.dead[i] or env._reached_once[i] or env._despawned[i]) and a in actions:
             actions[a] = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
 
 
@@ -33,8 +37,6 @@ def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.nda
     Policy output = [dir_x, dir_y, dir_z, speed] in [-1, 1]
     Simulator expects: direction (unit vector) and speed (m/s)
     """
-    from config.defaults import TAKEOFF_STEPS, TAKEOFF_VZ, HOVER_BIAS_VZ
-
     act = np.zeros((env.total_num_drones, 4), dtype=np.float32)
 
     for i, a in enumerate(env.possible_agents):
@@ -62,15 +64,6 @@ def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.nda
             speed01 = float((u[3] + 1.0) * 0.5)
             speed = env._env.SPEED_LIMIT * speed01  # m/s
 
-            # hover bias to fight gravity drift
-            dir_vec[2] += HOVER_BIAS_VZ
-            dir_vec /= max(np.linalg.norm(dir_vec), 1e-6)
-
-        # automatic takeoff phase (override RL for initial steps during training and tell drone to go up with takeoff velocity (off ground))
-        if env._step_count <= TAKEOFF_STEPS:
-            dir_vec = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-            speed = float(abs(TAKEOFF_VZ))
-
         # retrieve direction vector and speed for drone
         act[i, 0:3] = dir_vec
         act[i, 3] = float(speed)
@@ -91,7 +84,7 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
         drone_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
 
     # mark drones that are dead
-    env.dead = np.logical_or(env.dead, collisions)
+    env._dead = np.logical_or(env._dead, collisions)
 
     # despawn newly collided drones
     env.despawn_newly_collided_drones(collisions)
@@ -105,7 +98,7 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
             continue
 
         # skip drones if they are already dead/despawned before goal check
-        if env.dead[i] and env._despawned[i]:
+        if env._dead[i] and env._despawned[i]:
             continue
 
         pos = obs_dict[a][POS_SLICE]
@@ -127,8 +120,8 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
     active_idx = env.active_drone_indices()
     positions = env.active_drone_positions()
 
-    all_collided = bool(len(active_idx) == 0 and np.any(env.dead)) or bool(
-        np.all(env.dead[:env.total_num_drones] | env._reached_once[:env.total_num_drones] | env._despawned[:env.total_num_drones])
+    all_collided = bool(len(active_idx) == 0 and np.any(env._dead)) or bool(
+        np.all(env._dead[:env.total_num_drones] | env._reached_once[:env.total_num_drones] | env._despawned[:env.total_num_drones])
     ) # TODO CHECK
 
     max_sep, min_sep, too_far, too_close = env._pairwise_sep_stats(positions)
@@ -185,7 +178,7 @@ def compute_terminations(env, step_state) -> Tuple[dict, dict]:
 
         # allow crashed drone to terminate or if they have reached the goal
         term_dict[agent] = bool(
-            env.dead[i] or env._reached_once[i] or env._despawned[i] or step_state.episode_done
+            env._dead[i] or env._reached_once[i] or env._despawned[i] or step_state.episode_done
         )
         trunc_dict[agent] = bool(step_state.time_limit)
 
@@ -216,7 +209,7 @@ def build_info_dict(env, step_state) -> dict:
         info_dict[agent] = {
             "step": int(env._step_count),
             "active": True,
-            "collided": bool(env.dead[i]),  # ever collided
+            "collided": bool(env._dead[i]),  # ever collided
             "collision_now": bool(step_state.collisions[i]),  # collided this step
             "wall_collision_now": bool(step_state.wall_collisions[i]),
             "obstacle_collision_now": bool(step_state.obstacle_collisions[i]),

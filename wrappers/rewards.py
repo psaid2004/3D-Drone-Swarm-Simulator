@@ -43,7 +43,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             continue
 
         # if drone already inactive, no more updates to rewards
-        if env.dead[i] or env._reached_once[i] or env._despawned[i]:
+        if env._dead[i] or env._reached_once[i] or env._despawned[i]:
             reward_dict[agent] = 0.0
             continue
 
