@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Drone Swarm Simulator")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(50, 50, 1200, 650)
         
         # Create stacked widget
         self.stacked_widget = QStackedWidget()

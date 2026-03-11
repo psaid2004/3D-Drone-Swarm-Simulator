@@ -4,7 +4,7 @@ import threading
 import time
 
 from envs.createObjects import Dynamic, EnvObject
-from wrappers.pz_parallel_3d import env as make_env
+from wrappers.env_3d import DroneSwarm3D as env
 from envs.createWorld import SUPPORTED_SHAPES 
 
 
@@ -69,6 +69,7 @@ class EnvironmentViewer:
                 current_env = self._make_env(configs)
                 obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1))
                 self._apply_object_configs(current_env, configs)
+                print("Env made")
 
                 self._episode += 1
                 self._step = 0
@@ -103,6 +104,7 @@ class EnvironmentViewer:
                 current_env = None
 
         except Exception as exc:
+            print("ERROR: ", exc, "  ", str(exc))
             self._on_error(str(exc))
         finally:
             if current_env is not None:
@@ -117,13 +119,14 @@ class EnvironmentViewer:
         static_count = sum(1 for cfg in configs if cfg.get("kind") == "static")
         dynamic_count = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
 
-        return make_env(
-            num_drones=self._num_drones,
+        return env(
+            num_drones_per_swarm=self._num_drones,
             num_static_obstacles=static_count,
             num_dynamic_obstacles=dynamic_count,
             max_steps=self._max_steps,
             lidar=self._lidar,
             render_mode=self._render_mode,
+            world_scale=5 #TODO: make it modifiable
         )
 
     def _apply_object_configs(self, env_instance, configs):
