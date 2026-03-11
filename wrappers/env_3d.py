@@ -26,6 +26,7 @@ from config.defaults import *
 #TODO despawn after reaching target, spawn obstacle between target and drone?
 # TODO STELLA: MAKE SURE THAT SWARM LOGIC ONLY CONSIDERS NON-DESPAWNED DRONES
 
+
 class DroneSwarm3D(ParallelEnv):
 
     metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
@@ -88,6 +89,12 @@ class DroneSwarm3D(ParallelEnv):
             self.num_drones_per_swarm * self.num_swarms
         ) # TODO FUTURE IMPLEMENTATION SHOULD CONSIDER NUM SWARMS - ASSUMPTION OF 1 SWARM HERE
 
+        # Spawn position of every drone
+        self.spawn_positions = np.empty((0,3))
+
+        # Dict with swarm: [position of drone]
+        self.drones_in_swarm ={}
+
         self.num_static_obstacles = int(num_static_obstacles)
         self.num_dynamic_obstacles = int(num_dynamic_obstacles)
         self.max_steps = int(max_steps)
@@ -137,7 +144,11 @@ class DroneSwarm3D(ParallelEnv):
     def _init_simulator(self) -> None:
         """ Create drone simulator and PyBullet handles. """
         # list of drone's initial position
-        self.spawn_positions = self.generate_drone_swarm_spawn()
+
+        for i in range(self.num_swarms):
+            center, drones = self.generate_drone_swarm_spawn()
+            self.drones_in_swarm[i] = {"center": center, "drones":drones}
+            self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
         # --- Pybullet env ---
         self._env = VelocityAviary(
@@ -384,39 +395,47 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def generate_drone_swarm_spawn(self):
+        max_attempts = 10000
 
-        edge = self.rng.integers(0, 4)
+        for i in range(max_attempts):
+            edge = self.rng.integers(0, 4)
 
-        if edge == 0:  # +X edge
-            center = [self.world_scale - SWARM_EDGE_MARGIN,
-                self.rng.uniform(-self.world_scale + SWARM_EDGE_MARGIN, self.world_scale -SWARM_EDGE_MARGIN),
-                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-            ]
+            if edge == 0:  # +X edge
+                center = [self.world_scale - SWARM_EDGE_MARGIN,
+                    self.rng.uniform(-self.world_scale + SWARM_EDGE_MARGIN, self.world_scale -SWARM_EDGE_MARGIN),
+                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+                ]
 
-        elif edge == 1:  # -X edge
-            center = [
-                -self.world_scale + SWARM_EDGE_MARGIN,
-                self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
-                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-            ]
+            elif edge == 1:  # -X edge
+                center = [
+                    -self.world_scale + SWARM_EDGE_MARGIN,
+                    self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
+                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+                ]
 
-        elif edge == 2:  # +Y edge
-            center = [
-                self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
-                self.world_scale - SWARM_EDGE_MARGIN,
-                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-            ]
+            elif edge == 2:  # +Y edge
+                center = [
+                    self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
+                    self.world_scale - SWARM_EDGE_MARGIN,
+                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+                ]
 
-        else:  # -Y edge
-            center = [
-                self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
-                -self.world_scale + SWARM_EDGE_MARGIN,
-                self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-            ]
+            else:  # -Y edge
+                center = [
+                    self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
+                    -self.world_scale + SWARM_EDGE_MARGIN,
+                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
+                ]
+
+
+            if self.is_far_from_other_swarms(center):
+                break
+            else:
+                continue
 
         positions = []
 
-        while len(positions) < self.total_num_drones:
+        while len(positions) < self.num_drones_per_swarm:
             x = self.rng.uniform(center[0]- SWARM_RADIUS, center[0] + SWARM_RADIUS)
             y = self.rng.uniform(center[1] - SWARM_RADIUS, center[1] + SWARM_RADIUS)
             z = self.rng.uniform(center[2] - SWARM_RADIUS, center[2] + SWARM_RADIUS)
@@ -433,10 +452,10 @@ class DroneSwarm3D(ParallelEnv):
             if valid:
                 positions.append(candidate)
 
-        return np.array(positions, dtype=np.float32)
+        return center, np.array(positions, dtype=np.float32)
 
 
-    def make_valid_target(self, min_dist = 0.5, max_attempts = 1000) -> Target:
+    def make_valid_target(self, color, min_dist = 0.5, max_attempts = 1000) -> Target:
         """
         Make a valid target for all drones, i.e. a target that does not collide with the drone itself, other obstacles
         or other drones.
@@ -445,7 +464,7 @@ class DroneSwarm3D(ParallelEnv):
             t = self.generate_xyz()
 
             drone_positions = self._spawn_positions
-            possible_target = Target(t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
+            possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
             if possible_target.isValidPosition(drone_positions, self._obstacles, min_dist):
                 possible_target.spawn_target()
                 return possible_target
@@ -461,12 +480,23 @@ class DroneSwarm3D(ParallelEnv):
         """ Make a target for all drones."""
         targets = []
 
-        if self.num_swarms == 1:
-            t = self.make_valid_target()
 
+        if self.num_swarms == 1:
+            t = self.make_valid_target(COLORS[0])
             # repeat shared target for all drones
             targets = [t] * self.total_num_drones
             return targets
+        else:
+            for i in range(self.num_swarms):
+                t = self.make_valid_target(COLORS[i])
+
+                #TODO perhaps change this logic, self._targets stores it in a dumb way
+                # List that contain the target per drone
+                drone_targets = [t] * self.num_drones_per_swarm
+                targets.extend(drone_targets)
+
+            return targets
+
 
 
         #TODO add logic for when more than 1 target exists
@@ -595,6 +625,16 @@ class DroneSwarm3D(ParallelEnv):
         return np.array([x,y,z], dtype=np.float32)
 
 
+    def is_far_from_other_swarms(self, candidate_center):
+        if not self.drones_in_swarm:
+            return True
+        else:
+            for swarm_info in self.drones_in_swarm.values():
+
+                d = np.linalg.norm(np.array(candidate_center)- np.array(swarm_info["center"]))
+                if d <= SWARM_RADIUS:
+                    return False
+        return True
 
     def is_far_from_drones(self, point: np.ndarray, min_dist:float) -> bool:
         """ Helper function to determine if potential obstacle spawn positions is far from the drone spawn positions."""
@@ -1202,6 +1242,7 @@ class DroneSwarm3D(ParallelEnv):
         p = self._p
 
         for i, body_id in enumerate(self._drone_ids[:self.total_num_drones]):
+            color_for_drone = COLORS[i//self.num_drones_per_swarm]
             try:
                 self._call_physics(
                     p.setCollisionFilterGroupMask,
@@ -1222,7 +1263,7 @@ class DroneSwarm3D(ParallelEnv):
                         p.changeVisualShape,
                         body_id,
                         link_idx,
-                        rgbaColor=[1.0, 1.0, 1.0, 1.0],
+                        rgbaColor = color_for_drone,
                     )
                 except Exception:
                     pass
