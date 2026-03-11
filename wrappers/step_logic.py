@@ -24,7 +24,7 @@ def freeze_inactive_actions(env, actions: Dict[str, np.ndarray]) -> None:
         if i >= env.total_num_drones:
             continue
 
-        if (env.dead[i] or env._reached_once[i] or env._despawned[i]) and a in actions:
+        if (env._dead[i] or env._reached_once[i] or env._despawned[i]) and a in actions:
             actions[a] = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
 
 
@@ -81,6 +81,10 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
         obstacle_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
         drone_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
 
+    env._wall_collision_once = np.logical_or(env._wall_collision_once, wall_collisions)
+    env._obstacle_collision_once = np.logical_or(env._obstacle_collision_once, obstacle_collisions)
+    env._drone_collision_once = np.logical_or(env._drone_collision_once, drone_collisions)
+
     # mark drones that are dead
     env._dead = np.logical_or(env._dead, collisions)
 
@@ -118,7 +122,7 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
     active_idx = env.active_drone_indices()
     positions = env.active_drone_positions()
 
-    all_collided = bool(np.all(env.dead[:env.total_num_drones]))
+    all_collided = bool(np.all(env._dead[:env.total_num_drones]))
 
     max_sep, min_sep, too_far, too_close = env._pairwise_sep_stats(positions)
 
@@ -185,22 +189,30 @@ def build_info_dict(env, step_state) -> dict:
                 "step": int(env._step_count),
                 "active": False,
                 "collided": False,
+                "wall_collision": False,
+                "obstacle_collision": False,
+                "drone_collision": False,
+                "wall_collision_now": False,
+                "obstacle_collision_now": False,
+                "drone_collision_now": False,
                 "reached": False,
                 "swarm_max_sep": float(step_state.max_sep),
                 "swarm_min_sep": float(step_state.min_sep),
                 "swarm_too_far": bool(step_state.too_far),
                 "swarm_too_close": bool(step_state.too_close),
                 "episode_done_collision": False,
-                "episode_done_all_reached": bool(step_state.all_active_reached),
-                "episode_done_swarm": bool(step_state.swarm_term),
+                "episode_done_all_reached": bool(step_state.no_active_drones_left),
             }
             continue
 
         info_dict[agent] = {
             "step": int(env._step_count),
             "active": True,
-            "collided": bool(env._dead[i]),  # ever collided
-            "collision_now": bool(step_state.collisions[i]),  # collided this step
+            "collided": bool(env._dead[i]),
+            "wall_collision": bool(env._wall_collision_once[i]),
+            "obstacle_collision": bool(env._obstacle_collision_once[i]),
+            "drone_collision": bool(env._drone_collision_once[i]),
+            "collision_now": bool(step_state.collisions[i]),
             "wall_collision_now": bool(step_state.wall_collisions[i]),
             "obstacle_collision_now": bool(step_state.obstacle_collisions[i]),
             "drone_collision_now": bool(step_state.drone_collisions[i]),
@@ -212,8 +224,7 @@ def build_info_dict(env, step_state) -> dict:
             "swarm_too_far": bool(step_state.too_far),
             "swarm_too_close": bool(step_state.too_close),
             "episode_done_collision": bool(step_state.collisions[i]),
-            "episode_done_all_reached": bool(step_state.all_active_reached),
-            "episode_done_swarm": bool(step_state.swarm_term),
+            "episode_done_all_reached": bool(step_state.no_active_drones_left),
         }
 
     return info_dict

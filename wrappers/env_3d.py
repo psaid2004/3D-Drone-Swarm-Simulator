@@ -24,7 +24,6 @@ from wrappers.stats_trackers import EpisodeStatsTracker
 from config.defaults import *
 
 #TODO despawn after reaching target, spawn obstacle between target and drone?
-# TODO STELLA: MAKE SURE THAT SWARM LOGIC ONLY CONSIDERS NON-DESPAWNED DRONES
 
 class DroneSwarm3D(ParallelEnv):
 
@@ -128,6 +127,10 @@ class DroneSwarm3D(ParallelEnv):
         self._prev_dists = np.zeros(self.total_num_drones, dtype=np.float32)
         # reward value of each drone in previous step
         self._last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
+
+        self._wall_collision_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
+        self._obstacle_collision_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
+        self._drone_collision_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
         self._step_count = 0
 
@@ -1242,6 +1245,10 @@ class DroneSwarm3D(ParallelEnv):
         self._prev_dists = np.zeros((self.total_num_drones,), dtype=np.float32)
         self._last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
         self._status = np.zeros(self.total_num_drones, dtype=np.int32)
+
+        self._wall_collision_once[:] = False
+        self._obstacle_collision_once[:] = False
+        self._drone_collision_once[:] = False
 
         # refresh episode content
         self._spawn_obstacles()

@@ -48,10 +48,26 @@ def main():
 
         # Print status every 50 steps
         if step % 50 == 0:
-            print(f"Step {step}:")
+            print(f"\n===== STEP {step} =====")
             for d in obs_dict:
-                print(f"  {d} pos: {obs_dict[d][:3]}, reward: {reward_dict[d]:.2f}, collided: {info_dict[d]['collided']}")
+                pos = obs_dict[d][:3]
+                r = reward_dict[d]
 
+                collided = info_dict[d]["collided"]
+                reached = info_dict[d].get("reached", False)
+
+                wall = info_dict[d].get("wall_collision", False)
+                obs = info_dict[d].get("obstacle_collision", False)
+                drone = info_dict[d].get("drone_collision", False)
+
+                print(
+                    f"{d:8s} | "
+                    f"pos=({pos[0]:6.2f},{pos[1]:6.2f},{pos[2]:6.2f}) | "
+                    f"reward={r:7.2f} | "
+                    f"collided={str(collided):5s} | "
+                    f"reached={str(reached):5s} | "
+                    f"wall={wall} obs={obs} drone={drone}"
+                )
 
         print(len(pz_env._obstacles))
         # Stop if all done
