@@ -394,6 +394,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def generate_drone_swarm_spawn(self):
+        max_attempts = 1000
 
         for i in range(max_attempts):
             edge = self.rng.integers(0, 4)
@@ -1232,8 +1233,8 @@ class DroneSwarm3D(ParallelEnv):
         self._refresh_drone_ids_from_pybullet()
         self.restore_drone_visuals_and_collisions()
 
-        self._spawn_positions = self.generate_drone_swarm_spawn()
-        self.set_drone_spawn_positions_in_aviary(self._spawn_positions)
+        center, self.spawn_positions = self.generate_drone_swarm_spawn()
+        self.set_drone_spawn_positions_in_aviary(self.spawn_positions)
 
         # reset episode bookkeeping
         self._dead[:] = False
