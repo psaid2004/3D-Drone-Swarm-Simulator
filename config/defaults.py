@@ -39,7 +39,7 @@ COLORS =  [
 # Swarm cohesion / separation
 # =============================================================================
 DEFAULT_SWARM_MAX_SEP = 5.0
-DEFAULT_SWARM_MIN_SEP = 0.25
+DEFAULT_SWARM_MIN_SEP = 0.25 # TODO PEDRO THERE IS A SWARM_MIN_SEPARATION ABOVE BUT IT IS DEFINING THE SAME THING HERE?
 
 # =============================================================================
 # Obstacles
@@ -61,11 +61,6 @@ LIDAR_SHOW_RAYS_TEST = True
 #TODO MAKE SURE THE LIDAR ACTUALLY WORKS (DAVID)
 
 # =============================================================================
-# Motion
-# =============================================================================
-VEL_SCALE = 15.0
-
-# =============================================================================
 # Collision
 # =============================================================================
 COLLISION_DIST = 0.0
@@ -73,10 +68,11 @@ COLLISION_DIST = 0.0
 # =============================================================================
 # Reward - per-step shaping
 # =============================================================================
-PROG_COEF = 4.5 # reward coeff for progressing closer to goal
-TIME_PEN = 0.05 # small time penalty each step
-CNTRL_PEN = 0.01
-NEAR_OBS_PEN = 0.6
+PROG_COEF = 4.5 # reward coefficient for progressing closer to goal
+TIME_PEN = 0.05 # small time penalty each step (until drone reaches or collides)
+CNTRL_PEN = 0.01 # penalty coefficient for large / aggressive actions (prevents jittering)
+NEAR_OBS_PEN = 0.6 # penalty for being too close to an obstacle
+DIST_PEN = 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 
 # =============================================================================
 # Reward - swarm shaping
@@ -87,13 +83,12 @@ SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
 # =============================================================================
 # Reward - terminal bonuses / penalties
 # =============================================================================
-REACH_BONUS = 150.0
-TRUNC_PEN = 300.0
+TRUNC_PEN = 300.0 # penalty for if episode was truncated
 SHARED_COLLISION_PEN = 30.0 # small group penalty if any collision occurs
 WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
 OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
 DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
-ZERO_SPEED_PEN = 1.0
+ZERO_SPEED_PEN = 1.0 # penalty for drone not moving
 GOAL_BONUS = 150 # one-time bonus for reaching the goal
 
 # =============================================================================
@@ -105,6 +100,21 @@ eps = 1e-8
 # Paths
 # =============================================================================
 MODELS_DIR = "models"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

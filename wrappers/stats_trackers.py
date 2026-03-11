@@ -23,9 +23,11 @@ class EpisodeStatsTracker:
                 writer.writerow([
                     "episode",
                     "steps",
-                    "collisions",
-                    "goals_reached",
-                    "walls_hits",
+                    "total_collision_counts",
+                    "reached_total"
+                    "wall_collisions"
+                    "drone_collisions",
+                    "obstacle_collisions",
                     "mean_reward",
                 ])
 
