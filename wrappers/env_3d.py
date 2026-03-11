@@ -115,10 +115,11 @@ class DroneSwarm3D(ParallelEnv):
 
         # boolean array of target reached memory: once reached, stays True until reset
         self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
-        self.despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)
+        self._despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)
+        self._spawn_positions = np.zeros((self.total_num_drones, 3), dtype=np.float32)
 
         # target for each drone; self._targets[i] belongs to drone i
-        self._targets: list[Target] = []
+        self._targets: Optional[list[Target]] = None
 
         # distance of each drone to its target in previous step (used for reward computation)
         self._prev_dists = np.zeros(self.total_num_drones, dtype=np.float32)
@@ -137,13 +138,13 @@ class DroneSwarm3D(ParallelEnv):
     def _init_simulator(self) -> None:
         """ Create drone simulator and PyBullet handles. """
         # list of drone's initial position
-        self.spawn_positions = self.generate_drone_swarm_spawn()
+        self._spawn_positions = self.generate_drone_swarm_spawn()
 
         # --- Pybullet env ---
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
             num_drones=self.total_num_drones,
-            initial_xyzs=self.spawn_positions,
+            initial_xyzs=self._spawn_positions,
             physics=Physics.PYB,
             gui=(self.render_mode == "human"),
             record=False,
@@ -161,6 +162,7 @@ class DroneSwarm3D(ParallelEnv):
         self._lidar_line_ids: Dict[int, List[int]] = {}
 
         self._init_pybullet_handles()
+        self._refresh_drone_ids_from_pybullet()
 
 
     def _init_spaces(self) -> None:
@@ -364,7 +366,7 @@ class DroneSwarm3D(ParallelEnv):
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
             num_drones=self.total_num_drones,
-            initial_xyzs=self.spawn_positions,
+            initial_xyzs=self._spawn_positions,
             physics=Physics.PYB,
             gui=(self.render_mode == "human"),
             record=False,
@@ -673,9 +675,9 @@ class DroneSwarm3D(ParallelEnv):
     def despawn_newly_reached_drones(self, just_reached: np.ndarray) -> None:
         """ Helper function to despawn a drone if it reached the target. """
         for i in range(len(just_reached)):
-            if bool(just_reached[i] and not bool(self.despawned[i])):
+            if bool(just_reached[i] and not bool(self._despawned[i])):
                 self.despawn_drone_in_gui(i)
-                self.despawned[i] = True
+                self._despawned[i] = True
 
 
     # ----------------------------- OBSERVATION / ENVIRONMENT RETRIEVAL METHODS -----------------------------
@@ -882,7 +884,6 @@ class DroneSwarm3D(ParallelEnv):
                     too_close = True
 
         return max_d, min_d, too_far, too_close
-
 
 
     # ----------------------------- LIDAR METHODS -----------------------------
@@ -1104,7 +1105,7 @@ class DroneSwarm3D(ParallelEnv):
         self.agents = self.possible_agents[:]
 
         # remove episode-specific GUI/custom bodies from previous episode
-        self._clear_episode_artifacts()
+        self.clear_episode_artifacts()
 
         # if underlying VelocityAviary client is disconnected, rebuild it
         if not self._pybullet_client_alive():
@@ -1116,8 +1117,8 @@ class DroneSwarm3D(ParallelEnv):
         self._refresh_drone_ids_from_pybullet()
         self.restore_drone_visuals_and_collisions()
 
-        # actual spawn positions after reset
-        self._spawn_positions = self._active_positions().copy()
+        self._spawn_positions = self.generate_drone_swarm_spawn()
+        self.set_drone_spawn_positions_in_aviary(self._spawn_positions)
 
         # reset episode bookkeeping
         self.ep_done = False
@@ -1147,11 +1148,43 @@ class DroneSwarm3D(ParallelEnv):
         return obs0, info_dict
 
 
-    def _clear_episode_artifacts(self) -> None:
+    def clear_episode_artifacts(self) -> None:
         """Helper for resetting episode artifacts."""
         self._clear_debug_visuals()
         self.remove_all_obstacles()
         self.remove_targets()
+
+
+    def set_drone_spawn_positions_in_aviary(self, spawn_positions: np.ndarray) -> None:
+        """ Send the drone swarm to their new spawn position per episode."""
+        if self._p is None:
+            return
+
+        p = self._p
+        default_orientation = [0.0, 0.0, 0.0, 1.0]
+
+        for i, body_id in enumerate(self._drone_ids[:self.total_num_drones]):
+            pos = spawn_positions[i].tolist()
+
+            try:
+                self._call_physics(
+                    p.resetBasePositionAndOrientation,
+                    body_id,
+                    pos,
+                    default_orientation,
+                )
+            except Exception:
+                pass
+
+            try:
+                self._call_physics(
+                    p.resetBaseVelocity,
+                    body_id,
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                )
+            except Exception:
+                pass
 
 
     def remove_all_obstacles(self) -> None:
@@ -1195,7 +1228,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def restore_drone_visuals_and_collisions(self) -> None:
-        """ Helper for restoring visuals and collisions from perviously despawned drones. """
+        """ Helper for restoring visuals and collisions from previously despawned drones. """
         if self._p is None:
             return
 
