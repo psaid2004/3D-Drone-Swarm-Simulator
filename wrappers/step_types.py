@@ -12,7 +12,6 @@ class StepState:
     obstacle_collisions: np.ndarray
     drone_collisions: np.ndarray
 
-
     all_collided: bool
 
     positions: np.ndarray
@@ -20,11 +19,11 @@ class StepState:
     min_sep: float
     too_far: bool
     too_close: bool
-    swarm_term: bool
 
     reached_now: np.ndarray
     just_reached: np.ndarray
-    all_active_reached: bool
+
+    no_active_drones_left: bool
 
     episode_done: bool
 

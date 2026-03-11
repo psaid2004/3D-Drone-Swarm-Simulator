@@ -4,8 +4,6 @@ import numpy as np
 
 from wrappers.step_types import StepState
 from config.defaults import (
-    DEFAULT_TERMINATE_ON_COHESION_BREAK,
-    DEFAULT_TERMINATE_ON_SEPARATION,
     DEFAULT_SWARM_MAX_SEP,
     DEFAULT_SWARM_MIN_SEP,
     COHESION_PEN,
@@ -113,36 +111,29 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
             reached_now[i] = True
             env._reached_once[i] = True
 
-        # determine which drones just reached the target in this step
+    # determine which drones just reached the target in this step
     just_reached = np.logical_and(reached_now, np.logical_not(was_reached))
 
     # obtain active drone positions for ongoing swarm logic
     active_idx = env.active_drone_indices()
     positions = env.active_drone_positions()
 
-    all_collided = bool(len(active_idx) == 0 and np.any(env._dead)) or bool(
-        np.all(env._dead[:env.total_num_drones] | env._reached_once[:env.total_num_drones] | env._despawned[:env.total_num_drones])
-    ) # TODO CHECK
+    all_collided = bool(np.all(env.dead[:env.total_num_drones]))
 
     max_sep, min_sep, too_far, too_close = env._pairwise_sep_stats(positions)
 
-    swarm_term = bool(too_far and DEFAULT_TERMINATE_ON_COHESION_BREAK) or (
-            too_close and DEFAULT_TERMINATE_ON_SEPARATION) # TODO WHAT IS THIS?
-
-    # Swarm shaping penalties
+    # Swarm shaping penalties (penalty for when drones in swarm spread out too far or get too close)
     cohesion_pen = 0.0
     if positions.shape[0] > 1 and max_sep > DEFAULT_SWARM_MAX_SEP:
         cohesion_pen = - COHESION_PEN * (max_sep - DEFAULT_SWARM_MAX_SEP)
-
     sep_pen = 0.0
     if positions.shape[0] > 1 and min_sep < DEFAULT_SWARM_MIN_SEP:
         sep_pen = -SEPARATION_PEN * (DEFAULT_SWARM_MIN_SEP - min_sep)
-    # TODO CHECK ABOVE TOO
 
-    all_active_reached = bool(len(active_idx) == 0)
+    no_active_drones_left = len(active_idx) == 0
 
-    # episode ends if all collided, all active drones have reached target, swarm terminated or the time limit was reached
-    episode_done = bool(all_collided or all_active_reached or swarm_term or time_limit)
+    # episode ends if all collided or no more active drones present (episode is truncated below if time limit is reached)
+    episode_done = bool(all_collided or no_active_drones_left)
 
     return StepState(
         time_limit=time_limit,
@@ -155,10 +146,10 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
         max_sep=float(max_sep),
         min_sep=float(min_sep),
         too_far=bool(too_far),
-        swarm_term=swarm_term,
+        too_close=bool(too_close),
         reached_now=reached_now,
         just_reached=just_reached,
-        all_active_reached=bool(all_active_reached),
+        no_active_drones_left=bool(no_active_drones_left),
         episode_done=episode_done,
         cohesion_pen=float(cohesion_pen),
         sep_pen=float(sep_pen),
@@ -167,8 +158,8 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
 
 def compute_terminations(env, step_state) -> Tuple[dict, dict]:
     """ Compute terminations. """
-    term_dict = {}
-    trunc_dict = {}
+    term_dict = {} # whether agent terminated
+    trunc_dict = {} # whether agent is truncated by time limit
 
     for i, agent in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
@@ -176,7 +167,6 @@ def compute_terminations(env, step_state) -> Tuple[dict, dict]:
             trunc_dict[agent] = bool(step_state.time_limit)
             continue
 
-        # allow crashed drone to terminate or if they have reached the goal
         term_dict[agent] = bool(
             env._dead[i] or env._reached_once[i] or env._despawned[i] or step_state.episode_done
         )
