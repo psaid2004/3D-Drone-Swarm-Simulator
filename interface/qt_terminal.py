@@ -14,6 +14,8 @@ QPushButton = _QT_WIDGETS.QPushButton
 QTextEdit = _QT_WIDGETS.QTextEdit
 QVBoxLayout = _QT_WIDGETS.QVBoxLayout
 QWidget = _QT_WIDGETS.QWidget
+QObject = _QT_CORE.QObject
+pyqtSignal = _QT_CORE.pyqtSignal
 
 
 class CommandTerminal(QFrame):
@@ -131,3 +133,59 @@ class CommandTerminal(QFrame):
         self.run_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
         QTimer.singleShot(0, self._start_shell)
+
+class StreamRedirect(QObject):
+    text_written = pyqtSignal(str)
+
+    def write(self, text):
+        if text:
+            self.text_written.emit(str(text))
+
+    def flush(self):
+        pass
+
+class AppTerminal(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFrameShape(QFrame.Shape.Box)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+
+        title = QLabel("Application Output")
+        title.setStyleSheet("font-weight: 700;")
+
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        self.output.setStyleSheet("font-family: Consolas, 'Courier New', monospace;")
+
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(self.output.clear)
+
+        layout.addWidget(title)
+        layout.addWidget(self.output, 1)
+        layout.addWidget(clear_btn)
+
+        # redirect stdout/stderr
+        self.redirect = StreamRedirect()
+        self.redirect.text_written.connect(self._append)
+
+        sys.stdout = self.redirect
+        sys.stderr = self.redirect
+
+    def _append(self, text):
+        self.output.moveCursor(self.output.textCursor().MoveOperation.End)
+        self.output.insertPlainText(text)
+        self.output.moveCursor(self.output.textCursor().MoveOperation.End)
+
+class DualTerminal(QWidget):
+    def __init__(self,parent=None):
+        super().__init__(parent)
+
+        layout = QHBoxLayout(self)
+
+        self.cmd_terminal = CommandTerminal()
+        self.app_terminal = AppTerminal()
+
+        layout.addWidget(self.cmd_terminal, 1)
+        layout.addWidget(self.app_terminal, 1)

@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from interface.environment_viewer import EnvironmentViewer
-from interface.qt_terminal import CommandTerminal
+from interface.qt_terminal import DualTerminal
 
 
 # Load Qt bindings and assign classes to variables
@@ -441,7 +441,7 @@ class SimulationViewer(QWidget):
 
     def _toggle_console(self):
         if self.console is None:
-            self.console = CommandTerminal(self._root)
+            self.console = DualTerminal(self._root)
             self._root_layout.addWidget(self.console)
 
         self._console_visible = not self._console_visible
