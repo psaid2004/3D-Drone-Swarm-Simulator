@@ -6,11 +6,13 @@ import numpy as np
 class EpisodeStatsTracker:
     def __init__(self, log_path: str = 'episode_stats.csv'):
         self.log_path: Path = Path(log_path)
-        self.ep_idx = 0,
+        self.ep_idx = 0
         self.ep_rewards = []
-        self.collision_count = 0
+        self.total_collision_count = 0
         self.reached_total = 0
-        self.wall_hits = 0
+        self.wall_collisions = 0
+        self.drone_collisions = 0
+        self.obstacle_collisions = 0
         self._ensure_file()
 
     def _ensure_file(self) -> None:
@@ -30,22 +32,36 @@ class EpisodeStatsTracker:
 
     def reset_episode(self) -> None:
         self.ep_rewards.clear()
-        self.collision_count = 0
+        self.total_collision_count = 0
         self.reached_total = 0
-        self.wall_hits = 0
+        self.wall_collisions = 0
+        self.drone_collisions = 0
+        self.obstacle_collisions = 0
 
 
     def record_step(
             self,
             reward_dict: dict,
             possible_agents: list[str],
-            total_num_drones: int, step_state
+            total_num_drones: int,
+            step_state,
+            active_mask: np.ndarray,
     ) -> None:
-        step_mean_reward = float(np.mean([reward_dict[a] for a in possible_agents[:total_num_drones]]))
+        # only consider drones that contributed to the episode (not previously dead or despawned drones)
+        contributing_drones = []
 
+        for i, a in enumerate(possible_agents[:total_num_drones]):
+            if active_mask[i] or step_state.just_reached[i] or step_state.collisions[i]:
+                contributing_drones.append(reward_dict[a])
+
+        step_mean_reward = float(np.mean(contributing_drones) if contributing_drones else 0.0)
         self.ep_rewards.append(step_mean_reward)
 
-        self.collision_count += int(np.sum(step_state.collisions[:total_num_drones]))
+        self.total_collision_count += int(np.sum(step_state.collisions[:total_num_drones]))
+        self.wall_collisions += int(np.sum(step_state.wall_collisions[:total_num_drones]))
+        self.drone_collisions += int(np.sum(step_state.drone_collisions[:total_num_drones]))
+        self.obstacle_collisions += int(np.sum(step_state.obstacle_collisions[:total_num_drones]))
+
         self.reached_total += int(np.sum(step_state.just_reached[:total_num_drones]))
 
 
@@ -59,9 +75,11 @@ class EpisodeStatsTracker:
             writer.writerow([
                 self.ep_idx,
                 step_count,
-                self.collision_count,
+                self.total_collision_count,
                 self.reached_total,
-                self.wall_hits,
+                self.wall_collisions,
+                self.drone_collisions,
+                self.obstacle_collisions,
                 mean_reward,
             ])
 
