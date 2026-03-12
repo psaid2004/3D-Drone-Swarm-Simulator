@@ -139,11 +139,12 @@ class Dynamic(EnvObject):
 
 
 class Target():
-    def __init__(self, start_pos, radius, physics_call, call_gui):
+    def __init__(self, color, start_pos, radius, physics_call, call_gui):
         self.start_pos = start_pos
         self.radius = radius
         self.physics_call = physics_call
         self.call_gui = call_gui
+        self.color = color
 
     def isValidPosition(self, dronePositions, obstacles, min_dist):
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
@@ -169,7 +170,7 @@ class Target():
             p.createVisualShape,
             p.GEOM_SPHERE,
             radius=self.radius,
-            rgbaColor=[0.1, 1.0, 0.1, 0.9],
+            rgbaColor=self.color,
         )
 
 

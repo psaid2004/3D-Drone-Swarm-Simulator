@@ -8,7 +8,15 @@ from config.defaults import (
     CNTRL_PEN,
     NEAR_OBS_PEN,
     GOAL_BONUS,
-    COLLISION_PEN,
+    DRONE_COLLISION_PEN,
+    OBSTACLE_COLLISION_PEN,
+    WALL_COLLISION_PEN,
+    SHARED_COLLISION_PEN,
+    POS_SLICE,
+    OBS_SLICE,
+    DIST_PEN,
+    TRUNC_PEN,
+    ZERO_SPEED_PEN,
 )
 
 def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[str, float]:
@@ -21,31 +29,52 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             reward_dict[agent] = 0.0
             continue
 
-        pos = obs_dict[agent][0:3]
+        # one-time collision penalty
+        if step_state.wall_collisions[i]:
+            reward_dict[agent] = float(-WALL_COLLISION_PEN)
+            continue
+        if step_state.drone_collisions[i]:
+            reward_dict[agent] = float(-DRONE_COLLISION_PEN)
+            continue
+        if step_state.obstacle_collisions[i]:
+            reward_dict[agent] = float(-OBSTACLE_COLLISION_PEN)
+            continue
+
+        # one-time goal reached reward
+        if step_state.just_reached[i]:
+            reward_dict[agent] = float(GOAL_BONUS)
+            continue
+
+        # if drone already inactive, no more updates to rewards
+        if env._dead[i] or env._reached_once[i] or env._despawned[i]:
+            reward_dict[agent] = 0.0
+            continue
+
+        pos = obs_dict[agent][POS_SLICE]
         target = (
             env._targets[i].start_pos
             if env._targets is not None
             else np.zeros(3, dtype=np.float32)
         )
-
         dist = float(np.linalg.norm(target - pos))
         prev = float(env._prev_dists[i])
         env._prev_dists[i] = dist
 
-        r_progress = PROG_COEF * (prev - dist)
-        r_goal_dist = -0.15 * dist
-        r_time = -TIME_PEN
-        r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i]))
+        r_progress = PROG_COEF * (prev - dist) # reward for change in distance to target
+        r_distance_pen = -DIST_PEN * dist # penalise not moving to target
+        r_time = -TIME_PEN # penalise time
+        r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i])) # penalise large / aggressive actions
 
         if len(env._obstacles) > 0:
-            d_obs = float(np.linalg.norm(obs_dict[agent][9:12]))
+            d_obs = float(np.linalg.norm(obs_dict[agent][OBS_SLICE]))
+            # inverse-distance obstacle penalty with floor to avoid exploding near zero
             r_near = -NEAR_OBS_PEN / max(d_obs, 0.10)
         else:
             r_near = 0.0
 
         r = (
             r_progress
-            + r_goal_dist
+            + r_distance_pen
             + r_time
             + r_ctrl
             + r_near
@@ -53,13 +82,17 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             + step_state.sep_pen
         )
 
-        if step_state.just_reached[i]:
-            r += GOAL_BONUS
+        # penalty for if time limit was reached
+        if step_state.time_limit:
+            r -= TRUNC_PEN
 
-        if step_state.collisions[i]:
-            r -= COLLISION_PEN
-        elif np.any(step_state.collisions):
-            r -= 0.2 * COLLISION_PEN
+        # penalty for if drone has no speed (is not moving)
+        if sim_actions[i][3] == 0:
+            r -= ZERO_SPEED_PEN
+
+        # small team penalty if any collisions occur
+        if np.any(step_state.collisions):
+            r -= 0.2 * SHARED_COLLISION_PEN
 
         reward_dict[agent] = float(r)
 

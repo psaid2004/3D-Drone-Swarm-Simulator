@@ -25,24 +25,27 @@ GOAL_RADIUS = 1 # actual radius of the goal
 #TODO USE THIS FOR SPAWNING TARGETS
 GOAL_EDGE_MARGIN = 3.5  # Minimum distance between the wall and the goal
 GOAL_REACH_DISTANCE = 0.9 # How close drone needs to be around goal to be a successful reach
-
+COLORS =  [
+    [0.0, 1.0, 0.0, 0.9],  # green
+    [0.0, 0.0, 1.0, 0.9],  # blue
+    [1.0, 1.0, 0.0, 0.9],  # yellow
+    [1.0, 0.0, 1.0, 0.9],  # magenta
+    [0.0, 1.0, 1.0, 0.9],  # cyan
+    [1.0, 0.5, 0.0, 0.9],  # orange
+    [0.5, 0.0, 1.0, 0.9],  # purple
+]
 
 # =============================================================================
 # Swarm cohesion / separation
 # =============================================================================
 DEFAULT_SWARM_MAX_SEP = 5.0
-DEFAULT_SWARM_MIN_SEP = 0.25
-DEFAULT_TERMINATE_ON_COHESION_BREAK = False
-DEFAULT_TERMINATE_ON_SEPARATION = False
-# TODO make sure this works well with the reward function
+DEFAULT_SWARM_MIN_SEP = 0.25 # TODO PEDRO THERE IS A SWARM_MIN_SEPARATION ABOVE BUT IT IS DEFINING THE SAME THING HERE?
 
 # =============================================================================
 # Obstacles
 # =============================================================================
-MIN_SPAWN_DIST_FROM_DRONE = 0.5
+MIN_SPAWN_DIST_FROM_DRONE = 0.75
 SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
-
-#TODO MAKE SURE THE LIDAR ACTUALLY WORKS (DAVID)
 
 # =============================================================================
 # LiDAR
@@ -55,15 +58,7 @@ LIDAR_HORIZONTAL_FOV_DEG = 360.0  # full circle
 LIDAR_NOISE_STD = 0.0
 LIDAR_SHOW_RAYS_TRAIN = False
 LIDAR_SHOW_RAYS_TEST = True
-
-# =============================================================================
-# Motion
-# =============================================================================
-VEL_SCALE = 15.0
-TAKEOFF_STEPS = 60
-TAKEOFF_VZ = 1.0
-HOVER_BIAS_VZ = 0.0
-# TODO MORE STEP FUNCTION DEFAULTS TO FIGURE OUT ALSO ALL OF THE BELOW
+#TODO MAKE SURE THE LIDAR ACTUALLY WORKS (DAVID)
 
 # =============================================================================
 # Collision
@@ -73,25 +68,28 @@ COLLISION_DIST = 0.0
 # =============================================================================
 # Reward - per-step shaping
 # =============================================================================
-PROG_COEF = 4.5
-TIME_PEN = 0.05
-CNTRL_PEN = 0.01
-NEAR_OBS_PEN = 0.6
+PROG_COEF = 4.5 # reward coefficient for progressing closer to goal
+TIME_PEN = 0.05 # small time penalty each step (until drone reaches or collides)
+CNTRL_PEN = 0.01 # penalty coefficient for large / aggressive actions (prevents jittering)
+NEAR_OBS_PEN = 0.6 # penalty for being too close to an obstacle
+DIST_PEN = 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 
 # =============================================================================
 # Reward - swarm shaping
 # =============================================================================
-COHESION_PEN = 5.0
-SEPARATION_PEN = 3.0
+COHESION_PEN = 5.0 # penalty for when drones in swarm spread too far
+SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
 
 # =============================================================================
 # Reward - terminal bonuses / penalties
 # =============================================================================
-REACH_BONUS = 150.0
-TRUNC_PEN = 300.0
-COLLISION_PEN = 30.0
-ZERO_SPEED_PEN = 1.0
-GOAL_BONUS = 150
+TRUNC_PEN = 300.0 # penalty for if episode was truncated
+SHARED_COLLISION_PEN = 30.0 # small group penalty if any collision occurs
+WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
+OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
+DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
+ZERO_SPEED_PEN = 1.0 # penalty for drone not moving
+GOAL_BONUS = 150 # one-time bonus for reaching the goal
 
 # =============================================================================
 # Avoid division by zero
@@ -105,6 +103,33 @@ MODELS_DIR = "models"
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# OLD VARIABLE STORAGE
+# TAKEOFF_STEPS = 30 # first 30 steps of episode is purely drone takeoff
+# TAKEOFF_VZ = 1.0 # takeoff velocity of drone during first takeoff steps
+# HOVER_BIAS_VZ = 0.0 # add constant upward bias to counter gravity drift
+# DEFAULT_TERMINATE_ON_COHESION_BREAK = False
+# DEFAULT_TERMINATE_ON_SEPARATION = False
 
 
 
