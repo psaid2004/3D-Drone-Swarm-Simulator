@@ -88,6 +88,8 @@ class DroneSwarm3D(ParallelEnv):
         # Spawn position of every drone
         self.spawn_positions = np.empty((0,3))
 
+
+
         # Dict with swarm: [position of drone]
         self.drones_in_swarm ={}
 
@@ -118,7 +120,6 @@ class DroneSwarm3D(ParallelEnv):
         # boolean array of target reached memory: once reached, stays True until reset
         self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
         self._despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)
-        self._spawn_positions = np.zeros((self.total_num_drones, 3), dtype=np.float32)
 
         # target for each drone; self._targets[i] belongs to drone i
         self._targets: Optional[list[Target]] = None
@@ -142,7 +143,11 @@ class DroneSwarm3D(ParallelEnv):
         for i in range(self.num_swarms):
             center, drones = self.generate_drone_swarm_spawn()
             self.drones_in_swarm[i] = {"center": center, "drones":drones}
+            print("Spawn positions", self.spawn_positions)
+            print("drones", drones)
+
             self.spawn_positions = np.vstack([self.spawn_positions, drones])
+            print("Spawn positions", self.spawn_positions)
 
         # --- Pybullet env ---
         self._env = VelocityAviary(
@@ -463,7 +468,7 @@ class DroneSwarm3D(ParallelEnv):
         for _ in range(max_attempts):
             t = self.generate_xyz()
 
-            drone_positions = self._spawn_positions
+            drone_positions = self.spawn_positions
             possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
             if possible_target.isValidPosition(drone_positions, self._obstacles, min_dist):
                 possible_target.spawn_target()
@@ -490,14 +495,12 @@ class DroneSwarm3D(ParallelEnv):
             for i in range(self.num_swarms):
                 t = self.make_valid_target(COLORS[i])
 
-                #TODO perhaps change this logic, self._targets stores it in a dumb way
                 # List that contain the target per drone
                 drone_targets = [t] * self.num_drones_per_swarm
                 targets.extend(drone_targets)
 
             return targets
 
-        #TODO add logic for when more than 1 target exists
         return targets
 
 
@@ -649,9 +652,11 @@ class DroneSwarm3D(ParallelEnv):
 
     def is_far_from_drones(self, point: np.ndarray, min_dist:float) -> bool:
         """ Helper function to determine if potential obstacle spawn positions is far from the drone spawn positions."""
-        if self._spawn_positions is None:
+        if self.spawn_positions is None:
             return True
-        d = np.linalg.norm(self._spawn_positions - point, axis=1)
+
+        d = np.linalg.norm(np.array(self.spawn_positions) - point, axis=1)
+
 
         return np.all(d >= min_dist)
 
@@ -1280,8 +1285,10 @@ class DroneSwarm3D(ParallelEnv):
 
         p = self._p
         default_orientation = [0.0, 0.0, 0.0, 1.0]
+        print("spawn points:", spawn_positions)
 
-        for i, body_id in enumerate(self._drone_ids[:self.total_num_drones]):
+        for i, body_id in enumerate(self._drone_ids[:len(spawn_positions)]):
+
             pos = spawn_positions[i].tolist()
 
             try:
