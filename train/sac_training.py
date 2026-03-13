@@ -1,10 +1,10 @@
 """
-SB3 SAC training (3D PyBullet drones) with expert blending.
+SAC training.
 
 All required defaults and curriculum stages are imported from the config file.
 
 Run:
-  python -m train.sb3_sac_training
+  python -m train.sac_training
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ from stable_baselines3.common.callbacks import (
     CallbackList, CheckpointCallback
 )
 from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
-from stable_baselines3.sac.policies import SACPolicy # TODO FIGURE OUT WHETHER THIS SHOULD BE USED INSTEAD
 
 from config.curriculum import Curriculum
 from config.defaults import *
 from config.sac_defaults import *
+
 from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.env_3d import DroneSwarm3D
 from wrappers.env_reset_fix import SB3VecResetTupleFix
@@ -33,23 +33,30 @@ warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
 
 
 # ---- FILESYSTEM HELPERS ----
-def get_next_model_path(base=f"{MODELS_DIR}/sac_", drones=1, obs=0, ext=".zip"):
+def get_next_model_path(
+        num_drones: int,
+        num_static_obs: int,
+        num_dynamic_obs: int,
+        base=f"{MODELS_DIR}/sac_",
+        ext=".zip"
+):
     """Find a new model filename that does not overwrite an existing model."""
     k = 0
-    while os.path.isfile(f"{base}{k}_{drones}_{obs}{ext}"):
+    while os.path.isfile(f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"):
         k += 1
 
-    return f"{base}{k}_{drones}_{obs}{ext}"
+    return f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"
 
-
-def get_next_checkpoint_dir(base=f"{MODELS_DIR}/sac_drones_", n_drones=1, n_obs=0):
-    """Find a new checkpoint directory name that does not overwrite an existing directory."""
+def get_next_checkpoint_dir(
+        num_drones: int,
+        num_static_obs: int,
+        num_dynamic_obs: int
+):
     k = 0
-    while os.path.isdir(f"{base}{k}_{n_drones}_{n_obs}"):
+    while os.path.isdir(f"{MODELS_DIR}/sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"):
         k += 1
 
-    return f"sac_drones_{k}_{n_drones}_{n_obs}"
-
+    return f"sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"
 
 # ---- CREATE ENV ----
 def create_env(
@@ -57,7 +64,7 @@ def create_env(
         num_drones: int,
         num_static_obstacles: int,
         num_dynamic_obstacles: int,
-        num_timesteps: int,
+        max_episode_steps: int,
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -66,30 +73,32 @@ def create_env(
         num_drones_per_swarm=num_drones,
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
-        max_steps=num_timesteps,
+        max_steps=max_episode_steps,
     )
 
+    # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
-
+    # create number of copies of env in parallel
     vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
 
     vec = SB3VecResetTupleFix(vec)
-
+    # record episode-level statistics from the vectorized environment
     vec = VecMonitor(vec)
 
+    # normalizes observations and/or rewards to stabilize training
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
         norm_reward=False,
         norm_obs=True,
         clip_obs=5.0,
-        clip_reward=10.0,
+        # clip_reward=10.0,
     )
 
     return vec
 
 
-def unwrap_vecnormalize(env):
+def unwrap_vec_normalize(env):
     while env is not None:
         if isinstance(env, VecNormalize):
             return env
@@ -97,9 +106,10 @@ def unwrap_vecnormalize(env):
     return None
 
 
-# ---- TRAINING LOOP ----
+# ---- SAC TRAINING ----
 def train(device: str = "auto"):
-    os.makedirs(MODEL_DIR, exist_ok=True)
+    """ Train the SAC model while looping through all curriculum stages."""
+    os.makedirs(MODELS_DIR, exist_ok=True)
 
     if device == "auto":
         device_ = "cuda" if torch.cuda.is_available() else "cpu"
@@ -108,14 +118,23 @@ def train(device: str = "auto"):
     print(f"Device: {device_}")
 
     curr = Curriculum().stages
-    total_planned = int(sum(int(s[3]) for s in curr))
+    total_planned_stages = int(sum(int(s[4]) for s in curr))
 
     # --- build stage-0 env ---
-    ws0, ad0, ob0, _ = curr[0]
-    print(f"\n=== Stage 0 | world={ws0} active={ad0}/{DEFAULT_NUM_DRONES} obs={ob0} ===")
-    train_env = create_env(DEFAULT_NUM_DRONES, ad0, ob0, ws0)
+    ws0, nd0, ns0, ndyn0, steps0 = curr[0]
+    print(
+        f"\n=== Stage 0 | world={ws0} drones={nd0} "
+        f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
+    )
+    train_env = create_env(
+        world_scale=ws0,
+        num_drones=nd0,
+        num_static_obstacles=ns0,
+        num_dynamic_obstacles=ndyn0,
+        max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS?
+    )
 
-
+    # --- create model ---
     model = SAC(
         "MlpPolicy",
         train_env,
@@ -127,52 +146,121 @@ def train(device: str = "auto"):
         gradient_steps=GRADIENT_STEPS,
         gamma=GAMMA,
         ent_coef=ENTROPY_COEF,
-        tensorboard_log=f"{MODEL_DIR}/tb_logs",
+        tensorboard_log=f"{MODELS_DIR}/tb_logs",
         verbose=1,
         device=device_,
     )
 
+    # --- train stage 0 first ---
+    ckpt_dir = get_next_checkpoint_dir(
+        num_drones=nd0,
+        num_static_obs=ns0,
+        num_dynamic_obs=ndyn0,
+    )
+    ckpt_cb = CheckpointCallback(
+        save_freq=max(1, 20_000 // max(1, N_ENVS)),
+        save_path=f"{MODELS_DIR}/{ckpt_dir}",
+        name_prefix="sac_",
+    )
+
+    stage_info = CurriculumStageInfo(
+        stage_idx=0,
+        world_scale=float(ws0),
+        num_drones=int(nd0),
+        num_static_obstacles=int(ns0),
+        num_dynamic_obstacles=int(ndyn0),
+        stage_timesteps=int(steps0),
+        total_planned_timesteps=total_planned_stages,
+    )
+
+    stats_cb = StepStatsCallback(
+        n_drones_fixed=int(nd0),
+        n_envs=N_ENVS,
+        stage_info=stage_info,
+        enable_early_stop=True,
+        reach_threshold=0.85,
+        max_collision_rate=0.05,
+        patience=10,
+        min_timesteps=10_000,
+        verbose=1,
+    )
+    stats_cb.reset(stage_start_ts=model.num_timesteps)
+
+    callbacks = CallbackList([stats_cb, ckpt_cb])
+
+    model.learn(
+        total_timesteps=int(steps0),
+        reset_num_timesteps=False,
+        callback=callbacks,
+    )
+
+    path = get_next_model_path(
+        num_drones=nd0,
+        num_static_obs=ns0,
+        num_dynamic_obs=ndyn0,
+    )
+    model.save(path)
+    print(f"[SAVED] {path}")
+
+    vn = unwrap_vec_normalize(model.get_env())
+    if vn is not None:
+        norm_path = path.replace(".zip", "_vec_normalize.pkl")
+        vn.save(norm_path)
+        print(f"[SAVED VEC NORMALIZE] {norm_path}")
+
     # --- curriculum stages ---
-    for idx, (world_scale, active_drones, n_obs, stage_steps) in enumerate(curr):
+    for idx, (world_scale, num_drones, num_static_obs, num_dynamic_obs, stage_steps) in enumerate(curr[1:], start=1):
         stage_steps = int(stage_steps)
 
         print(
             f"\n=== Stage {idx} | world={world_scale} "
-            f"active={active_drones}/{DEFAULT_NUM_DRONES} "
-            f"obs={n_obs} steps={stage_steps} ==="
+            f"drones={num_drones} static={num_static_obs} "
+            f"dynamic={num_dynamic_obs} steps={stage_steps} ==="
         )
 
         # swap env
         old_env = model.get_env()
-        new_env = create_env(DEFAULT_NUM_DRONES, active_drones, n_obs, world_scale)
+        new_env = create_env(
+            world_scale=world_scale,
+            num_drones=num_drones,
+            num_static_obstacles=num_static_obs,
+            num_dynamic_obstacles=num_dynamic_obs,
+            max_episode_steps=stage_steps,
+        )
+        old_vn = unwrap_vec_normalize(old_env)
+        new_vn = unwrap_vec_normalize(new_env)
 
-        old_vn = unwrap_vecnormalize(old_env)
-        new_vn = unwrap_vecnormalize(new_env)
-
+        # carry normalization statistics across curriculum stages
         if old_vn is not None and new_vn is not None:
             new_vn.obs_rms = old_vn.obs_rms
             new_vn.ret_rms = old_vn.ret_rms
 
         model.set_env(new_env)
 
-        # callbacks
-        ckpt_dir = get_next_checkpoint_dir(n_drones=DEFAULT_NUM_DRONES, n_obs=n_obs)
+        # --- Callbacks ---
+        ckpt_dir = get_next_checkpoint_dir(
+            num_drones=num_drones,
+            num_static_obs=num_static_obs,
+            num_dynamic_obs=num_dynamic_obs,
+        )
         ckpt_cb = CheckpointCallback(
             save_freq=max(1, 20_000 // max(1, N_ENVS)),
-            save_path=f"{MODEL_DIR}/{ckpt_dir}",
+            save_path=f"{MODELS_DIR}/{ckpt_dir}",
             name_prefix="sac_",
         )
 
         stage_info = CurriculumStageInfo(
             stage_idx=idx,
             world_scale=float(world_scale),
-            active_drones=int(active_drones),
-            num_obstacles=int(n_obs),
+            num_drones=int(num_drones),
+            num_static_obstacles=int(num_static_obs),
+            num_dynamic_obstacles=int(num_dynamic_obs),
             stage_timesteps=stage_steps,
-            total_planned_timesteps=total_planned,
+            total_planned_timesteps=total_planned_stages,
         )
+
         stats_cb = StepStatsCallback(
-            n_drones_fixed=DEFAULT_NUM_DRONES,
+            n_drones_fixed=int(num_drones),
             n_envs=N_ENVS,
             stage_info=stage_info,
             enable_early_stop=True,
@@ -182,21 +270,28 @@ def train(device: str = "auto"):
             min_timesteps=10_000,
             verbose=1,
         )
+
         stats_cb.reset(stage_start_ts=model.num_timesteps)
 
         callbacks = CallbackList([stats_cb, ckpt_cb])
 
-        # train
         model.learn(
             total_timesteps=stage_steps,
             reset_num_timesteps=False,
             callback=callbacks,
         )
 
-        # save
-        path = get_next_model_path(drones=DEFAULT_NUM_DRONES, obs=n_obs)
+        # save the model up until now
+        path = get_next_model_path(num_drones = num_drones, num_static_obs = num_static_obs, num_dynamic_obs = num_dynamic_obs)
         model.save(path)
         print(f"[SAVED] {path}")
+
+        # save the normalised observation to use during evaluation
+        vn = unwrap_vec_normalize(model.get_env())
+        if vn is not None:
+            norm_path = path.replace(".zip", "_vec_normalize.pkl")
+            vn.save(norm_path)
+            print(f"[SAVED VEC NORMALIZE] {norm_path}")
 
         try:
             train_env.close()
@@ -205,6 +300,13 @@ def train(device: str = "auto"):
         train_env = new_env
 
         old_env.close()
+
+    # save the final normalised values
+    final_vn = unwrap_vec_normalize(model.get_env())
+    if final_vn is not None:
+        final_norm_path = f"{MODELS_DIR}/final_vec_normalize.pkl"
+        final_vn.save(final_norm_path)
+        print(f"[SAVED FINAL VEC_NORMALIZE] {final_norm_path}")
 
     train_env.close()
     print("Training complete.")
