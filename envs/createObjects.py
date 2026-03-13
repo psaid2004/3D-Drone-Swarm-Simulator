@@ -55,6 +55,24 @@ class EnvObject:
                 "visual_kwargs":    lambda s: {"radius": 0.1 * s},
                 "use_orientation": True,
             },
+            "x_pos_wall": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([0.05, s, s])},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([0.05, s, s])},
+                "use_orientation": False
+            },
+            "y_pos_wall": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([s, 0.05, s])},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([s, 0.05, s])},
+                "use_orientation": False
+            },
+            "z_pos_wall": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([s, s, 0.05])},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([s, s, 0.05])},
+                "use_orientation": False
+            }
         }
     
     # kwargs = keyword arguments

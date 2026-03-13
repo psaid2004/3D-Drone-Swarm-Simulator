@@ -10,18 +10,18 @@ from pettingzoo.utils.env import ParallelEnv
 
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from envs.createObjects import Target, EnvObject, Dynamic
-from wrappers.step_logic import (
+from davids_drones.envs.createObjects import Target, EnvObject, Dynamic
+from davids_drones.wrappers.step_logic import (
     freeze_inactive_actions,
     convert_actions_for_simulator,
     compute_step_state,
     compute_terminations,
     build_info_dict,
 )
-from wrappers.rewards import compute_rewards
-from wrappers.stats_trackers import EpisodeStatsTracker
+from davids_drones.wrappers.rewards import compute_rewards
+from davids_drones.wrappers.stats_trackers import EpisodeStatsTracker
 
-from config.defaults import *
+from davids_drones.config.defaults import *
 
 #TODO despawn after reaching target, spawn obstacle between target and drone?
 
@@ -83,7 +83,7 @@ class DroneSwarm3D(ParallelEnv):
         self.total_num_drones = max(
             1,
             self.num_drones_per_swarm * self.num_swarms
-        ) # TODO FUTURE IMPLEMENTATION SHOULD CONSIDER NUM SWARMS - ASSUMPTION OF 1 SWARM HERE
+        ) 
 
         # Spawn position of every drone
         self.spawn_positions = np.empty((0,3))
@@ -133,9 +133,29 @@ class DroneSwarm3D(ParallelEnv):
         self._obstacle_collision_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
         self._drone_collision_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
+        self._wall_ids: List[int] = []
         self._step_count = 0
 
 
+    def _spawn_walls(self) -> None:
+        
+        if self._p is None:
+            return
+        
+        p = self._p
+        s = self.world_scale
+        positions = [
+            ("z_pos_wall",[0, 0, s]),   # ceiling
+            ("z_pos_wall",[0, 0, -s]),  # floor
+            ("x_pos_wall",[s, 0, 0]),   # front
+            ("x_pos_wall",[-s, 0, 0]),  # back
+            ("y_pos_wall",[0, s, 0]),   # right
+            ("y_pos_wall",[0, -s, 0]),  # left
+        ]
+        objects = [(key, EnvObject(pos, s, [0, 0, 0])) for key, pos in positions]
+        self._wall_ids = [obj.create(key, self._call_physics) for key, obj in objects]
+        
+    
     def _init_simulator(self) -> None:
         """ Create drone simulator and PyBullet handles. """
         # list of drone's initial position
@@ -376,8 +396,7 @@ class DroneSwarm3D(ParallelEnv):
         except Exception:
             pass
 
-        # TODO Ask stella about neighbourhood radius
-        self._env = VelocityAviary(
+        self._env = VelocityAviary( 
             drone_model=DroneModel.CF2X,
             num_drones=self.total_num_drones,
             initial_xyzs=self.spawn_positions,
@@ -1257,6 +1276,7 @@ class DroneSwarm3D(ParallelEnv):
 
         # refresh episode content
         self._spawn_obstacles()
+        self._spawn_walls()
         self._targets = self._make_targets()
 
         obs0 = self._build_obs_dict()
@@ -1327,6 +1347,13 @@ class DroneSwarm3D(ParallelEnv):
 
         self._obstacles = []
 
+    def _remove_walls(self) -> None:
+        for body_id in self._wall_ids:
+            try:
+                self._call_physics(self._p.removeBody, body_id)
+            except Exception:
+                pass
+        self._wall_ids = []
 
     def remove_targets(self) -> None:
         """Helper for removing targets from current episode environment."""
