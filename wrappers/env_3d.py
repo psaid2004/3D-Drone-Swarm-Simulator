@@ -23,7 +23,6 @@ from wrappers.stats_trackers import EpisodeStatsTracker
 
 from config.defaults import *
 
-#TODO despawn after reaching target, spawn obstacle between target and drone?
 
 class DroneSwarm3D(ParallelEnv):
 
@@ -376,7 +375,6 @@ class DroneSwarm3D(ParallelEnv):
         except Exception:
             pass
 
-        # TODO Ask stella about neighbourhood radius
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
             num_drones=self.total_num_drones,
@@ -876,7 +874,7 @@ class DroneSwarm3D(ParallelEnv):
 
         if self._p is None or len(self._obstacles) == 0:
             # if there are no obstacles, set the distance really far away
-            return np.array([LIDAR_RANGE * 2.0, 0.0, 0.0], dtype=np.float32) # TODO PEDRO I KEPT THIS ONE SINCE IF ITS ZERO ITS A COLLISION
+            return np.array([LIDAR_RANGE * 2.0, 0.0, 0.0], dtype=np.float32)
 
         p = self._p
         obs_pos = []
