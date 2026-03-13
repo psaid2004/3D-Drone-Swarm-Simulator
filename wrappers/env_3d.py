@@ -23,7 +23,6 @@ from wrappers.stats_trackers import EpisodeStatsTracker
 
 from config.defaults import *
 
-#TODO despawn after reaching target, spawn obstacle between target and drone?
 
 class DroneSwarm3D(ParallelEnv):
 
@@ -141,13 +140,10 @@ class DroneSwarm3D(ParallelEnv):
         # list of drone's initial position
 
         for i in range(self.num_swarms):
-            center, drones = self.generate_drone_swarm_spawn()
-            self.drones_in_swarm[i] = {"center": center, "drones":drones}
-            print("Spawn positions", self.spawn_positions)
-            print("drones", drones)
+            edge, center, drones = self.generate_drone_swarm_spawn()
+            self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones":drones}
 
             self.spawn_positions = np.vstack([self.spawn_positions, drones])
-            print("Spawn positions", self.spawn_positions)
 
         # --- Pybullet env ---
         self._env = VelocityAviary(
@@ -401,36 +397,11 @@ class DroneSwarm3D(ParallelEnv):
 
     def generate_drone_swarm_spawn(self):
         max_attempts = 1000
+        edge = 0
 
         for i in range(max_attempts):
             edge = self.rng.integers(0, 4)
-
-            if edge == 0:  # +X edge
-                center = [self.world_scale - SWARM_EDGE_MARGIN,
-                    self.rng.uniform(-self.world_scale + SWARM_EDGE_MARGIN, self.world_scale -SWARM_EDGE_MARGIN),
-                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-                ]
-
-            elif edge == 1:  # -X edge
-                center = [
-                    -self.world_scale + SWARM_EDGE_MARGIN,
-                    self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
-                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-                ]
-
-            elif edge == 2:  # +Y edge
-                center = [
-                    self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
-                    self.world_scale - SWARM_EDGE_MARGIN,
-                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-                ]
-
-            else:  # -Y edge
-                center = [
-                    self.rng.uniform(-self.world_scale+SWARM_EDGE_MARGIN, self.world_scale-SWARM_EDGE_MARGIN),
-                    -self.world_scale + SWARM_EDGE_MARGIN,
-                    self.rng.uniform(SWARM_EDGE_MARGIN, self.world_scale - SWARM_EDGE_MARGIN)
-                ]
+            center = self.generate_swarm_center_xyz(edge, SWARM_EDGE_MARGIN)
 
 
             if self.is_far_from_other_swarms(center):
@@ -457,16 +428,60 @@ class DroneSwarm3D(ParallelEnv):
             if valid:
                 positions.append(candidate)
 
-        return center, np.array(positions, dtype=np.float32)
+        return edge, center, np.array(positions, dtype=np.float32)
+
+    def generate_edge_xyz(self, edge, margin):
+        """Generate a random position on a given world edge."""
+
+        if edge == 0:  # +X edge
+            pos = [
+                self.world_scale - margin,
+                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
+                self.rng.uniform(margin, self.world_scale - margin)
+            ]
+
+        elif edge == 1:  # -X edge
+            pos = [
+                -self.world_scale + margin,
+                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
+                self.rng.uniform(margin, self.world_scale - margin)
+            ]
+
+        elif edge == 2:  # +Y edge
+            pos = [
+                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
+                self.world_scale - margin,
+                self.rng.uniform(margin, self.world_scale - margin)
+            ]
+
+        else:  # -Y edge
+            pos = [
+                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
+                -self.world_scale + margin,
+                self.rng.uniform(margin, self.world_scale - margin)
+            ]
+
+        return np.array(pos, dtype=np.float32)
 
 
-    def make_valid_target(self, color, min_dist = 0.5, max_attempts = 1000) -> Target:
+    # Generates the swarm center
+    def generate_swarm_center_xyz(self, edge, margin):
+        return self.generate_edge_xyz(edge, margin)
+
+    # Generate the spawn position of target, opposite to the swarms center
+    def generate_target_xyz(self, edge, margin):
+        opposite_edge = {0: 1, 1: 0, 2: 3, 3: 2}[edge]
+        return self.generate_edge_xyz(opposite_edge, margin)
+
+
+
+    def make_valid_target(self,swarm_edge, color, min_dist = 0.5, max_attempts = 1000) -> Target:
         """
         Make a valid target for all drones, i.e. a target that does not collide with the drone itself, other obstacles
         or other drones.
         """
         for _ in range(max_attempts):
-            t = self.generate_xyz()
+            t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
 
             drone_positions = self.spawn_positions
             possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
@@ -485,7 +500,6 @@ class DroneSwarm3D(ParallelEnv):
         """ Make a target for all drones."""
         targets = []
 
-
         if self.num_swarms == 1:
             t = self.make_valid_target(COLORS[0])
             # repeat shared target for all drones
@@ -493,7 +507,12 @@ class DroneSwarm3D(ParallelEnv):
             return targets
         else:
             for i in range(self.num_swarms):
-                t = self.make_valid_target(COLORS[i])
+                swarm_centroid = self.drones_in_swarm[i]["center"]
+                swarm_edge = self.drones_in_swarm[i]["edge"]
+
+
+
+                t = self.make_valid_target(swarm_edge,COLORS[i])
 
                 # List that contain the target per drone
                 drone_targets = [t] * self.num_drones_per_swarm
@@ -752,6 +771,7 @@ class DroneSwarm3D(ParallelEnv):
         # if drone does not yet have target, create one
         if self._targets is None:
             self._targets = self._make_targets()
+
 
         # compute drone positions and swarm centre
         positions = self.active_drone_positions()
@@ -1237,7 +1257,7 @@ class DroneSwarm3D(ParallelEnv):
         self._refresh_drone_ids_from_pybullet()
         self.restore_drone_visuals_and_collisions()
 
-        center, self.spawn_positions = self.generate_drone_swarm_spawn()
+        edge, center, self.spawn_positions = self.generate_drone_swarm_spawn()
         self.set_drone_spawn_positions_in_aviary(self.spawn_positions)
 
         # reset episode bookkeeping
@@ -1258,6 +1278,7 @@ class DroneSwarm3D(ParallelEnv):
         # refresh episode content
         self._spawn_obstacles()
         self._targets = self._make_targets()
+
 
         obs0 = self._build_obs_dict()
 
@@ -1285,7 +1306,6 @@ class DroneSwarm3D(ParallelEnv):
 
         p = self._p
         default_orientation = [0.0, 0.0, 0.0, 1.0]
-        print("spawn points:", spawn_positions)
 
         for i, body_id in enumerate(self._drone_ids[:len(spawn_positions)]):
 
