@@ -44,7 +44,7 @@ DEFAULT_SWARM_MIN_SEP = 0.25 # TODO PEDRO THERE IS A SWARM_MIN_SEPARATION ABOVE 
 # =============================================================================
 # Obstacles
 # =============================================================================
-MIN_SPAWN_DIST_FROM_DRONE = 0.75
+MIN_SPAWN_DIST_FROM_DRONE = 0.8
 SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 
 # =============================================================================

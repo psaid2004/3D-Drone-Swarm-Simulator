@@ -10,18 +10,18 @@ from pettingzoo.utils.env import ParallelEnv
 
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from davids_drones.envs.createObjects import Target, EnvObject, Dynamic
-from davids_drones.wrappers.step_logic import (
+from envs.createObjects import Target, EnvObject, Dynamic
+from wrappers.step_logic import (
     freeze_inactive_actions,
     convert_actions_for_simulator,
     compute_step_state,
     compute_terminations,
     build_info_dict,
 )
-from davids_drones.wrappers.rewards import compute_rewards
-from davids_drones.wrappers.stats_trackers import EpisodeStatsTracker
+from wrappers.rewards import compute_rewards
+from wrappers.stats_trackers import EpisodeStatsTracker
 
-from davids_drones.config.defaults import *
+from config.defaults import *
 
 
 class DroneSwarm3D(ParallelEnv):
@@ -512,8 +512,9 @@ class DroneSwarm3D(ParallelEnv):
 
         backup = self.generate_xyz()
 
-        return Target(backup, GOAL_RADIUS, physics_call = self._call_physics, call_gui = self._call_gui)
-
+        return Target(color, backup, GOAL_RADIUS,
+                      physics_call=self._call_physics,
+                      call_gui=self._call_gui)
 
     def _make_targets(self) -> list[Target]:
         """ Make a target for all drones."""
@@ -530,8 +531,6 @@ class DroneSwarm3D(ParallelEnv):
                 swarm_centroid = self.drones_in_swarm[i]["center"]
                 swarm_edge = self.drones_in_swarm[i]["edge"]
 
-
-
                 t = self.make_valid_target(swarm_edge,COLORS[i])
 
                 # List that contain the target per drone
@@ -540,80 +539,104 @@ class DroneSwarm3D(ParallelEnv):
 
             return targets
 
-        return targets
-
-
-    def _spawn_obstacles(self) -> None:
+    def _spawn_obstacles(self):
         """ Spawn the obstacles. """
-
-        rng = np.random.default_rng()
 
         self._obstacles = []
 
+        # -----------------If you want blocking obstacles uncomment the line below ------------------------------------------------
+        # self._spawn_blocking_obstacles()
+
         if self.num_static_obstacles + self.num_dynamic_obstacles <= 0 or self._p is None:
             return
-        rng = self.rng
 
         # A max number of attempts for creating an obstacle
         max_attempts = 10000
+
         for _ in range(self.num_static_obstacles):
-            shape = rng.choice(SUPPORTED_SHAPES)
+            shape = self.rng.choice(SUPPORTED_SHAPES)
+            self._spawn_static_obstacles(max_attempts, shape)
+
+        for _ in range(self.num_dynamic_obstacles):
+            axis = self.rng.choice([0, 1, 2])
+            shape = self.rng.choice(SUPPORTED_SHAPES)
+            self._spawn_dynamic_obstacles(max_attempts, shape, axis)
+
+    def _spawn_static_obstacles(self, max_attempts, shape) -> None:
+        """ Spawn the obstacles. """
+
+        for _ in range(max_attempts):
+            candidate = self.generate_xyz()
+            ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi))]
+            size = float(self.rng.uniform(0.8, 1.2))
+
+            obj = EnvObject(candidate, size, ori)
+            body = obj.create(shape, physics_call=self._call_physics)
+
+            # Check if the obstacle is overlapping with any other obstacle or too close to drones or target
+            if (self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE)):
+                self._call_physics(self._p.removeBody, body)
+                continue
+
+            self._obstacles.append(obj)
+            break
+
+
+    def _spawn_dynamic_obstacles(self, max_attempts, shape, axis) -> None:
+        """ Spawn the dynamic obstacles. """
+        for _ in range(max_attempts):
+
+            candidate = self.generate_xyz()
+
+            displacement = self.rng.uniform(1, 3)
+            min_pos = candidate[axis] - displacement
+            max_pos = candidate[axis] + displacement
+
+            # Check if obstacle is going beyond world borders, if so generate another obstacle
+            if self.out_of_bounds(max_pos, min_pos, axis):
+                continue
+
+            # Generate other attributes with some variability
+            ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi))]
+            size = float(self.rng.uniform(0.8, 1.2))
+            speed = self.rng.uniform(0.8, 1.2)
+            direction = self.rng.choice([-1,1])
+
+            obj = Dynamic(axis,min_pos,max_pos,speed,direction,candidate, size, ori)
+            body = obj.create(shape, physics_call= self._call_physics)
+
+            # Check if the obstacle is overlapping with any other obstacle and is far enough from targets and drones
+            if (self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE)):
+                self._call_physics(self._p.removeBody, body)
+                continue
+            self._obstacles.append(obj)
+            break
+
+
+    def _spawn_blocking_obstacles(self) -> None:
+        # A max number of attempts for creating an obstacle
+        max_attempts = 10000
+
+        for swarm_num, swarm_info in self.drones_in_swarm.items():
+            shape = self.rng.choice(SUPPORTED_SHAPES)
+            swarm_center = swarm_info["center"]
+            target_pos = self._targets[swarm_num * self.num_drones_per_swarm].start_pos
 
             for _ in range(max_attempts):
-
-                candidate = self.generate_xyz()
-
-                # Check that it is far away from drones
-                if not self.is_far_from_drones(candidate, MIN_SPAWN_DIST_FROM_DRONE):
-                    continue
-
-                ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
-                size = float(rng.uniform(0.8, 1.2))
+                candidate = self.generate_blocking_xyz(swarm_center, target_pos)
+                ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)),
+                       float(self.rng.uniform(-np.pi, np.pi))]
+                size = float(self.rng.uniform(1.2, 1.5))
 
                 obj = EnvObject(candidate, size, ori)
                 body = obj.create(shape, physics_call=self._call_physics)
 
-                # Check if the obstacle is overlapping with any other obstacle
-                if (self.obstacle_overlap(obj)):
+                # Check if the obstacle is overlapping with any other obstacle or too close to drones or target
+                if (self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets,
+                                                                       MIN_SPAWN_DIST_FROM_DRONE)):
                     self._call_physics(self._p.removeBody, body)
                     continue
 
-                self._obstacles.append(obj)
-                break
-
-        for _ in range(self.num_dynamic_obstacles):
-            axis = rng.choice([0, 1, 2])
-            shape = rng.choice(SUPPORTED_SHAPES)
-
-            for _ in range(max_attempts):
-
-                candidate = self.generate_xyz()
-
-                # Check if obstacle is far enough from drones, to prevent spawn killing
-                if not self.is_far_from_drones(candidate, MIN_SPAWN_DIST_FROM_DRONE):
-                    continue
-
-                displacement = rng.uniform(1, 3)
-                min_pos = candidate[axis] - displacement
-                max_pos = candidate[axis] + displacement
-
-                # Check if obstacle is going beyond world borders, if so generate another obstacle
-                if self.out_of_bounds(max_pos, min_pos, axis):
-                    continue
-
-                # Generate other attributes with some variability
-                ori = [float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi)), float(rng.uniform(-np.pi, np.pi))]
-                size = float(rng.uniform(0.8, 1.2))
-                speed = self.rng.uniform(0.8, 1.2)
-                direction = self.rng.choice([-1,1])
-
-                obj = Dynamic(axis,min_pos,max_pos,speed,direction,candidate, size, ori)
-                body = obj.create(shape, physics_call= self._call_physics)
-
-                # Check if the obstacle is overlapping with any other obstacle
-                if (self.obstacle_overlap(obj)):
-                    self._call_physics(self._p.removeBody, body)
-                    continue
                 self._obstacles.append(obj)
                 break
 
@@ -677,6 +700,32 @@ class DroneSwarm3D(ParallelEnv):
 
         return np.array([x,y,z], dtype=np.float32)
 
+    # Creates an obstacles that blocks the straight line from a center to the target
+    def generate_blocking_xyz(self, swarm_center: np.ndarray, target_pos: np.ndarray,
+                              margin: float = 0.1) -> np.ndarray:
+        # Vector from swarm to target
+        line_vec = target_pos - swarm_center
+
+        # Pick a random fraction along the line (0=start, 1=end)
+        t = self.rng.uniform(0.2, 0.8)  # avoid spawning exactly on swarm or target
+        point_on_line = swarm_center + t * line_vec
+
+        # Optional: add a small random perpendicular offset so obstacle is not exactly on line
+        # Generate a random vector
+        random_offset = self.rng.uniform(-margin, margin, size=3)
+
+        # Project offset perpendicular to the line
+        line_dir = line_vec / (np.linalg.norm(line_vec) + 1e-8)  # avoid division by zero
+        perp_offset = random_offset - np.dot(random_offset, line_dir) * line_dir
+
+        # Final candidate position
+        candidate = point_on_line + perp_offset
+
+        # Clip to world bounds if needed
+        candidate = np.clip(candidate, [-self.world_scale, -self.world_scale, 0],
+                            [self.world_scale, self.world_scale, self.world_scale])
+
+        return candidate.astype(np.float32)
 
     def is_far_from_other_swarms(self, candidate_center):
         if not self.drones_in_swarm:
@@ -689,15 +738,6 @@ class DroneSwarm3D(ParallelEnv):
                     return False
         return True
 
-    def is_far_from_drones(self, point: np.ndarray, min_dist:float) -> bool:
-        """ Helper function to determine if potential obstacle spawn positions is far from the drone spawn positions."""
-        if self.spawn_positions is None:
-            return True
-
-        d = np.linalg.norm(np.array(self.spawn_positions) - point, axis=1)
-
-
-        return np.all(d >= min_dist)
 
 
     def despawn_drone_in_gui(self, drone_idx: int) -> None:
@@ -1277,7 +1317,13 @@ class DroneSwarm3D(ParallelEnv):
         self._refresh_drone_ids_from_pybullet()
         self.restore_drone_visuals_and_collisions()
 
-        edge, center, self.spawn_positions = self.generate_drone_swarm_spawn()
+        # If you want to change the spwan positions with reset uncomment below (might not be working fully)
+        # for i in range(self.num_swarms):
+        #     edge, center, drones = self.generate_drone_swarm_spawn()
+        #     self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
+        #
+        #     self.spawn_positions = np.vstack([self.spawn_positions, drones])
+
         self.set_drone_spawn_positions_in_aviary(self.spawn_positions)
 
         # reset episode bookkeeping
@@ -1296,9 +1342,9 @@ class DroneSwarm3D(ParallelEnv):
         self._drone_collision_once[:] = False
 
         # refresh episode content
+        self._targets = self._make_targets()
         self._spawn_obstacles()
         self._spawn_walls()
-        self._targets = self._make_targets()
 
 
         obs0 = self._build_obs_dict()

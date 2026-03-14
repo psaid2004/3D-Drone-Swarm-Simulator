@@ -113,6 +113,25 @@ class EnvObject:
         else:
             return False
 
+    # Check if obstacle is too close to drones or the targets
+    def isValidPosition(self, dronePositions, targets, min_dist):
+        if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
+            return False
+
+        targets_pos = []
+        for target in targets:
+            try:
+                targets_pos.append(target.start_pos)
+            except Exception:
+                pass
+
+        targets_pos = np.array(targets_pos, dtype=np.float32)
+        if len(targets_pos) > 0:
+            if np.any(np.linalg.norm(targets_pos - self.start_pos, axis=-1) < min_dist):
+                return False
+
+        return True
+
 
 
 class Dynamic(EnvObject):
@@ -164,21 +183,23 @@ class Target():
         self.call_gui = call_gui
         self.color = color
 
-    def isValidPosition(self, dronePositions, obstacles, min_dist):
+    # Check if the target is too close to drones and other targets
+    def isValidPosition(self, dronePositions, targets, min_dist):
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
             return False
 
-        obs_pos = []
-        for object in obstacles:
+        target_pos = []
+        for target in targets:
             try:
-                pos, _ = self.physics_call(p.getBasePositionAndOrientation, object.body_id)
-                obs_pos.append(pos)
+                if not np.allclose(target.start_pos, self.start_pos):
+                    target_pos.append(target.start_pos)
             except Exception:
                 pass
 
-        obs_pos = np.array(obs_pos, dtype=np.float32)
-        if len(obs_pos) > 0:
-            if np.any(np.linalg.norm(obs_pos - self.start_pos, axis=-1) < min_dist):
+        target_pos = np.array(target_pos, dtype=np.float32)
+        if len(target_pos) > 0:
+            target_pos = np.array(target_pos, dtype=np.float32).reshape(-1, 3)
+            if np.any(np.linalg.norm(target_pos - self.start_pos, axis=-1) < min_dist):
                 return False
 
         return True
