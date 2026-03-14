@@ -152,7 +152,7 @@ class DroneSwarm3D(ParallelEnv):
             ("y_pos_wall",[0, -s, 0]),  # left
         ]
         objects = [(key, EnvObject(pos, s, [0, 0, 0])) for key, pos in positions]
-        self._wall_ids = [obj.create(key, self._call_physics) for key, obj in objects]
+        self._wall_ids = [obj.create(key, self._call_physics, color=(0.5, 0.5, 0.5, 1.0)) for key, obj in objects]
         
     
     def _init_simulator(self) -> None:
@@ -520,7 +520,8 @@ class DroneSwarm3D(ParallelEnv):
         targets = []
 
         if self.num_swarms == 1:
-            t = self.make_valid_target(COLORS[0])
+            swarm_edge = self.drones_in_swarm[0]["edge"]
+            t = self.make_valid_target(swarm_edge,COLORS[0])
             # repeat shared target for all drones
             targets = [t] * self.total_num_drones
             return targets
