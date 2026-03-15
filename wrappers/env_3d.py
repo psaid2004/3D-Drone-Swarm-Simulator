@@ -10,18 +10,18 @@ from pettingzoo.utils.env import ParallelEnv
 
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from envs.createObjects import Target, EnvObject, Dynamic
-from wrappers.step_logic import (
+from davids_drones.envs.createObjects import Target, EnvObject, Dynamic
+from davids_drones.wrappers.step_logic import (
     freeze_inactive_actions,
     convert_actions_for_simulator,
     compute_step_state,
     compute_terminations,
     build_info_dict,
 )
-from wrappers.rewards import compute_rewards
-from wrappers.stats_trackers import EpisodeStatsTracker
+from davids_drones.wrappers.rewards import compute_rewards
+from davids_drones.wrappers.stats_trackers import EpisodeStatsTracker
 
-from config.defaults import *
+from davids_drones.config.defaults import *
 
 
 class DroneSwarm3D(ParallelEnv):
@@ -543,7 +543,6 @@ class DroneSwarm3D(ParallelEnv):
         """ Spawn the obstacles. """
 
         self._obstacles = []
-
         # -----------------If you want blocking obstacles uncomment the line below ------------------------------------------------
         # self._spawn_blocking_obstacles()
 
@@ -553,15 +552,15 @@ class DroneSwarm3D(ParallelEnv):
         # A max number of attempts for creating an obstacle
         max_attempts = 10000
 
-        for _ in range(self.num_static_obstacles):
-            shape = self.rng.choice(SUPPORTED_SHAPES)
-            self._spawn_static_obstacles(max_attempts, shape)
-
         for _ in range(self.num_dynamic_obstacles):
             axis = self.rng.choice([0, 1, 2])
             shape = self.rng.choice(SUPPORTED_SHAPES)
             self._spawn_dynamic_obstacles(max_attempts, shape, axis)
 
+        for _ in range(self.num_static_obstacles):
+            shape = self.rng.choice(SUPPORTED_SHAPES)
+            self._spawn_static_obstacles(max_attempts, shape)
+        
     def _spawn_static_obstacles(self, max_attempts, shape) -> None:
         """ Spawn the obstacles. """
 
@@ -571,6 +570,8 @@ class DroneSwarm3D(ParallelEnv):
             size = float(self.rng.uniform(0.8, 1.2))
 
             obj = EnvObject(candidate, size, ori)
+            if(self.in_swept_area(obj)) :
+                continue
             body = obj.create(shape, physics_call=self._call_physics)
 
             # Check if the obstacle is overlapping with any other obstacle or too close to drones or target
@@ -581,7 +582,12 @@ class DroneSwarm3D(ParallelEnv):
             self._obstacles.append(obj)
             break
 
-
+    def in_swept_area(self, object) :
+        for obs in self._obstacles :
+            if isinstance(obs, Dynamic) and object.is_in_swept_area(obs) :
+                print("IT HAPPENED")
+                return True
+        return False
     def _spawn_dynamic_obstacles(self, max_attempts, shape, axis) -> None:
         """ Spawn the dynamic obstacles. """
         for _ in range(max_attempts):

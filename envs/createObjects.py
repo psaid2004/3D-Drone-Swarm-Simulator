@@ -36,24 +36,28 @@ class EnvObject:
                 "collision_kwargs": lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
                 "visual_kwargs":    lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
                 "use_orientation": False,
+                "radius" : 0.2*size
             },
             "wall": {
                 "geom": p.GEOM_BOX,
                 "collision_kwargs": lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
                 "visual_kwargs":    lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
                 "use_orientation": True,
+                "radius" : 0.3 * size
             },
             "sphere": {
                 "geom": p.GEOM_SPHERE,
                 "collision_kwargs": lambda s: {"radius": 0.2 * s},
                 "visual_kwargs":    lambda s: {"radius": 0.2 * s},
                 "use_orientation": False,
+                "radius" : 0.2 * size
             },
             "cylinder": {
                 "geom": p.GEOM_CYLINDER,
                 "collision_kwargs": lambda s: {"radius": 0.1 * s, "height": 0.5 * s},
                 "visual_kwargs":    lambda s: {"radius": 0.1 * s},
                 "use_orientation": True,
+                "radius" : 0.25 * size
             },
             "x_pos_wall": {
                 "geom": p.GEOM_BOX,
@@ -113,6 +117,14 @@ class EnvObject:
         else:
             return False
 
+    def is_in_swept_area(self, object, safety_margin = 0.3):
+        center, half_extents = object.get_swept_area()
+        p = self.start_pos
+        for axis in range(3):
+            if abs(p[axis] - center[axis]) > half_extents[axis] + safety_margin:
+                return False
+        return True
+    
     # Check if obstacle is too close to drones or the targets
     def isValidPosition(self, dronePositions, targets, min_dist):
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
@@ -160,6 +172,13 @@ class Dynamic(EnvObject):
 
         self.physics_call(p.resetBasePositionAndOrientation, self.body_id, pos, orn)
 
+    def get_swept_area(self):
+        center = self.start_pos.copy()
+        center[self.axis] = (self.min + self.max) / 2
+        object_radius = 0.3 * self.size
+        half_extents = [object_radius for _ in range(3)]
+        half_extents[self.axis] = (self.max - self.min) / 2
+        return center, half_extents
 
     # TODO CHANGE SO IT DETECTS IF OVERLAP WILL HAPPEN DURING ITS PATH
     def isOverlapping(self, obstacle):
