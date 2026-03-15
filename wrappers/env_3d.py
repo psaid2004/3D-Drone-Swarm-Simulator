@@ -1318,11 +1318,11 @@ class DroneSwarm3D(ParallelEnv):
         self.restore_drone_visuals_and_collisions()
 
         # If you want to change the spwan positions with reset uncomment below (might not be working fully)
-        # for i in range(self.num_swarms):
-        #     edge, center, drones = self.generate_drone_swarm_spawn()
-        #     self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
-        #
-        #     self.spawn_positions = np.vstack([self.spawn_positions, drones])
+        for i in range(self.num_swarms):
+            edge, center, drones = self.generate_drone_swarm_spawn()
+            self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
+
+            self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
         self.set_drone_spawn_positions_in_aviary(self.spawn_positions)
 
@@ -1364,6 +1364,8 @@ class DroneSwarm3D(ParallelEnv):
         self._clear_debug_visuals()
         self.remove_all_obstacles()
         self.remove_targets()
+        # reset spawn positions
+        self.spawn_positions = np.empty((0, 3))
 
 
     def set_drone_spawn_positions_in_aviary(self, spawn_positions: np.ndarray) -> None:
