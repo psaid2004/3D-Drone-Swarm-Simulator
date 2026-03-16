@@ -202,23 +202,29 @@ class Dynamic(EnvObject):
         else:
             return False
 
-    def position_at_time(self, t):
+    def axis_position_at_time(self, t):
         path_length = self.max - self.min
-        period = 2 * path_length / self.speed # full movement cycle
-        t_in_cycle = t % period
-        if t_in_cycle < period / 2:
-            pos = self.min + self.speed * t_in_cycle # we move forward
+        x0 = float(self.start_pos[self.axis])
+        v = float(self.direction) * float(self.speed) #sigend velocity
+        
+        unfolded = x0 + v * t # motion formula
+        y = (unfolded - self.min) % (2 * path_length)
+        if y <= path_length:
+            return self.min + y
         else:
-            pos = self.max - self.speed * (t_in_cycle - period / 2) # we move backward
-        return pos
+            return self.min + (2 * path_length - y) # bounce backwards
     
-    def full_position_at_step(self, step):
+    def full_position_at_time(self, t):
         pos = self.start_pos.copy()
-        pos[self.axis] = self.position_at_time(step)
+        pos[self.axis] = self.axis_position_at_time(t)
         return pos
     
-    def collides_with_dynamic(self, other) :
-        pass
+    def full_position_at_step(self, step: int, dt: float = 1.0/60.0) -> np.darray:
+        return self.full_position_at_time(step * dt)
+    
+    def get_period(self) -> float:
+        path_length = self.max - self.min
+        return 2.0 * path_length / self.speed
 
 class Target():
     def __init__(self, color, start_pos, radius, physics_call, call_gui):
