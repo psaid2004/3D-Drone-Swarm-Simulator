@@ -30,6 +30,10 @@ class EnvObject:
         self.size = size
         self.start_pos = start_pos
         self.orientation = orientation
+        self.half_extents = None
+        self.radius = None
+        self.height = None
+        self.shape = None
         self.SHAPE_CONFIGS = {
             "box": {
                 "geom": p.GEOM_BOX,
@@ -82,11 +86,16 @@ class EnvObject:
     # kwargs = keyword arguments
     def create(self, shape, physics_call, color=(1, 0, 0, 1)):
         self.physics_call = physics_call
+        self.shape = shape
         conf = self.SHAPE_CONFIGS[shape]
         geom = conf["geom"]
         
         collision_kwargs = conf["collision_kwargs"](self.size)
         visual_kwargs = conf["visual_kwargs"](self.size)
+        
+        self.half_extents = collision_kwargs.get("halfExtents")
+        self.radius = collision_kwargs.get("radius", conf.get("radius"))
+        self.height = collision_kwargs.get("height")
         
         collision = physics_call(p.createCollisionShape,geom, **collision_kwargs)
         visual = physics_call(p.createVisualShape,geom, rgbaColor=color, **visual_kwargs)
@@ -202,6 +211,14 @@ class Dynamic(EnvObject):
         else:
             pos = self.max - self.speed * (t_in_cycle - period / 2) # we move backward
         return pos
+    
+    def full_position_at_step(self, step):
+        pos = self.start_pos.copy()
+        pos[self.axis] = self.position_at_time(step)
+        return pos
+    
+    def collides_with_dynamic(self, other) :
+        pass
 
 class Target():
     def __init__(self, color, start_pos, radius, physics_call, call_gui):
