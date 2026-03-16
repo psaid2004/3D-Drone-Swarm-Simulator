@@ -219,7 +219,7 @@ class Dynamic(EnvObject):
         pos[self.axis] = self.axis_position_at_time(t)
         return pos
     
-    def full_position_at_step(self, step: int, dt: float = 1.0/60.0) -> np.darray:
+    def full_position_at_step(self, step: int, dt: float = 1.0/60.0) -> np.array:
         return self.full_position_at_time(step * dt)
     
     def get_period(self) -> float:
