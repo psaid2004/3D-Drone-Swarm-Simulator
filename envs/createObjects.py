@@ -30,6 +30,10 @@ class EnvObject:
         self.size = size
         self.start_pos = start_pos
         self.orientation = orientation
+        self.half_extents = None
+        self.radius = None
+        self.height = None
+        self.shape = None
         self.SHAPE_CONFIGS = {
             "box": {
                 "geom": p.GEOM_BOX,
@@ -82,11 +86,16 @@ class EnvObject:
     # kwargs = keyword arguments
     def create(self, shape, physics_call, color=(1, 0, 0, 1)):
         self.physics_call = physics_call
+        self.shape = shape
         conf = self.SHAPE_CONFIGS[shape]
         geom = conf["geom"]
         
         collision_kwargs = conf["collision_kwargs"](self.size)
         visual_kwargs = conf["visual_kwargs"](self.size)
+        
+        self.half_extents = collision_kwargs.get("halfExtents")
+        self.radius = collision_kwargs.get("radius", conf.get("radius"))
+        self.height = collision_kwargs.get("height")
         
         collision = physics_call(p.createCollisionShape,geom, **collision_kwargs)
         visual = physics_call(p.createVisualShape,geom, rgbaColor=color, **visual_kwargs)
@@ -193,6 +202,29 @@ class Dynamic(EnvObject):
         else:
             return False
 
+    def axis_position_at_time(self, t):
+        path_length = self.max - self.min
+        x0 = float(self.start_pos[self.axis])
+        v = float(self.direction) * float(self.speed) #sigend velocity
+        
+        unfolded = x0 + v * t # motion formula
+        y = (unfolded - self.min) % (2 * path_length)
+        if y <= path_length:
+            return self.min + y
+        else:
+            return self.min + (2 * path_length - y) # bounce backwards
+    
+    def full_position_at_time(self, t):
+        pos = self.start_pos.copy()
+        pos[self.axis] = self.axis_position_at_time(t)
+        return pos
+    
+    def full_position_at_step(self, step: int, dt: float = 1.0/60.0) -> np.darray:
+        return self.full_position_at_time(step * dt)
+    
+    def get_period(self) -> float:
+        path_length = self.max - self.min
+        return 2.0 * path_length / self.speed
 
 class Target():
     def __init__(self, color, start_pos, radius, physics_call, call_gui):

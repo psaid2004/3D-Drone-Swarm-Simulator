@@ -585,9 +585,9 @@ class DroneSwarm3D(ParallelEnv):
     def in_swept_area(self, object) :
         for obs in self._obstacles :
             if isinstance(obs, Dynamic) and object.is_in_swept_area(obs) :
-                print("IT HAPPENED")
                 return True
         return False
+    
     def _spawn_dynamic_obstacles(self, max_attempts, shape, axis) -> None:
         """ Spawn the dynamic obstacles. """
         for _ in range(max_attempts):
