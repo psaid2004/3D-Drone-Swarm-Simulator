@@ -1,6 +1,9 @@
 import time
 import numpy as np
 from davids_drones.wrappers.env_3d import DroneSwarm3D
+from pathlib import Path
+import json
+from davids_drones.envs.createObjects import EnvObject, Dynamic
 
 
 def safe_unit(v: np.ndarray) -> np.ndarray:
@@ -8,6 +11,75 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
     if norm < 1e-6:
         return np.zeros_like(v)
     return v / norm
+
+# Pre-set folder with configs
+def _configs_dir() -> Path:
+    return Path(__file__).resolve().parents[1] / "interface" / "configs"
+
+# Load object configurations from JSON files
+def _load_object_config(config_name: str) -> list[dict]:
+    path = _configs_dir() / config_name
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, list):
+        raise ValueError(f"Expected a list in {path}, got {type(data).__name__}")
+    return data
+
+# Load different scenarios
+def load_wall_holes_config() -> list[dict]:
+    return _load_object_config("wall_holes.json")
+
+
+def load_two_walls_with_holes_config() -> list[dict]:
+    return _load_object_config("two_walls_with_holes.json")
+
+
+def load_hallway_config() -> list[dict]:
+    return _load_object_config("hallway.json")
+# Load different scenarios
+
+# Apply object configurations to the environment
+def apply_object_config(env: DroneSwarm3D, object_configs: list[dict]) -> None:
+    """Spawn obstacles from JSON config into the environment."""
+    env.remove_all_obstacles()
+    env._obstacles = []
+
+    static_count = 0
+    dynamic_count = 0
+
+    for cfg in object_configs:
+        pos = [float(cfg["x"]), float(cfg["y"]), float(cfg["z"])]
+        ori = [0.0, 0.0, float(cfg.get("yaw", 0.0))]
+        size = max(0.1, float(cfg.get("size", 1.0)))
+        shape = str(cfg.get("shape", "box"))
+
+        if cfg.get("kind") == "dynamic":
+            axis = int(cfg.get("axis", 0))
+            min_pos = float(cfg.get("min", -1.0))
+            max_pos = float(cfg.get("max", 1.0))
+            if min_pos > max_pos:
+                min_pos, max_pos = max_pos, min_pos
+            speed = max(0.0, float(cfg.get("speed", 0.2)))
+            direction = -1 if int(cfg.get("direction", 1)) < 0 else 1
+            obj = Dynamic(axis, min_pos, max_pos, speed, direction, pos, size, ori)
+            dynamic_count += 1
+        else:
+            obj = EnvObject(pos, size, ori)
+            static_count += 1
+
+        obj.create(shape, physics_call=env._call_physics)
+        env._obstacles.append(obj)
+
+    env.num_static_obstacles = static_count
+    env.num_dynamic_obstacles = dynamic_count
+
+
+def get_ml_test_scenarios() -> dict[str, callable]:
+    return {
+        "wall_holes": load_wall_holes_config,
+        "two_walls_with_holes": load_two_walls_with_holes_config,
+        "hallway": load_hallway_config,
+    }
 
 def main():
     # --- create environment ----
@@ -24,7 +96,18 @@ def main():
         lidar=False,
         render_mode="human")
 
+    # --- Uncomment to load scenarios ---
+
+    # scenarios = get_ml_test_scenarios()
+    # selected_scenario = "hallway"
+    # object_configs = scenarios[selected_scenario]()
+
     obs_dict, info = pz_env.reset()
+    
+    # --- Uncomment to apply scenario ---
+    
+    # apply_object_config(pz_env, object_configs)
+
 
     print("Initial observations:")
     for drone, obs in obs_dict.items():
