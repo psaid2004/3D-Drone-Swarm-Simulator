@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Dict
 import numpy as np
 
-from config.defaults import (
+from davids_drones.config.defaults import (
     PROG_COEF,
     TIME_PEN,
     CNTRL_PEN,

@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from wrappers.env_3d import DroneSwarm3D
+from davids_drones.wrappers.env_3d import DroneSwarm3D
 
 
 def safe_unit(v: np.ndarray) -> np.ndarray:

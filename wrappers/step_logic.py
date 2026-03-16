@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import Dict, Tuple
 import numpy as np
 
-from wrappers.step_types import StepState
-from config.defaults import (
+from davids_drones.wrappers.step_types import StepState
+from davids_drones.config.defaults import (
     DEFAULT_SWARM_MAX_SEP,
     DEFAULT_SWARM_MIN_SEP,
     COHESION_PEN,

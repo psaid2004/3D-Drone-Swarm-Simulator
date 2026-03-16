@@ -21,10 +21,10 @@ SWARM_MIN_SEPARATION = 0.15  # Min distance between drones in the swarm
 # =============================================================================
 # Goal
 # =============================================================================
-GOAL_RADIUS = 1 # actual radius of the goal
+GOAL_RADIUS = 0.5 # actual radius of the goal
 #TODO USE THIS FOR SPAWNING TARGETS
-GOAL_EDGE_MARGIN = 3.5  # Minimum distance between the wall and the goal
-GOAL_REACH_DISTANCE = 0.9 # How close drone needs to be around goal to be a successful reach
+GOAL_EDGE_MARGIN = 0.6  # Minimum distance between the wall and the goal
+GOAL_REACH_DISTANCE = 0.4 # How close drone needs to be around goal to be a successful reach
 COLORS =  [
     [0.0, 1.0, 0.0, 0.9],  # green
     [0.0, 0.0, 1.0, 0.9],  # blue
@@ -44,7 +44,7 @@ DEFAULT_SWARM_MIN_SEP = 0.25 # TODO PEDRO THERE IS A SWARM_MIN_SEPARATION ABOVE 
 # =============================================================================
 # Obstacles
 # =============================================================================
-MIN_SPAWN_DIST_FROM_DRONE = 0.75
+MIN_SPAWN_DIST_FROM_DRONE = 0.8
 SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 
 # =============================================================================
