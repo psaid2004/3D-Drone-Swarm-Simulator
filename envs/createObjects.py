@@ -193,6 +193,15 @@ class Dynamic(EnvObject):
         else:
             return False
 
+    def position_at_time(self, t):
+        path_length = self.max - self.min
+        period = 2 * path_length / self.speed # full movement cycle
+        t_in_cycle = t % period
+        if t_in_cycle < period / 2:
+            pos = self.min + self.speed * t_in_cycle # we move forward
+        else:
+            pos = self.max - self.speed * (t_in_cycle - period / 2) # we move backward
+        return pos
 
 class Target():
     def __init__(self, color, start_pos, radius, physics_call, call_gui):
