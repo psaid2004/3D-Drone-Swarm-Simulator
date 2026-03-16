@@ -1,6 +1,8 @@
 import queue
 import threading
 import importlib
+import json
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 import sys
@@ -11,6 +13,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from interface.environment_viewer import EnvironmentViewer
 from interface.qt_terminal import DualTerminal
+
+
+#TODO: Allow experimental settings (dynamic world size, other untested settings)
+#TODO: Save terminal logs
+#TODO: More intuitive variable names
+#TODO: Save simulation state and allow rewinding and replaying
+#TODO: Play/Replay simulation - use renger mode "none" to run headless and capture frames, then play them back at variable speed with a slider
 
 
 # Load Qt bindings and assign classes to variables
@@ -37,6 +46,7 @@ QGroupBox = _QT_WIDGETS.QGroupBox
 QSpinBox = _QT_WIDGETS.QSpinBox
 QCheckBox = _QT_WIDGETS.QCheckBox
 QStackedWidget = _QT_WIDGETS.QStackedWidget
+QFileDialog = _QT_WIDGETS.QFileDialog
 
 # Constants for object configuration
 SHAPES = ("box", "wall", "sphere", "cylinder")
@@ -55,6 +65,7 @@ class LandingPage(QWidget):
         layout = QVBoxLayout()
         #layout.setAlignment(Qt.AlignCenter)
         
+        
         # Title
         title = QLabel("Drone Swarm Simulator")
         title.setStyleSheet("font-size: 32px; font-weight: bold; margin-bottom: 30px;")
@@ -65,7 +76,7 @@ class LandingPage(QWidget):
         subtitle.setStyleSheet("font-size: 16px; color: gray; margin-bottom: 50px;")
         #subtitle.setAlignment(Qt.AlignCenter)
         
-        # Configuration panel
+        ################## Settings panel ##################
         config_frame = QFrame()
         config_frame.setFrameShape(QFrame.Shape.Box)
         config_frame.setMaximumWidth(500)
@@ -118,9 +129,28 @@ class LandingPage(QWidget):
         # Lidar option
         self.lidar_checkbox = QCheckBox("Enable Lidar")
         config_layout.addWidget(self.lidar_checkbox)
-        
+
         config_layout.addStretch()
-        
+
+        ################ Experimental settings panel ################
+        experimental_frame = QFrame()
+        experimental_frame.setFrameShape(QFrame.Shape.Box)
+        experimental_frame.setMaximumWidth(500)
+        experimental_layout = QVBoxLayout(experimental_frame)
+        experimental_title = QLabel("Experimental Settings")
+        experimental_title.setStyleSheet("font-weight: bold; font-size: 18px; margin-bottom: 10px;")  
+        experimental_layout.addWidget(experimental_title)
+
+        # World scale
+        world_layout = QHBoxLayout()
+        world_layout.addWidget(QLabel("World Scale:"))
+        self.world_scale_spinbox = QSpinBox()
+        self.world_scale_spinbox.setRange(1, 100)
+        self.world_scale_spinbox.setValue(10)
+        world_layout.addWidget(self.world_scale_spinbox)
+        world_layout.addStretch()
+        experimental_layout.addLayout(world_layout)
+
         self.start_btn = QPushButton("Launch Simulation")
         self.start_btn.setStyleSheet("""
             QPushButton {
@@ -139,7 +169,10 @@ class LandingPage(QWidget):
         
         layout.addWidget(title)
         layout.addWidget(subtitle)
-        layout.addWidget(config_frame)
+        settings_row = QHBoxLayout()
+        settings_row.addWidget(config_frame)
+        settings_row.addWidget(experimental_frame)
+        layout.addLayout(settings_row)
         layout.addSpacing(30)
         layout.addWidget(self.start_btn)
         
@@ -345,6 +378,14 @@ class SimulationViewer(QWidget):
         self.console_btn.setFixedWidth(120)
         self.console_btn.clicked.connect(self._toggle_console)
 
+        self.save_config_btn = QPushButton("Save config")
+        self.save_config_btn.setFixedWidth(120)
+        self.save_config_btn.clicked.connect(self._save_config)
+
+        self.load_config_btn = QPushButton("Load config")
+        self.load_config_btn.setFixedWidth(120)
+        self.load_config_btn.clicked.connect(self._load_config)
+
         timeline_frame = QFrame()
         timeline_frame.setFrameShape(QFrame.Shape.Box)
         timeline_layout = QHBoxLayout(timeline_frame)
@@ -388,7 +429,8 @@ class SimulationViewer(QWidget):
         top_layout.addSpacing(10)
         top_layout.addWidget(self.stop_btn)
         top_layout.addWidget(self.start_btn)
-
+        top_layout.addWidget(self.save_config_btn)
+        top_layout.addWidget(self.load_config_btn)
         body = QWidget()
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
@@ -463,6 +505,59 @@ class SimulationViewer(QWidget):
 
         self._rebuild_object_controls()
 
+
+    def _save_config(self):
+        self._object_configs = self._get_object_configs_snapshot()
+        configs_dir = Path(__file__).resolve().parent / "configs"
+        configs_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        file_path = configs_dir / f"obj_{timestamp}.json"
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(self._object_configs, f, indent=4)
+
+    def _load_config(self):
+        configs_dir = Path(__file__).resolve().parent / "configs"
+        configs_dir.mkdir(parents=True, exist_ok=True)
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load object config",
+            str(configs_dir),
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not file_name:
+            return
+        file_path = Path(file_name)
+        if not file_path.is_file():
+            return
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                configs = json.load(f)
+            if isinstance(configs, list):
+                normalized_configs = [self._ensure_config_fields(dict(cfg)) for cfg in configs if isinstance(cfg, dict)]
+                with self._config_lock:
+                    self._object_configs = normalized_configs
+                self.object_spinbox.blockSignals(True)
+                self.object_spinbox.setValue(len(normalized_configs))
+                self.object_spinbox.blockSignals(False)
+                self._rebuild_object_controls()
+                self.telemetry_lbl.setText(
+                    self._telemetry_text(
+                        episode=0,
+                        step=0,
+                        drones=0,
+                        obstacles=len(normalized_configs),) + f"Speed       : {self._env_viewer.get_speed_multiplier():.2f}x\n"
+                )
+
+                if self._running:
+                    self._request_restart(f"Restarting with: {file_path.name}")
+                else:
+                    self.status_lbl.setText(f"Loaded config: {file_path.name}")
+            else:
+                self.status_lbl.setText("Load failed")
+        except Exception as exc:
+            print(f"Failed to load config from {file_path}: {exc}")
+            self.status_lbl.setText("Load failed")
+        
     def _toggle_console(self):
         if self.console is None:
             self.console = DualTerminal(self._root)

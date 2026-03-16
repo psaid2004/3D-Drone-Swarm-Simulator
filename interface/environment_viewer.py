@@ -3,6 +3,8 @@ import random
 import threading
 import time
 
+import numpy as np
+
 from envs.createObjects import Dynamic, EnvObject
 from wrappers.env_3d import DroneSwarm3D as env
 from envs.createWorld import SUPPORTED_SHAPES 
@@ -82,7 +84,18 @@ class EnvironmentViewer:
                         self._restart_event.clear()
                         break
 
-                    act_dict = {agent: current_env.action_space(agent).sample() for agent in obs_dict}
+                    act_dict = {}
+                    for agent, obs in obs_dict.items():
+                        to_target = obs[6:9]
+                        to_centroid = obs[12:15]
+                        dir_vec = 0.8 * _safe_unit(to_target) + 0.2 * _safe_unit(to_centroid)
+                        dir_vec = _safe_unit(dir_vec)
+                        speed = float(np.clip(np.linalg.norm(to_target) / 5.0, 0.05, 1.0))
+                        u3 = speed * 2.0 - 1.0
+                        act_dict[agent] = np.array(
+                            [dir_vec[0], dir_vec[1], dir_vec[2], u3],
+                            dtype=np.float32,
+                        )
                     obs_dict, _, done, trunc, _ = current_env.step(act_dict)
                     self._step += 1
 
@@ -174,3 +187,10 @@ class EnvironmentViewer:
         env_instance._obstacles = new_obstacles
         env_instance.num_static_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "static")
         env_instance.num_dynamic_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
+
+
+def _safe_unit(vec: np.ndarray) -> np.ndarray:
+    norm = float(np.linalg.norm(vec))
+    if norm < 1e-6:
+        return np.zeros_like(vec)
+    return vec / norm
