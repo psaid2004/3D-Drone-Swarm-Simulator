@@ -9,3 +9,5 @@ __pycache__/
 models/
 *.zip
 old_files/
+interface/__pycache__/
+interface/configs/

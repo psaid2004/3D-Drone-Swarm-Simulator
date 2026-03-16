@@ -1501,6 +1501,9 @@ class DroneSwarm3D(ParallelEnv):
                 self._call_gui(p.removeUserDebugItem, lid)
         self._lidar_line_ids = {}
 
+    def action_space(self, agent):
+        """ Retrieve the action space """
+        return self._action_space
 
     def render(self):
         return None
