@@ -1,9 +1,9 @@
 import time
 import numpy as np
-from davids_drones.wrappers.env_3d import DroneSwarm3D
+from wrappers.env_3d import DroneSwarm3D
 from pathlib import Path
 import json
-from davids_drones.envs.createObjects import EnvObject, Dynamic
+from envs.createObjects import EnvObject, Dynamic
 
 
 def safe_unit(v: np.ndarray) -> np.ndarray:
@@ -97,7 +97,6 @@ def main():
         render_mode="human")
 
     # --- Uncomment to load scenarios ---
-
     # scenarios = get_ml_test_scenarios()
     # selected_scenario = "hallway"
     # object_configs = scenarios[selected_scenario]()

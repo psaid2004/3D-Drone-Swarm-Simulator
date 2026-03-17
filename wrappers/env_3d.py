@@ -10,18 +10,18 @@ from pettingzoo.utils.env import ParallelEnv
 
 from gym_pybullet_drones.envs.VelocityAviary import VelocityAviary
 from gym_pybullet_drones.utils.enums import DroneModel, Physics
-from davids_drones.envs.createObjects import Target, EnvObject, Dynamic
-from davids_drones.wrappers.step_logic import (
+from envs.createObjects import Target, EnvObject, Dynamic
+from wrappers.step_logic import (
     freeze_inactive_actions,
     convert_actions_for_simulator,
     compute_step_state,
     compute_terminations,
     build_info_dict,
 )
-from davids_drones.wrappers.rewards import compute_rewards
-from davids_drones.wrappers.stats_trackers import EpisodeStatsTracker
+from wrappers.rewards import compute_rewards
+from wrappers.stats_trackers import EpisodeStatsTracker
 
-from davids_drones.config.defaults import *
+from config.defaults import *
 
 
 class DroneSwarm3D(ParallelEnv):
