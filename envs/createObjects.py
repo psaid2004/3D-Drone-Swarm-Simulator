@@ -189,7 +189,6 @@ class Dynamic(EnvObject):
         half_extents[self.axis] = (self.max - self.min) / 2
         return center, half_extents
 
-    # TODO CHANGE SO IT DETECTS IF OVERLAP WILL HAPPEN DURING ITS PATH
     def isOverlapping(self, obstacle):
         pts = self.physics_call(
             p.getClosestPoints,
