@@ -30,10 +30,12 @@ class EnvObject:
         self.size = size
         self.start_pos = start_pos
         self.orientation = orientation
+        self.baseQuat = p.getQuaternionFromEuler(self.orientation)
         self.half_extents = None
         self.radius = None
         self.height = None
         self.shape = None
+        self.collision_shape_spec = None
         self.SHAPE_CONFIGS = {
             "box": {
                 "geom": p.GEOM_BOX,
@@ -83,19 +85,33 @@ class EnvObject:
             }
         }
     
-    # kwargs = keyword arguments
-    def create(self, shape, physics_call, color=(1, 0, 0, 1)):
-        self.physics_call = physics_call
+    
+    def set_shape_spec(self, shape):
         self.shape = shape
         conf = self.SHAPE_CONFIGS[shape]
         geom = conf["geom"]
-        
         collision_kwargs = conf["collision_kwargs"](self.size)
-        visual_kwargs = conf["visual_kwargs"](self.size)
+        
+        self.collision_shape_spec = {
+            "geom": geom,
+            "collision_kwargs": collision_kwargs
+        }
         
         self.half_extents = collision_kwargs.get("halfExtents")
         self.radius = collision_kwargs.get("radius", conf.get("radius"))
         self.height = collision_kwargs.get("height")
+    
+    
+    # kwargs = keyword arguments
+    def create(self, shape, physics_call, color=(1, 0, 0, 1)):
+        self.physics_call = physics_call
+        self.shape = shape
+        self.set_shape_spec(shape)
+        conf = self.SHAPE_CONFIGS[shape]
+        geom = self.collision_shape_spec["geom"]
+        collision_kwargs = self.collision_shape_spec["collision_kwargs"]
+        visual_kwargs = conf["visual_kwargs"](self.size)
+        
         
         collision = physics_call(p.createCollisionShape,geom, **collision_kwargs)
         visual = physics_call(p.createVisualShape,geom, rgbaColor=color, **visual_kwargs)
@@ -152,6 +168,9 @@ class EnvObject:
                 return False
 
         return True
+    
+    def pose_at_time(self, t: float):
+        return self.start_pos.tolist(), self.baseQuat
 
 
 
@@ -225,6 +244,11 @@ class Dynamic(EnvObject):
     def get_period(self) -> float:
         path_length = self.max - self.min
         return 2.0 * path_length / self.speed
+    
+    def pose_at_time(self, t: float):
+        return self.full_position_at_time(t).tolist(), self.baseQuat
+    
+
 
 class Target():
     def __init__(self, color, start_pos, radius, physics_call, call_gui):
