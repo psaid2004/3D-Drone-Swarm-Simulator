@@ -97,7 +97,6 @@ def main():
         render_mode="human")
 
     # --- Uncomment to load scenarios ---
-
     # scenarios = get_ml_test_scenarios()
     # selected_scenario = "hallway"
     # object_configs = scenarios[selected_scenario]()

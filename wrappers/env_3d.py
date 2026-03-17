@@ -21,7 +21,10 @@ from wrappers.step_logic import (
 )
 from wrappers.rewards import compute_rewards
 from wrappers.stats_trackers import EpisodeStatsTracker
+from wrappers.rewards import compute_rewards
+from wrappers.stats_trackers import EpisodeStatsTracker
 
+from config.defaults import *
 from config.defaults import *
 
 
@@ -545,13 +548,13 @@ class DroneSwarm3D(ParallelEnv):
         """ Spawn the obstacles. """
 
         self._obstacles = []
-        # -----------------If you want blocking obstacles uncomment the line below ------------------------------------------------
-        # self._spawn_blocking_obstacles()
+
 
         if self.num_static_obstacles + self.num_dynamic_obstacles <= 0 or self._p is None:
             return
 
         # A max number of attempts for creating an obstacle
+        swarm_list = list(self.drones_in_swarm.keys())
         max_attempts = 100000
 
         for _ in range(self.num_dynamic_obstacles):
@@ -562,17 +565,24 @@ class DroneSwarm3D(ParallelEnv):
 
         for _ in range(self.num_static_obstacles):
             shape = self.rng.choice(SUPPORTED_SHAPES)
-            self._spawn_static_obstacles(max_attempts, shape)
-        
-    def _spawn_static_obstacles(self, max_attempts, shape) -> None:
+            swarm_list = self._spawn_static_obstacles(max_attempts, shape, swarm_list)
+
+    def _spawn_static_obstacles(self, max_attempts, shape, swarm_list) -> None:
         """ Spawn the obstacles. """
+        chosen_swarm = None
+        blocking_obstacles_chance = self.rng.uniform(0.0, 1.0)
 
         for _ in range(max_attempts):
-            candidate = self.generate_xyz()
-            ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi))]
-            size = float(self.rng.uniform(0.8, 1.2))
+            if blocking_obstacles_chance < 0.5 and len(swarm_list) >= 1:
+                chosen_swarm = self.rng.choice(swarm_list)
+                obj = self._spawn_blocking_obstacles(chosen_swarm)
+            else:
+                candidate = self.generate_xyz()
+                ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi))]
+                size = float(self.rng.uniform(0.8, 1.2))
 
-            obj = EnvObject(candidate, size, ori)
+                obj = EnvObject(candidate, size, ori)
+
             if(self.in_swept_area(obj)) :
                 continue
             body = obj.create(shape, physics_call=self._call_physics)
@@ -582,8 +592,11 @@ class DroneSwarm3D(ParallelEnv):
                 self._call_physics(self._p.removeBody, body)
                 continue
 
+            if chosen_swarm is not None:
+                swarm_list.remove(chosen_swarm)
             self._obstacles.append(obj)
             break
+        return swarm_list
 
     def in_swept_area(self, object) :
         for obs in self._obstacles :
@@ -627,32 +640,20 @@ class DroneSwarm3D(ParallelEnv):
             break
 
 
-    def _spawn_blocking_obstacles(self) -> None:
+    def _spawn_blocking_obstacles(self, swarm_num) -> EnvObject:
         # A max number of attempts for creating an obstacle
-        max_attempts = 10000
 
-        for swarm_num, swarm_info in self.drones_in_swarm.items():
-            shape = self.rng.choice(SUPPORTED_SHAPES)
-            swarm_center = swarm_info["center"]
-            target_pos = self._targets[swarm_num * self.num_drones_per_swarm].start_pos
+        swarm_center = self.drones_in_swarm[swarm_num]["center"]
+        target_pos = self._targets[swarm_num * self.num_drones_per_swarm].start_pos
 
-            for _ in range(max_attempts):
-                candidate = self.generate_blocking_xyz(swarm_center, target_pos)
-                ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)),
-                       float(self.rng.uniform(-np.pi, np.pi))]
-                size = float(self.rng.uniform(1.2, 1.5))
 
-                obj = EnvObject(candidate, size, ori)
-                body = obj.create(shape, physics_call=self._call_physics)
+        candidate = self.generate_blocking_xyz(swarm_center, target_pos)
+        ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)),
+               float(self.rng.uniform(-np.pi, np.pi))]
+        size = float(self.rng.uniform(1.2, 1.5))
 
-                # Check if the obstacle is overlapping with any other obstacle or too close to drones or target
-                if (self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets,
-                                                                       MIN_SPAWN_DIST_FROM_DRONE)):
-                    self._call_physics(self._p.removeBody, body)
-                    continue
-
-                self._obstacles.append(obj)
-                break
+        obj = EnvObject(candidate, size, ori)
+        return obj
 
 
     def _update_obstacles(self) -> None:
