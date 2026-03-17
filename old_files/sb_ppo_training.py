@@ -36,7 +36,7 @@ from old_files.experiment import (
     MODELS_DIR,
     DEFAULT_NUM_DRONES,
 )
-from train.callbacks.stats_cb import StepStatsCallback, CurriculumStageInfo
+from old_files.stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.pz_parallel_3d import env as make_env
 from wrappers.sb3_reset_fix import SB3VecResetTupleFix
 
