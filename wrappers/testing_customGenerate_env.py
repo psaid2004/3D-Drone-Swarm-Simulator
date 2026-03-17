@@ -98,7 +98,7 @@ def main():
 
     # --- Uncomment to load scenarios ---
     # scenarios = get_ml_test_scenarios()
-    # selected_scenario = "hallway"
+    # selected_scenario = "wall_holes"
     # object_configs = scenarios[selected_scenario]()
 
     obs_dict, info = pz_env.reset()

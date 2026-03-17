@@ -16,7 +16,8 @@ import warnings
 import supersuit as ss
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import (
-    CallbackList, CheckpointCallback
+    CallbackList, CheckpointCallback, EvalCallback,
+
 )
 from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
 
@@ -118,7 +119,7 @@ def train(device: str = "auto"):
     print(f"Device: {device_}")
 
     curr = Curriculum().stages
-    total_planned_stages = int(sum(int(s[4]) for s in curr))
+    total_planned_stages = int(sum(int(s[4]) for s in curr)) #sum of all curriculum stage timesteps
 
     # --- build stage-0 env ---
     ws0, nd0, ns0, ndyn0, steps0 = curr[0]
@@ -126,6 +127,8 @@ def train(device: str = "auto"):
         f"\n=== Stage 0 | world={ws0} drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
     )
+
+    # create the training environment
     train_env = create_env(
         world_scale=ws0,
         num_drones=nd0,
@@ -134,7 +137,16 @@ def train(device: str = "auto"):
         max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS?
     )
 
-    # --- create model ---
+    # create an evaluation environment
+    eval_env = create_env(
+        world_scale=ws0,
+        num_drones=nd0,
+        num_static_obstacles=ns0,
+        num_dynamic_obstacles=ndyn0,
+        max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS?
+    )
+
+    # --- create SAC model ---
     model = SAC(
         "MlpPolicy",
         train_env,
@@ -149,18 +161,22 @@ def train(device: str = "auto"):
         tensorboard_log=f"{MODELS_DIR}/tb_logs",
         verbose=1,
         device=device_,
-    )
+    ) # TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
 
     # --- train stage 0 first ---
+
+    # save current point of training
     ckpt_dir = get_next_checkpoint_dir(
         num_drones=nd0,
         num_static_obs=ns0,
         num_dynamic_obs=ndyn0,
     )
     ckpt_cb = CheckpointCallback(
-        save_freq=max(1, 20_000 // max(1, N_ENVS)),
+        save_freq=max(1, 10_000 // max(1, N_ENVS)),
         save_path=f"{MODELS_DIR}/{ckpt_dir}",
         name_prefix="sac_",
+        save_vecnormalize=True,
+        save_replay_buffer=True
     )
 
     stage_info = CurriculumStageInfo(
@@ -172,7 +188,6 @@ def train(device: str = "auto"):
         stage_timesteps=int(steps0),
         total_planned_timesteps=total_planned_stages,
     )
-
     stats_cb = StepStatsCallback(
         n_drones_fixed=int(nd0),
         n_envs=N_ENVS,
@@ -185,6 +200,18 @@ def train(device: str = "auto"):
         verbose=1,
     )
     stats_cb.reset(stage_start_ts=model.num_timesteps)
+
+    # evaluate current policy on clean evaluate environment
+    eval_cb = EvalCallback(
+        eval_env=eval_env,
+        best_model_save_path="./logs/best_model",
+        log_path="./logs/evals",
+        eval_freq=max(10_000 // N_ENVS, 1),
+        n_eval_episodes=5,
+        deterministic=True,
+        render=False,
+        verbose=1,
+    )
 
     callbacks = CallbackList([stats_cb, ckpt_cb])
 

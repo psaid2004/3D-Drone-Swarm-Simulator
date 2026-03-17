@@ -17,7 +17,7 @@ class CurriculumStageInfo:
     num_static_obstacles: int
     num_dynamic_obstacles: int
     stage_timesteps: int
-    total_planned_timesteps: int # TODO FIGURE OUT WHAT THIS IS
+    total_planned_timesteps: int
 
 
 class StepStatsCallback(BaseCallback):
@@ -203,7 +203,9 @@ class StepStatsCallback(BaseCallback):
                 total = max(1, int(si.total_planned_timesteps))
                 prefix = (
                     f"[Curr] stage={si.stage_idx} "
-                    f"(scale={si.world_scale}, active={si.active_drones}, obs={si.num_obstacles}, stage_ts={si.stage_timesteps}) "
+                    f"(scale={si.world_scale}, drones={si.num_drones}, "
+                    f"static={si.num_static_obstacles}, dynamic={si.num_dynamic_obstacles}, "
+                    f"stage_ts={si.stage_timesteps}) "
                     f"| timesteps={self.num_timesteps}/{total} ({100.0 * self.num_timesteps / total:5.1f}%)\n"
                 )
 
