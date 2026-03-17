@@ -3,7 +3,7 @@ import pybullet_data # gives a path to built-in assets
 from pathlib import Path
 import time
 import numpy as np
-from createObjects import *
+from envs.createObjects import *
 
 # 1️⃣ Connect to PyBullet
 physics_client = p.connect(p.GUI)  # Use p.DIRECT for headless
