@@ -30,41 +30,41 @@ def freeze_inactive_actions(env, actions: Dict[str, np.ndarray]) -> None:
 
 def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.ndarray:
     """
-    Convert normalised policy actions into simulator (VelocityAviary) velocity commands.
+    Convert policy actions to the normalized format expected by VelocityAviary.
 
-    Policy output = [dir_x, dir_y, dir_z, speed] in [-1, 1]
-    Simulator expects: direction (unit vector) and speed (m/s)
+    Output format per drone:
+        [dir_x, dir_y, dir_z, speed_scale]
+
+    where:
+        dir_* is a unit direction vector
+        speed_scale is in [0, 1]
     """
     act = np.zeros((env.total_num_drones, 4), dtype=np.float32)
 
     for i, a in enumerate(env.possible_agents):
-
-        # inactive drones -> just hover
         if i >= env.total_num_drones:
-            act[i] = np.array([0.0, 0.0, 1.0, 0.0], dtype=np.float32)
             continue
 
-        # default is direction = up and speed = 0 m/s
-        dir_vec = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-        speed = 0.0
+        # default: no movement
+        dir_vec = np.zeros(3, dtype=np.float32)
+        speed_scale = 0.0
 
         if a in actions:
             u = np.array(actions[a], dtype=np.float32).reshape(-1)
-            # clip to valid range
             u = np.clip(u[:4], -1.0, 1.0)
 
-            # get the required direction based on normalised action
             v = u[:3].astype(np.float32)
             n = np.linalg.norm(v)
-            dir_vec = v / n if n > 1e-6 else dir_vec
 
-            # speed mapping: u[3] from [-1,1] -> [0,1 (vel_scale)]
-            speed01 = float((u[3] + 1.0) * 0.5)
-            speed = env._env.SPEED_LIMIT * speed01  # m/s
+            if n > 1e-6:
+                dir_vec = v / n
+                speed_scale = float((u[3] + 1.0) * 0.5)  # map [-1,1] -> [0,1]
+            else:
+                dir_vec = np.zeros(3, dtype=np.float32)
+                speed_scale = 0.0
 
-        # retrieve direction vector and speed for drone
         act[i, 0:3] = dir_vec
-        act[i, 3] = float(speed)
+        act[i, 3] = speed_scale
 
     return act
 
@@ -205,6 +205,15 @@ def build_info_dict(env, step_state) -> dict:
             }
             continue
 
+        pos = env._env._getDroneStateVector(i)[POS_SLICE]
+        target = env._targets[i].start_pos if env._targets is not None else np.zeros(3, dtype=np.float32)
+        dist_to_target = float(np.linalg.norm(target - pos))
+
+        vel = env._env._getDroneStateVector(i)[10:13]
+        actual_speed = float(np.linalg.norm(vel))
+
+        cmd_speed = float(env._last_sim_actions[i][3]) if hasattr(env, "_last_sim_actions") else 0.0
+
         info_dict[agent] = {
             "step": int(env._step_count),
             "active": True,
@@ -219,6 +228,9 @@ def build_info_dict(env, step_state) -> dict:
             "reached": bool(env._reached_once[i]),
             "reached_now": bool(step_state.reached_now[i]),
             "just_reached": bool(step_state.just_reached[i]),
+            "dist_to_target": dist_to_target,
+            "cmd_speed": cmd_speed,
+            "actual_speed": actual_speed,
             "swarm_max_sep": float(step_state.max_sep),
             "swarm_min_sep": float(step_state.min_sep),
             "swarm_too_far": bool(step_state.too_far),

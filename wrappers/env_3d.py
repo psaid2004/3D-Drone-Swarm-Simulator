@@ -222,6 +222,9 @@ class DroneSwarm3D(ParallelEnv):
             dtype=np.float32,
         )
 
+        self.action_spaces = {agent: self._action_space for agent in self.possible_agents}
+        self.observation_spaces = {agent: self._obs_space for agent in self.possible_agents}
+
         if self.lidar:
             self._lidar_dirs_body = self._precompute_lidar_dirs_body()
 
@@ -392,10 +395,19 @@ class DroneSwarm3D(ParallelEnv):
     def _rebuild_aviary(self) -> None:
         """Recreate VelocityAviary from scratch (fresh PyBullet connection)."""
         try:
-            # best effort close old env (may already be half-dead)
             self._env.close()
         except Exception:
             pass
+
+        # make sure spawn_positions is valid before rebuilding
+        if not isinstance(self.spawn_positions, np.ndarray) or self.spawn_positions.shape != (self.total_num_drones, 3):
+            self.spawn_positions = np.empty((0, 3), dtype=np.float32)
+            self.drones_in_swarm = {}
+
+            for i in range(self.num_swarms):
+                edge, center, drones = self.generate_drone_swarm_spawn()
+                self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
+                self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
@@ -408,12 +420,11 @@ class DroneSwarm3D(ParallelEnv):
         )
         self._env.SPEED_LIMIT = 2.0
 
-        # reset objects tied to the old simulation
         self._obstacles = []
         self._lidar_line_ids = {}
 
-        # reobtain pybullet handles and drone IDs
         self._init_pybullet_handles()
+        self._refresh_drone_ids_from_pybullet()
 
 
     # ----------------------------- (DE)SPAWN DRONES, OBSTACLES AND TARGETS -----------------------------
@@ -505,7 +516,13 @@ class DroneSwarm3D(ParallelEnv):
         or other drones.
         """
         for _ in range(max_attempts):
-            t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
+            #t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
+
+            #TODO: UNCOMMENT ABOVE AND REMOVE IF ELSE (JUST FOR TESTING NO REACH ISSUE IN STAGE 0)
+            if self.num_static_obstacles == 0 and self.num_dynamic_obstacles == 0 and self.total_num_drones == 1:
+                t = self.generate_xyz()
+            else:
+                t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
 
             drone_positions = self.spawn_positions
             possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
@@ -1313,6 +1330,7 @@ class DroneSwarm3D(ParallelEnv):
         # 3. Convert normalised policy actions into simulator (VelocityAviary) velocity commands
         sim_actions = convert_actions_for_simulator(self, actions)
 
+        self._last_sim_actions = sim_actions.copy()
         # 4. Step the simulator using the action
         self._env.step(sim_actions)
 
@@ -1376,6 +1394,7 @@ class DroneSwarm3D(ParallelEnv):
         self._refresh_drone_ids_from_pybullet()
         self.restore_drone_visuals_and_collisions()
 
+        self.drones_in_swarm = {}
         # If you want to change the spwan positions with reset uncomment below (might not be working fully)
         for i in range(self.num_swarms):
             edge, center, drones = self.generate_drone_swarm_spawn()
@@ -1554,6 +1573,10 @@ class DroneSwarm3D(ParallelEnv):
             for lid in line_ids:
                 self._call_gui(p.removeUserDebugItem, lid)
         self._lidar_line_ids = {}
+
+    def observation_space(self, agent):
+        """Retrieve the observation space."""
+        return self._obs_space
 
     def action_space(self, agent):
         """ Retrieve the action space """

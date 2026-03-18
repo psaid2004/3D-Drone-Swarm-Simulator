@@ -140,6 +140,11 @@ class StepStatsCallback(BaseCallback):
         # dict -> {agent id: first env step where collision happened}
         self._first_collision_env_step = {}
 
+        self._dist_to_target_sum = 0.0
+        self._cmd_speed_sum = 0.0
+        self._actual_speed_sum = 0.0
+        self._dist_samples = 0
+
 
     def _on_rollout_start(self) -> None:
         self._rollout_reset()
@@ -186,7 +191,17 @@ class StepStatsCallback(BaseCallback):
             swarm_too_close = bool(info.get("swarm_too_close", False))
             swarm_too_far = bool(info.get("swarm_too_far", False))
 
+            dist_to_target = float(info.get("dist_to_target", 0.0))
+            cmd_speed = float(info.get("cmd_speed", 0.0))
+            actual_speed = float(info.get("actual_speed", 0.0))
+
             self._agent_steps += 1
+            self._dist_to_target_sum += dist_to_target
+            self._cmd_speed_sum += cmd_speed
+            self._actual_speed_sum += actual_speed
+            self._dist_samples += 1
+
+
 
             if active:
                 active_this_step[env_i, drone_i] = True
@@ -248,6 +263,10 @@ class StepStatsCallback(BaseCallback):
         denom_all_drones = max(1, self.total_drone_count)
         denom_agent_steps = max(1, self._agent_steps)
         denom_env_steps = max(1, self._env_steps)
+        denom_dist_samples = max(1, self._dist_samples)
+        mean_dist_to_target = self._dist_to_target_sum / denom_dist_samples
+        mean_cmd_speed = self._cmd_speed_sum / denom_dist_samples
+        mean_actual_speed = self._actual_speed_sum / denom_dist_samples
 
         reaches_ever = len(self._reached_ever)
         reaches_now = len(self._reached_now)
@@ -290,6 +309,10 @@ class StepStatsCallback(BaseCallback):
         self.logger.record("stats/swarm_too_close_rate", float(self._swarm_too_close_steps) / float(denom_agent_steps))
         self.logger.record("stats/swarm_too_far_rate", float(self._swarm_too_far_steps) / float(denom_agent_steps))
 
+        self.logger.record("debug/mean_dist_to_target", float(mean_dist_to_target))
+        self.logger.record("debug/mean_cmd_speed", float(mean_cmd_speed))
+        self.logger.record("debug/mean_actual_speed", float(mean_actual_speed))
+
         if self._first_collision_env_step:
             steps = np.array(list(self._first_collision_env_step.values()), dtype=np.float32)
             self.logger.record("stats/first_collision_env_step_mean", float(np.mean(steps)))
@@ -308,7 +331,7 @@ class StepStatsCallback(BaseCallback):
             self.logger.record("curriculum/num_drones", float(si.num_drones))
             self.logger.record("curriculum/num_static_obstacles", float(si.num_static_obstacles))
             self.logger.record("curriculum/num_dynamic_obstacles", float(si.num_dynamic_obstacles))
-            self.logger.record("curriculum/num_obstacles", float((CurriculumStageInfo.num_total_obstacles))) # TODO FIX
+            self.logger.record("curriculum/num_obstacles", float(self.stage_info.num_total_obstacles)) # TODO FIX - done?
             self.logger.record("curriculum/stage_timesteps", float(si.stage_timesteps))
             self.logger.record("curriculum/progress_frac", float(self.num_timesteps) / float(total))
 
@@ -341,7 +364,10 @@ class StepStatsCallback(BaseCallback):
                 + f"collision_rate={collision_step_rate:.4f} "
                 + f"wall_collision_rate={wall_collision_step_rate:.4f} "
                 + f"obs_collision_rate={obstacle_collision_step_rate:.4f} "
-                + f"drone_collision_rate={drone_collision_step_rate:.4f}"
+                + f"drone_collision_rate={drone_collision_step_rate:.4f} "
+                + f"mean_dist_to_target={mean_dist_to_target:.3f} "
+                + f"mean_cmd_speed={mean_cmd_speed:.3f} "
+                + f"mean_actual_speed={mean_actual_speed:.3f} "
             )
 
         # ---- Early stop decision ----

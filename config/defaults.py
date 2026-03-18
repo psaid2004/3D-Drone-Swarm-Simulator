@@ -24,7 +24,7 @@ SWARM_MIN_SEPARATION = 0.15  # Min distance between drones in the swarm
 GOAL_RADIUS = 0.5 # actual radius of the goal
 #TODO USE THIS FOR SPAWNING TARGETS
 GOAL_EDGE_MARGIN = 0.6  # Minimum distance between the wall and the goal
-GOAL_REACH_DISTANCE = 0.4 # How close drone needs to be around goal to be a successful reach
+GOAL_REACH_DISTANCE = 0.6 #0.4 # How close drone needs to be around goal to be a successful reach
 COLORS =  [
     [0.0, 1.0, 0.0, 0.9],  # green
     [0.0, 0.0, 1.0, 0.9],  # blue
@@ -69,10 +69,10 @@ COLLISION_DIST = 0.0
 # Reward - per-step shaping
 # =============================================================================
 PROG_COEF = 4.5 # reward coefficient for progressing closer to goal
-TIME_PEN = 0.05 # small time penalty each step (until drone reaches or collides)
+TIME_PEN = 0.005#0.05 # small time penalty each step (until drone reaches or collides)
 CNTRL_PEN = 0.01 # penalty coefficient for large / aggressive actions (prevents jittering)
 NEAR_OBS_PEN = 0.6 # penalty for being too close to an obstacle
-DIST_PEN = 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
+DIST_PEN = 0.05 #0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 
 # =============================================================================
 # Reward - swarm shaping
@@ -89,7 +89,7 @@ WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
 OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
 DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
 ZERO_SPEED_PEN = 1.0 # penalty for drone not moving
-GOAL_BONUS = 150 # one-time bonus for reaching the goal
+GOAL_BONUS = 300#150 # one-time bonus for reaching the goal
 
 # =============================================================================
 # Avoid division by zero

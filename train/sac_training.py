@@ -27,7 +27,8 @@ from config.curriculum import Curriculum
 from config.defaults import *
 from config.sac_defaults import *
 
-from callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
+#from callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
+from .callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.env_3d import DroneSwarm3D
 from wrappers.env_reset_fix import SB3VecResetTupleFix
 
@@ -214,7 +215,7 @@ def make_stage_callbacks(
         progress_cb,
         stats_cb,
         ckpt_cb,
-        eval_cb,
+        #eval_cb,
     ])
 
 
