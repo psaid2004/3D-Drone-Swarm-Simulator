@@ -21,8 +21,6 @@ from wrappers.step_logic import (
 )
 from wrappers.rewards import compute_rewards
 from wrappers.stats_trackers import EpisodeStatsTracker
-from wrappers.rewards import compute_rewards
-from wrappers.stats_trackers import EpisodeStatsTracker
 
 from config.defaults import *
 from config.defaults import *
@@ -135,29 +133,9 @@ class DroneSwarm3D(ParallelEnv):
         self._obstacle_collision_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
         self._drone_collision_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
-        self._wall_ids: List[int] = []
         self._step_count = 0
 
 
-    def _spawn_walls(self) -> None:
-        
-        if self._p is None:
-            return
-        
-        p = self._p
-        s = self.world_scale
-        positions = [
-            ("z_pos_wall",[0, 0, s]),   # ceiling
-            ("z_pos_wall",[0, 0, -s]),  # floor
-            ("x_pos_wall",[s, 0, 0]),   # front
-            ("x_pos_wall",[-s, 0, 0]),  # back
-            ("y_pos_wall",[0, s, 0]),   # right
-            ("y_pos_wall",[0, -s, 0]),  # left
-        ]
-        objects = [(key, EnvObject(pos, s, [0, 0, 0])) for key, pos in positions]
-        self._wall_ids = [obj.create(key, self._call_physics, color=(0.5, 0.5, 0.5, 1.0)) for key, obj in objects]
-        
-    
     def _init_simulator(self) -> None:
         """ Create drone simulator and PyBullet handles. """
         # list of drone's initial position
@@ -185,6 +163,7 @@ class DroneSwarm3D(ParallelEnv):
         self._client_id = None
         self._drone_ids: List[int] = []
         self._obstacles = []
+        self._wall_ids: List[int] = []
 
         # GUI-only debug visuals
         self._lidar_line_ids: Dict[int, List[int]] = {}
@@ -219,8 +198,6 @@ class DroneSwarm3D(ParallelEnv):
             high=np.full((obs_dim,), 1e9, dtype=np.float32),
             dtype=np.float32,
         )
-
-
 
         if self.lidar:
             self._lidar_dirs_body = self._precompute_lidar_dirs_body()
@@ -452,6 +429,7 @@ class DroneSwarm3D(ParallelEnv):
 
         return edge, center, np.array(positions, dtype=np.float32)
 
+
     def generate_edge_xyz(self, edge, margin):
         """Generate a random position on a given world edge."""
 
@@ -490,11 +468,31 @@ class DroneSwarm3D(ParallelEnv):
     def generate_swarm_center_xyz(self, edge, margin):
         return self.generate_edge_xyz(edge, margin)
 
+
     # Generate the spawn position of target, opposite to the swarms center
     def generate_target_xyz(self, edge, margin):
         opposite_edge = {0: 1, 1: 0, 2: 3, 3: 2}[edge]
         return self.generate_edge_xyz(opposite_edge, margin)
 
+
+    def _spawn_walls(self) -> None:
+
+        if self._p is None:
+            return
+
+        s = self.world_scale
+
+        positions = [
+            ("z_pos_wall", [0, 0, s]),  # ceiling
+            ("z_pos_wall", [0, 0, -s]),  # floor
+            ("x_pos_wall", [s, 0, 0]),  # front
+            ("x_pos_wall", [-s, 0, 0]),  # back
+            ("y_pos_wall", [0, s, 0]),  # right
+            ("y_pos_wall", [0, -s, 0]),  # left
+        ]
+
+        objects = [(key, EnvObject(pos, s, [0, 0, 0])) for key, pos in positions]
+        self._wall_ids = [obj.create(key, self._call_physics, color=(0.5, 0.5, 0.5, 1.0)) for key, obj in objects]
 
 
     def make_valid_target(self,swarm_edge, color, min_dist = 0.5, max_attempts = 1000) -> Target:
@@ -525,6 +523,7 @@ class DroneSwarm3D(ParallelEnv):
                       physics_call=self._call_physics,
                       call_gui=self._call_gui)
 
+
     def _make_targets(self) -> list[Target]:
         """ Make a target for all drones."""
         targets = []
@@ -547,6 +546,7 @@ class DroneSwarm3D(ParallelEnv):
                 targets.extend(drone_targets)
 
             return targets
+
 
     def _spawn_obstacles(self):
         """ Spawn the obstacles. """
@@ -571,6 +571,7 @@ class DroneSwarm3D(ParallelEnv):
             shape = self.rng.choice(SUPPORTED_SHAPES)
             swarm_list = self._spawn_static_obstacles(max_attempts, shape, swarm_list)
 
+
     def _spawn_static_obstacles(self, max_attempts, shape, swarm_list) -> None:
         """ Spawn the obstacles. """
         chosen_swarm = None
@@ -592,7 +593,7 @@ class DroneSwarm3D(ParallelEnv):
             body = obj.create(shape, physics_call=self._call_physics)
 
             # Check if the obstacle is overlapping with any other obstacle or too close to drones or target
-            if (self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE)):
+            if self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE):
                 self._call_physics(self._p.removeBody, body)
                 continue
 
@@ -607,7 +608,8 @@ class DroneSwarm3D(ParallelEnv):
             if isinstance(obs, Dynamic) and object.is_in_swept_area(obs) :
                 return True
         return False
-    
+
+
     def _spawn_dynamic_obstacles(self, max_attempts, shape, axis) -> None:
         """ Spawn the dynamic obstacles. """
         for _ in range(max_attempts):
@@ -686,7 +688,7 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def out_of_bounds(self, max_pos, min_pos, axis):
-        """ Helper function used to see if dynamic objects are going out of bounds. """
+        """ Helper function used to see if entities are going out of bounds. """
         if axis != 2:
             if max_pos >= self.world_scale or min_pos <= -self.world_scale:
                 return True
@@ -764,9 +766,10 @@ class DroneSwarm3D(ParallelEnv):
 
         return np.array([x,y,z], dtype=np.float32)
 
-    # Creates an obstacles that blocks the straight line from a center to the target
+
     def generate_blocking_xyz(self, swarm_center: np.ndarray, target_pos: np.ndarray,
                               margin: float = 0.1) -> np.ndarray:
+        """ Creates an obstacles that blocks the straight line from a center to the target"""
         # Vector from swarm to target
         line_vec = target_pos - swarm_center
 
@@ -790,6 +793,7 @@ class DroneSwarm3D(ParallelEnv):
                             [self.world_scale, self.world_scale, self.world_scale])
 
         return candidate.astype(np.float32)
+
 
     def is_far_from_other_swarms(self, candidate_center):
         if not self.drones_in_swarm:
@@ -1065,19 +1069,45 @@ class DroneSwarm3D(ParallelEnv):
 
         thresh_obstacle = 0.01
         thresh_drone = 0.01
+        thresh_wall = 0.02
 
         # drone vs wall
-        for i in range(self.total_num_drones):
+        for i, did in enumerate(active_ids):
             if self._dead[i] or self._reached_once[i] or self._despawned[i]:
                 continue
 
-            try:
-                state = self._env._getDroneStateVector(i)
-                pos_i = np.array(state[POS_SLICE], dtype=np.float32)
-                if self.drone_out_of_bounds(pos_i):
-                    wall_collisions[i] = True
-            except Exception:
-                continue
+            # 1) direct contact with wall bodies
+            for wid in self._wall_ids:
+                try:
+                    pts = self._call_physics(p.getContactPoints, bodyA=did, bodyB=wid)
+                    if pts and len(pts) > 0:
+                        wall_collisions[i] = True
+                        break
+                except Exception:
+                    continue
+
+                try:
+                    pts = self._call_physics(
+                        p.getClosestPoints,
+                        bodyA=did,
+                        bodyB=wid,
+                        distance=thresh_wall,
+                    )
+                    if pts and len(pts) > 0:
+                        wall_collisions[i] = True
+                        break
+                except Exception:
+                    continue
+
+            # 2) fallback numeric boundary check
+            if not wall_collisions[i]:
+                try:
+                    state = self._env._getDroneStateVector(i)
+                    pos_i = np.array(state[POS_SLICE], dtype=np.float32)
+                    if self.drone_out_of_bounds(pos_i):
+                        wall_collisions[i] = True
+                except Exception:
+                    pass
 
         # drone vs obstacle
         if len(self._obstacles) >0:
@@ -1347,6 +1377,7 @@ class DroneSwarm3D(ParallelEnv):
             self.active_drone_mask()
         )
 
+
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
 
 
@@ -1430,6 +1461,7 @@ class DroneSwarm3D(ParallelEnv):
         self._clear_debug_visuals()
         self.remove_all_obstacles()
         self.remove_targets()
+        self.remove_walls()
         # reset spawn positions
         self.spawn_positions = np.empty((0, 3))
 
@@ -1482,13 +1514,16 @@ class DroneSwarm3D(ParallelEnv):
 
         self._obstacles = []
 
-    def _remove_walls(self) -> None:
+
+    def remove_walls(self) -> None:
+        """ Helper for removing walls from current episode environment."""
         for body_id in self._wall_ids:
             try:
                 self._call_physics(self._p.removeBody, body_id)
             except Exception:
                 pass
         self._wall_ids = []
+
 
     def remove_targets(self) -> None:
         """Helper for removing targets from current episode environment."""
