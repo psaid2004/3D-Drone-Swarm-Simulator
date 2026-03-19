@@ -183,7 +183,7 @@ def make_stage_callbacks(
         num_drones=int(num_drones),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
-        print_every=100,
+        print_every=5000,
         enable_stage_early_stop=True,
         reach_threshold=0.85,
         max_collision_rate=0.05,

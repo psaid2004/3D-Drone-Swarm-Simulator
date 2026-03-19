@@ -1378,11 +1378,11 @@ class DroneSwarm3D(ParallelEnv):
         )
 
         # TODO REMOVE AFTER DEBUGGING
-        if (
-                self._step_count % 50 == 0
-                or any(info.get("collision_now", False) for info in info_dict.values())
-        ):
-            self._debug_print_step(obs_dict, reward_dict, info_dict, term_dict, trunc_dict)
+        #if (
+        #        self._step_count % 50 == 0
+        #        or any(info.get("collision_now", False) for info in info_dict.values())
+        #):
+        #    self._debug_print_step(obs_dict, reward_dict, info_dict, term_dict, trunc_dict)
 
 
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
