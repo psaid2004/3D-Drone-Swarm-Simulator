@@ -31,7 +31,7 @@ from old_files.experiment import (
     LIDAR_SHOW_RAYS_TEST,
 )
 
-from wrappers.pz_parallel_3d import env as make_env
+from wrappers.env_3d import env as make_env
 
 # =============================================================================
 # DEFAULTS (overridable)

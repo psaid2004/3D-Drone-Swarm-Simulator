@@ -213,12 +213,14 @@ def make_stage_callbacks(
         verbose=1,
     )
 
-    return CallbackList([
+    callback_list = CallbackList([
         progress_cb,
         stats_cb,
         ckpt_cb,
         #eval_cb,
     ])
+
+    return callback_list, stats_cb
 
 
 # ---- SAC TRAINING ----
@@ -280,8 +282,7 @@ def train(device: str = "auto"):
 
     # --- train stage 0 first ---
 
-
-    callbacks = make_stage_callbacks(
+    callbacks, stats_cb = make_stage_callbacks(
         stage_idx=0,
         world_scale=ws0,
         num_drones=nd0,

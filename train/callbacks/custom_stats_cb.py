@@ -125,6 +125,26 @@ class StepStatsCallback(BaseCallback):
         self._obstacle_collision_ever_count = 0
         self._drone_collision_ever_count = 0
 
+        # print-window counters (reset only after console print)
+        if not hasattr(self, "_print_collision_now_count"):
+            self._print_collision_now_count = 0
+            self._print_wall_collision_now_count = 0
+            self._print_obstacle_collision_now_count = 0
+            self._print_drone_collision_now_count = 0
+
+            self._print_collision_ever_count = 0
+            self._print_wall_collision_ever_count = 0
+            self._print_obstacle_collision_ever_count = 0
+            self._print_drone_collision_ever_count = 0
+
+            self._print_agent_steps = 0
+            self._print_env_steps = 0
+
+            self._print_dist_to_target_sum = 0.0
+            self._print_cmd_speed_sum = 0.0
+            self._print_actual_speed_sum = 0.0
+
+
         self._reached_ever = set()
         self._reached_now = set()
 
@@ -140,7 +160,9 @@ class StepStatsCallback(BaseCallback):
         self._dist_to_target_sum = 0.0
         self._cmd_speed_sum = 0.0
         self._actual_speed_sum = 0.0
-        self._dist_samples = 0
+
+        self.episode_done_collision = bool
+        self.episode_done_all_reached = bool
 
 
     def _on_rollout_start(self) -> None:
@@ -171,7 +193,6 @@ class StepStatsCallback(BaseCallback):
             active = bool(info.get("active", True))
             reached = bool(info.get("reached", False))
             reached_now = bool(info.get("reached_now", False))
-            just_reached = bool(info.get("just_reached", False))
 
             collided = bool(info.get("collided", False))
             collision_now = bool(info.get("collision_now", False))
@@ -192,13 +213,16 @@ class StepStatsCallback(BaseCallback):
             cmd_speed = float(info.get("cmd_speed", 0.0))
             actual_speed = float(info.get("actual_speed", 0.0))
 
+            episode_done_collision = bool(info.get("episode_done_collision", False))
+            episode_done_all_reached = bool(info.get("episode_done_all_reached", False))
+
             self._agent_steps += 1
+
             self._dist_to_target_sum += dist_to_target
             self._cmd_speed_sum += cmd_speed
             self._actual_speed_sum += actual_speed
-            self._dist_samples += 1
-
-
+            self.episode_done_collision = episode_done_collision
+            self.episode_done_all_reached = episode_done_all_reached
 
             if active:
                 active_this_step[env_i, drone_i] = True
@@ -207,7 +231,7 @@ class StepStatsCallback(BaseCallback):
                 self._reached_ever.add(flat_idx)
                 self._env_drone_reached_anytime[env_i, drone_i] = True
 
-            if reached_now or just_reached:
+            if reached_now:
                 reached_this_step[env_i, drone_i] = True
                 self._reached_now.add(flat_idx)
 
@@ -241,14 +265,6 @@ class StepStatsCallback(BaseCallback):
             if swarm_too_far:
                 self._swarm_too_far_steps += 1
 
-        # simultaneous reach: all ACTIVE drones in an env reached on same env-step
-        for e in range(self.num_envs):
-            act = active_this_step[e]
-            if not act.any():
-                continue
-            all_active_reached_same_step = np.all(np.logical_or(~act, reached_this_step[e]))
-            if all_active_reached_same_step:
-                self._env_team_simul_flag[e] = True
 
         return True
 
@@ -257,39 +273,41 @@ class StepStatsCallback(BaseCallback):
         if self._agent_steps <= 0:
             return
 
-        denom_all_drones = max(1, self.total_drone_count)
-        denom_agent_steps = max(1, self._agent_steps)
+        denom_all_drones_count = max(1, self.total_drone_count)
+        denom_drones_steps = max(1, self._agent_steps)
         denom_env_steps = max(1, self._env_steps)
-        denom_dist_samples = max(1, self._dist_samples)
-        mean_dist_to_target = self._dist_to_target_sum / denom_dist_samples
-        mean_cmd_speed = self._cmd_speed_sum / denom_dist_samples
-        mean_actual_speed = self._actual_speed_sum / denom_dist_samples
 
         reaches_ever = len(self._reached_ever)
         reaches_now = len(self._reached_now)
 
-        collision_step_rate = self._collision_now_count / denom_agent_steps
-        wall_collision_step_rate = self._wall_collision_now_count / denom_agent_steps
-        obstacle_collision_step_rate = self._obstacle_collision_now_count / denom_agent_steps
-        drone_collision_step_rate = self._drone_collision_now_count / denom_agent_steps
+        # out of all drone decisions taken, how many of them resulted in a collision right now
+        collision_step_rate = self._collision_now_count / denom_drones_steps
+        wall_collision_step_rate = self._wall_collision_now_count / denom_drones_steps
+        obstacle_collision_step_rate = self._obstacle_collision_now_count / denom_drones_steps
+        drone_collision_step_rate = self._drone_collision_now_count / denom_drones_steps
+
+        mean_dist_to_target = self._dist_to_target_sum / denom_drones_steps
+        mean_cmd_speed = self._cmd_speed_sum / denom_drones_steps
+        mean_actual_speed = self._actual_speed_sum / denom_drones_steps
 
         team_any = 0
         team_all = 0
-        team_simultaneous = 0
 
         for e in range(self.num_envs):
             reached_anytime = self._env_drone_reached_anytime[e]
-            team_any += int(np.any(reached_anytime))
-            team_all += int(np.all(reached_anytime))
+            team_any += int(np.any(reached_anytime)) # if any drone reached in that env e
+            team_all += int(np.all(reached_anytime)) # if all drones reached in that env e
 
         # ---- scalar logs ----
         self.logger.record("stats/reaches_ever_count", float(reaches_ever))
         self.logger.record("stats/reaches_now_count", float(reaches_now))
-        self.logger.record("stats/reaches_denom", float(denom_all_drones))
-        self.logger.record("stats/reach_rate", float(reaches_ever) / float(denom_all_drones))
+        self.logger.record("stats/reach_rate", float(reaches_ever) / float(denom_all_drones_count))
 
         self.logger.record("stats/team_reach_any_count", float(team_any))
         self.logger.record("stats/team_reach_all_count", float(team_all))
+
+        self.logger.record("stats/episode_ended_collisions", self.episode_done_collision)
+        self.logger.record("stats/episode_ended_all_reached", self.episode_done_all_reached)
 
         self.logger.record("stats/collision_step_rate", float(collision_step_rate))
         self.logger.record("stats/wall_collision_step_rate", float(wall_collision_step_rate))
@@ -301,8 +319,8 @@ class StepStatsCallback(BaseCallback):
         self.logger.record("stats/obstacle_collision_ever_count", float(self._obstacle_collision_ever_count))
         self.logger.record("stats/drone_collision_ever_count", float(self._drone_collision_ever_count))
 
-        self.logger.record("stats/swarm_too_close_rate", float(self._swarm_too_close_steps) / float(denom_agent_steps))
-        self.logger.record("stats/swarm_too_far_rate", float(self._swarm_too_far_steps) / float(denom_agent_steps))
+        self.logger.record("stats/swarm_too_close_rate", float(self._swarm_too_close_steps) / float(denom_drones_steps))
+        self.logger.record("stats/swarm_too_far_rate", float(self._swarm_too_far_steps) / float(denom_drones_steps))
 
         self.logger.record("debug/mean_dist_to_target", float(mean_dist_to_target))
         self.logger.record("debug/mean_cmd_speed", float(mean_cmd_speed))
@@ -321,12 +339,14 @@ class StepStatsCallback(BaseCallback):
             si = self.stage_info
             total = max(1, si.total_planned_timesteps)
 
+            num_total_obstacles = float(si.num_dynamic_obstacles) + float(si.num_static_obstacles)
+
             self.logger.record("curriculum/stage_idx", float(si.stage_idx))
             self.logger.record("curriculum/world_scale", float(si.world_scale))
             self.logger.record("curriculum/num_drones", float(si.num_drones))
             self.logger.record("curriculum/num_static_obstacles", float(si.num_static_obstacles))
             self.logger.record("curriculum/num_dynamic_obstacles", float(si.num_dynamic_obstacles))
-            self.logger.record("curriculum/num_obstacles", float(self.stage_info.num_total_obstacles)) # TODO FIX - done?
+            self.logger.record("curriculum/num_obstacles", num_total_obstacles)
             self.logger.record("curriculum/stage_timesteps", float(si.stage_timesteps))
             self.logger.record("curriculum/progress_frac", float(self.num_timesteps) / float(total))
 
@@ -352,10 +372,9 @@ class StepStatsCallback(BaseCallback):
             print(
                 prefix
                 + "[Stats] "
-                + f"reached={reaches_ever}/{denom_all_drones} "
+                + f"reached={reaches_ever}/{denom_all_drones_count} "
                 + f"team_any_reached={team_any} "
                 + f"team_all_reached={team_all} "
-                + f"team_simultaneous={team_simultaneous} "
                 + f"collision_rate={collision_step_rate:.4f} "
                 + f"wall_collision_rate={wall_collision_step_rate:.4f} "
                 + f"obs_collision_rate={obstacle_collision_step_rate:.4f} "
@@ -373,7 +392,7 @@ class StepStatsCallback(BaseCallback):
         if steps_in_stage < self.min_stage_timesteps:
             return
 
-        reach_rate = float(reaches_ever) / float(denom_all_drones)
+        reach_rate = float(reaches_ever) / float(denom_all_drones_count)
         meets_reach = reach_rate >= self.reach_threshold
         meets_collision = collision_step_rate <= self.max_collision_rate
 
@@ -398,6 +417,7 @@ class StepStatsCallback(BaseCallback):
                     f"[StageEarlyStop] triggered at num_timesteps={self.num_timesteps} "
                     f"(stage_steps={steps_in_stage})"
                 )
+
             # self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
             # self.model.env.reset()  # optional: clean reset
             # TODO FIGURE OUT IF ABOVE TWO LINES ARE STILL NEEDED
