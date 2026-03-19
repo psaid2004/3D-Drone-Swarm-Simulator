@@ -69,10 +69,10 @@ COLLISION_DIST = 0.0
 # Reward - per-step shaping
 # =============================================================================
 PROG_COEF = 4.5 # reward coefficient for progressing closer to goal
-TIME_PEN = 0.005#0.05 # small time penalty each step (until drone reaches or collides)
-CNTRL_PEN = 0.01 # penalty coefficient for large / aggressive actions (prevents jittering)
+TIME_PEN = 0.05#0.05 # small time penalty each step (until drone reaches or collides)
+CNTRL_PEN = 0.001 # penalty coefficient for large / aggressive actions (prevents jittering)
 NEAR_OBS_PEN = 0.6 # penalty for being too close to an obstacle
-DIST_PEN = 0.05 #0.15 # penalty coefficient for staying far from target (prevents drone not moving)
+DIST_PEN = 0.15 #0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 
 # =============================================================================
 # Reward - swarm shaping
