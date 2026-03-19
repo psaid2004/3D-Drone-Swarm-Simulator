@@ -222,8 +222,7 @@ class DroneSwarm3D(ParallelEnv):
             dtype=np.float32,
         )
 
-        self.action_spaces = {agent: self._action_space for agent in self.possible_agents}
-        self.observation_spaces = {agent: self._obs_space for agent in self.possible_agents}
+
 
         if self.lidar:
             self._lidar_dirs_body = self._precompute_lidar_dirs_body()
@@ -398,16 +397,6 @@ class DroneSwarm3D(ParallelEnv):
             self._env.close()
         except Exception:
             pass
-
-        # make sure spawn_positions is valid before rebuilding
-        if not isinstance(self.spawn_positions, np.ndarray) or self.spawn_positions.shape != (self.total_num_drones, 3):
-            self.spawn_positions = np.empty((0, 3), dtype=np.float32)
-            self.drones_in_swarm = {}
-
-            for i in range(self.num_swarms):
-                edge, center, drones = self.generate_drone_swarm_spawn()
-                self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
-                self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
@@ -1395,7 +1384,6 @@ class DroneSwarm3D(ParallelEnv):
         self.restore_drone_visuals_and_collisions()
 
         self.drones_in_swarm = {}
-        # If you want to change the spwan positions with reset uncomment below (might not be working fully)
         for i in range(self.num_swarms):
             edge, center, drones = self.generate_drone_swarm_spawn()
             self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
