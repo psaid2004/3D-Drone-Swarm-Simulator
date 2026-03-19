@@ -83,8 +83,8 @@ class EnvGUITester:
                 episode_rewards[d] += r
 
             # Print diagnostics every 50 steps
-            if step % 50 == 0:
-                self._print_step(step, obs_dict, reward_dict, info_dict)
+            # if step % 50 == 0:
+            self._print_step(step, obs_dict, reward_dict, info_dict)
 
             step_count += 1
 
@@ -145,11 +145,11 @@ class EnvGUITester:
 # ------------------------------------------------------------------
 if __name__ == "__main__":
     tester = EnvGUITester(
-        world_scale=2.0,
-        num_drones=1,
+        world_scale=4.0,
+        num_drones=2,
         num_static_obstacles=3,
-        num_dynamic_obstacles=0,
-        max_steps=200000,
+        num_dynamic_obstacles=2,
+        max_steps=400000,
         n_episodes=10,
     )
     tester.run()

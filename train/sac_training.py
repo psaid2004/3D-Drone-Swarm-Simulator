@@ -69,6 +69,7 @@ def create_env(
         num_static_obstacles: int,
         num_dynamic_obstacles: int,
         max_episode_steps: int,
+        render_mode = None
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -78,6 +79,7 @@ def create_env(
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
+        render_mode=render_mode,
     )
 
     # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on
@@ -240,14 +242,17 @@ def train(device: str = "auto"):
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
     )
 
+    print("making first stage")
     # create the training environment
     train_env = create_env(
         world_scale=ws0,
         num_drones=nd0,
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
-        max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS? SAME BELOW
+        max_episode_steps=steps0,
+        render_mode = "human",      # TODO IS THIS CONSIDERED THE MAX STEPS? SAME BELOW
     )
+    print("end making first stage")
 
     # create an evaluation environment
     eval_env = create_env(
@@ -275,8 +280,8 @@ def train(device: str = "auto"):
         device=device_,
     ) # TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
 
-    # --- train stage 0 first ---
 
+    # --- train stage 0 first ---
 
     callbacks = make_stage_callbacks(
         stage_idx=0,
