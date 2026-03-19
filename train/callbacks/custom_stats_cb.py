@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from stable_baselines3.common.callbacks import BaseCallback
 
-PRINT_EVERY = 5_000
+PRINT_EVERY = 200
 
 
 @dataclass
@@ -32,7 +32,6 @@ class StepStatsCallback(BaseCallback):
         active: bool
         reached: bool
         reached_now: bool
-        just_reached: bool
         collided: bool
         collision_now: bool
         wall_collision: bool
@@ -131,8 +130,6 @@ class StepStatsCallback(BaseCallback):
 
         # did drone every reach target
         self._env_drone_reached_anytime = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
-        # did swarm succeed simultaneously
-        self._env_team_simul_flag = np.zeros((self.num_envs,), dtype=np.bool_)
 
         self._swarm_too_close_steps = 0
         self._swarm_too_far_steps = 0
@@ -284,7 +281,6 @@ class StepStatsCallback(BaseCallback):
             reached_anytime = self._env_drone_reached_anytime[e]
             team_any += int(np.any(reached_anytime))
             team_all += int(np.all(reached_anytime))
-            team_simultaneous += int(self._env_team_simul_flag[e])
 
         # ---- scalar logs ----
         self.logger.record("stats/reaches_ever_count", float(reaches_ever))
@@ -294,7 +290,6 @@ class StepStatsCallback(BaseCallback):
 
         self.logger.record("stats/team_reach_any_count", float(team_any))
         self.logger.record("stats/team_reach_all_count", float(team_all))
-        self.logger.record("stats/team_reach_simultaneous_count", float(team_simultaneous))
 
         self.logger.record("stats/collision_step_rate", float(collision_step_rate))
         self.logger.record("stats/wall_collision_step_rate", float(wall_collision_step_rate))

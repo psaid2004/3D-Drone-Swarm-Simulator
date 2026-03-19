@@ -41,7 +41,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             continue
 
         # one-time goal reached reward
-        if step_state.just_reached[i]:
+        if step_state.reached_now[i]:
             reward_dict[agent] = float(GOAL_BONUS)
             continue
 
