@@ -750,12 +750,12 @@ class DroneSwarm3D(ParallelEnv):
         x,y,z = float(pos[0]), float(pos[1]), float(pos[2])
 
         return (
-            x <= -self.world_scale
-            or x >= self.world_scale
-            or y <= -self.world_scale
-            or y >= self.world_scale
-            or z <= 0.0
-            or z >= self.world_scale
+            x <= -self.world_scale + 0.2
+            or x >= self.world_scale - 0.2
+            or y <= -self.world_scale + 0.1
+            or y >= self.world_scale + 0.1
+            or z <= 0.0 + 0.1
+            or z >= self.world_scale - 0.1
         )
 
 

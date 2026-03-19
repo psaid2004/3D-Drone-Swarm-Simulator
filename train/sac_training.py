@@ -78,6 +78,7 @@ def create_env(
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
+        render_mode="human",
     )
 
     # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on

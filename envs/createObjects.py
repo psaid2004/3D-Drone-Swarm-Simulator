@@ -152,6 +152,7 @@ class EnvObject:
     
     # Check if obstacle is too close to drones or the targets
     def isValidPosition(self, dronePositions, targets, min_dist):
+        # Check if too close to drones
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
             return False
 
@@ -163,6 +164,7 @@ class EnvObject:
                 pass
 
         targets_pos = np.array(targets_pos, dtype=np.float32)
+        # Check if too close to target
         if len(targets_pos) > 0:
             if np.any(np.linalg.norm(targets_pos - self.start_pos, axis=-1) < min_dist):
                 return False
