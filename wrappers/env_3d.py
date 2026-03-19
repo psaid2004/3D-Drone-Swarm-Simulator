@@ -92,8 +92,6 @@ class DroneSwarm3D(ParallelEnv):
         # Spawn position of every drone
         self.spawn_positions = np.empty((0,3))
 
-
-
         # Dict with swarm: [position of drone]
         self.drones_in_swarm ={}
 
@@ -181,7 +179,7 @@ class DroneSwarm3D(ParallelEnv):
             user_debug_gui=False,
         )
 
-        self._env.SPEED_LIMIT = 2.0 # m/s
+        self._env.SPEED_LIMIT = 5.0 # m/s
 
         self._p = None
         self._client_id = None
@@ -1371,12 +1369,12 @@ class DroneSwarm3D(ParallelEnv):
         self._step_count = 0
         self.agents = self.possible_agents[:]
 
-        # remove episode-specific GUI/custom bodies from previous episode
-        self.clear_episode_artifacts()
-
         # if underlying VelocityAviary client is disconnected, rebuild it
         if not self._pybullet_client_alive():
             self._rebuild_aviary()
+
+        # remove episode-specific GUI/custom bodies from previous episode
+        self.clear_episode_artifacts()
 
         self._env.reset()
 
