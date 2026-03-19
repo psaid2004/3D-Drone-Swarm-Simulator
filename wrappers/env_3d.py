@@ -62,7 +62,7 @@ class DroneSwarm3D(ParallelEnv):
         self._init_agents()
         self._init_episode_state()
         self._init_simulator()
-        self._init_query_world()
+        # self._init_query_world()
         self._init_spaces()
         self._init_logging()
 
@@ -567,7 +567,7 @@ class DroneSwarm3D(ParallelEnv):
             axis = self.rng.choice([0, 1, 2])
             shape = self.rng.choice(SUPPORTED_SHAPES)
             self._spawn_dynamic_obstacles(max_attempts, shape, axis)
-            self._rebuild_query_world_from_current_scene()
+            # self._rebuild_query_world_from_current_scene()
 
         for _ in range(self.num_static_obstacles):
             shape = self.rng.choice(SUPPORTED_SHAPES)
@@ -633,8 +633,9 @@ class DroneSwarm3D(ParallelEnv):
             
             obj = Dynamic(axis,min_pos,max_pos,speed,direction,candidate, size, ori)
             obj.set_shape_spec(shape)
-            if self.candidate_collides_over_time(obj,horizon_steps=self.max_steps, dt=1.0/60.0):
-                continue
+            #BRING THIS BACK LATER
+            # if self.candidate_collides_over_time(obj,horizon_steps=self.max_steps, dt=1.0/60.0):
+            #     continue
             
             body = obj.create(shape, physics_call= self._call_physics)
 
@@ -707,9 +708,9 @@ class DroneSwarm3D(ParallelEnv):
     
     def _rebuild_query_world_from_current_scene(self):
         self._qworld.clear()
-        print("IM RESETING")  
+        print("IM RESETING")
         print(len(self._obstacles))
-              
+
         for obs in self._obstacles:
             if isinstance(obs, Dynamic):
                 self._qworld.add_dynamic_object(id(obs), obs)
@@ -1409,7 +1410,7 @@ class DroneSwarm3D(ParallelEnv):
 
         # refresh episode content
         self._targets = self._make_targets()
-        self._rebuild_query_world_from_current_scene()
+        # self._rebuild_query_world_from_current_scene()
         self._spawn_obstacles()
         self._spawn_walls()
 
