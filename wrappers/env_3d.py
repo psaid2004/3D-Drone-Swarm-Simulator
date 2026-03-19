@@ -170,6 +170,7 @@ class DroneSwarm3D(ParallelEnv):
 
             self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
+
         # --- Pybullet env ---
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
@@ -1372,11 +1373,12 @@ class DroneSwarm3D(ParallelEnv):
         self.agents = self.possible_agents[:]
 
         # remove episode-specific GUI/custom bodies from previous episode
-        self.clear_episode_artifacts()
 
         # if underlying VelocityAviary client is disconnected, rebuild it
         if not self._pybullet_client_alive():
             self._rebuild_aviary()
+
+        self.clear_episode_artifacts()
 
         self._env.reset()
 
