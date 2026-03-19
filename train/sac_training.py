@@ -27,8 +27,7 @@ from config.curriculum import Curriculum
 from config.defaults import *
 from config.sac_defaults import *
 
-#from callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
-from .callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
+from train.callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.env_3d import DroneSwarm3D
 from wrappers.env_reset_fix import SB3VecResetTupleFix
 

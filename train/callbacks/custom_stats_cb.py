@@ -201,8 +201,6 @@ class StepStatsCallback(BaseCallback):
             self._actual_speed_sum += actual_speed
             self._dist_samples += 1
 
-
-
             if active:
                 active_this_step[env_i, drone_i] = True
 
