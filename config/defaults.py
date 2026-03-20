@@ -57,7 +57,7 @@ LIDAR_VERTICAL_FOV_DEG = 30.0  # ±22.5° up/down
 LIDAR_HORIZONTAL_FOV_DEG = 180.0  # full circle
 LIDAR_NOISE_STD = 0.0
 LIDAR_SHOW_RAYS_TRAIN = False
-LIDAR_SHOW_RAYS_TEST = True
+LIDAR_SHOW_RAYS_TEST = False
 
 # =============================================================================
 # Collision

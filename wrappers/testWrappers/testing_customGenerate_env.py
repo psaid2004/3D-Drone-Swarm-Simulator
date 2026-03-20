@@ -83,17 +83,17 @@ def get_ml_test_scenarios() -> dict[str, callable]:
 
 def main():
     # --- create environment ----
-    n_drones = 5
+    n_drones = 1
     n_steps = 8000
 
     pz_env = DroneSwarm3D(
-        world_scale = 3.0,
+        world_scale = 5.0,
         num_drones_per_swarm=n_drones,
-        num_static_obstacles = 3,
-        num_dynamic_obstacles = 6,
+        num_static_obstacles = 0,
+        num_dynamic_obstacles = 0,
         max_steps=n_steps,
         num_swarms=1,
-        lidar=False,
+        lidar=True,
         render_mode="human")
 
     # --- Uncomment to load scenarios ---
@@ -109,11 +109,11 @@ def main():
 
 
     print("Initial observations:")
-    for drone, obs in obs_dict.items():
-        print(drone, obs[:6])  # pos + vel
+    # for drone, obs in obs_dict.items():
+    #     print(drone, obs[:6])  # pos + vel
     print("Targets:", [info[drone].get("reached") for drone in obs_dict])
 
-    print(n_steps)
+    # print(n_steps)
     for step in range(n_steps):
         action_dict = {}
         for drone, obs in obs_dict.items():
@@ -151,10 +151,28 @@ def main():
                     f"wall={wall} obs={obs} drone={drone}"
                 )
 
-        print(len(pz_env._obstacles))
+        # print(len(pz_env._obstacles))
         # Stop if all done
         if all(term_dict.values()):
             print(f"Episode ended at step {step}")
+            pos = obs_dict[d][:3]
+            r = reward_dict[d]
+
+            collided = info_dict[d]["collided"]
+            reached = info_dict[d].get("reached", False)
+
+            wall = info_dict[d].get("wall_collision", False)
+            obs = info_dict[d].get("obstacle_collision", False)
+            drone = info_dict[d].get("drone_collision", False)
+
+            print(
+                f"{d:8s} | "
+                f"pos=({pos[0]:6.2f},{pos[1]:6.2f},{pos[2]:6.2f}) | "
+                f"reward={r:7.2f} | "
+                f"collided={str(collided):5s} | "
+                f"reached={str(reached):5s} | "
+                f"wall={wall} obs={obs} drone={drone}"
+            )
             break
 
         pz_env.render()
