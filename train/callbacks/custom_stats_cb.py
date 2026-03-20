@@ -213,9 +213,8 @@ class StepStatsCallback(BaseCallback):
             cmd_speed = float(info.get("cmd_speed", 0.0))
             actual_speed = float(info.get("actual_speed", 0.0))
 
-            episode_done_collision = bool(info.get("episode_done_collision", False))
-            episode_done_all_reached = bool(info.get("episode_done_all_reached", False))
-
+            self.episode_done_collision = bool(info.get("episode_done_collision", False))
+            self.episode_done_all_reached = bool(info.get("episode_done_all_reached", False))
 
             self._agent_steps += 1
 
