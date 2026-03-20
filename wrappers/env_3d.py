@@ -484,7 +484,7 @@ class DroneSwarm3D(ParallelEnv):
 
         positions = [
             ("z_pos_wall", [0, 0, s]),  # ceiling
-            ("z_pos_wall", [0, 0, 0]),  # floor
+            ("z_pos_wall", [0, 0, -s]),  # floor
             ("x_pos_wall", [s, 0, 0]),  # front
             ("x_pos_wall", [-s, 0, 0]),  # back
             ("y_pos_wall", [0, s, 0]),  # right
