@@ -4,8 +4,6 @@ from wrappers.env_3d import DroneSwarm3D
 from config.defaults import LIDAR_NUM_RAYS, LIDAR_NUM_LAYERS
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
 def safe_unit(v: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     """Normalise a vector; return zero-vector if it's near-zero."""
     n = np.linalg.norm(v)
@@ -18,9 +16,6 @@ def clamp_norm(v: np.ndarray, max_norm: float = 1.0, eps: float = 1e-8) -> np.nd
     if n <= max_norm:
         return v
     return v / (n + eps) * max_norm
-
-
-# ── Expert Policy ─────────────────────────────────────────────────────────────
 
 class ExpertPolicy:
     """
