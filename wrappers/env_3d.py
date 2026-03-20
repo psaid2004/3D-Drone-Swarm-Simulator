@@ -1109,7 +1109,7 @@ class DroneSwarm3D(ParallelEnv):
                 except Exception:
                     pass
 
-        # drone vs obstacle
+        # drone vs obstacle.
         if len(self._obstacles) >0:
             for i, did in enumerate(active_ids):
                 if self._dead[i] or self._reached_once[i] or self._despawned[i]:
