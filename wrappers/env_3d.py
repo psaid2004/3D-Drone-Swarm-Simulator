@@ -753,7 +753,7 @@ class DroneSwarm3D(ParallelEnv):
             or x >= self.world_scale
             or y <= -self.world_scale
             or y >= self.world_scale
-            or z <= 0.0
+            or z <= 0.1
             or z >= self.world_scale
         )
 
