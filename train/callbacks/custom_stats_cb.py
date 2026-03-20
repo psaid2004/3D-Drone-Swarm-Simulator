@@ -8,7 +8,6 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 PRINT_EVERY = 200
 
-
 @dataclass
 class CurriculumStageInfo:
     stage_idx: int
