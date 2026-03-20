@@ -115,14 +115,12 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
             reached_now[i] = True
             env._reached_once[i] = True
 
-    # determine which drones just reached the target in this step
-    just_reached = np.logical_and(reached_now, np.logical_not(was_reached))
-
     # obtain active drone positions for ongoing swarm logic
     active_idx = env.active_drone_indices()
     positions = env.active_drone_positions()
 
     all_collided = bool(np.all(env._dead[:env.total_num_drones]))
+    all_reached = bool(np.all(env._reached_once[:env.total_num_drones]))
 
     max_sep, min_sep, too_far, too_close = env._pairwise_sep_stats(positions)
 
@@ -137,7 +135,7 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
     no_active_drones_left = len(active_idx) == 0
 
     # episode ends if all collided or no more active drones present (episode is truncated below if time limit is reached)
-    episode_done = bool(all_collided or no_active_drones_left)
+    episode_done = bool(all_collided or all_reached)
 
     return StepState(
         time_limit=time_limit,
@@ -146,13 +144,13 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
         obstacle_collisions=obstacle_collisions,
         drone_collisions=drone_collisions,
         all_collided=all_collided,
+        all_reached =all_reached,
         positions=positions,
         max_sep=float(max_sep),
         min_sep=float(min_sep),
         too_far=bool(too_far),
         too_close=bool(too_close),
         reached_now=reached_now,
-        just_reached=just_reached,
         no_active_drones_left=bool(no_active_drones_left),
         episode_done=episode_done,
         cohesion_pen=float(cohesion_pen),
@@ -172,7 +170,7 @@ def compute_terminations(env, step_state) -> Tuple[dict, dict]:
             continue
 
         term_dict[agent] = bool(
-            env._dead[i] or env._reached_once[i] or env._despawned[i] or step_state.episode_done
+            env._dead[i] or env._reached_once[i] or step_state.episode_done
         )
         trunc_dict[agent] = bool(step_state.time_limit)
 
@@ -201,7 +199,7 @@ def build_info_dict(env, step_state) -> dict:
                 "swarm_too_far": bool(step_state.too_far),
                 "swarm_too_close": bool(step_state.too_close),
                 "episode_done_collision": False,
-                "episode_done_all_reached": bool(step_state.no_active_drones_left),
+                "episode_done_all_reached": bool(step_state.all_reached),
             }
             continue
 
@@ -214,9 +212,11 @@ def build_info_dict(env, step_state) -> dict:
 
         cmd_speed = float(env._last_sim_actions[i][3]) if hasattr(env, "_last_sim_actions") else 0.0
 
+        is_active = bool(not (env._dead[i] or env._reached_once[i] or env._despawned[i]))
+
         info_dict[agent] = {
             "step": int(env._step_count),
-            "active": True,
+            "active": is_active,
             "collided": bool(env._dead[i]),
             "wall_collision": bool(env._wall_collision_once[i]),
             "obstacle_collision": bool(env._obstacle_collision_once[i]),
@@ -227,7 +227,6 @@ def build_info_dict(env, step_state) -> dict:
             "drone_collision_now": bool(step_state.drone_collisions[i]),
             "reached": bool(env._reached_once[i]),
             "reached_now": bool(step_state.reached_now[i]),
-            "just_reached": bool(step_state.just_reached[i]),
             "dist_to_target": dist_to_target,
             "cmd_speed": cmd_speed,
             "actual_speed": actual_speed,
@@ -236,7 +235,7 @@ def build_info_dict(env, step_state) -> dict:
             "swarm_too_far": bool(step_state.too_far),
             "swarm_too_close": bool(step_state.too_close),
             "episode_done_collision": bool(step_state.collisions[i]),
-            "episode_done_all_reached": bool(step_state.no_active_drones_left),
+            "episode_done_all_reached": bool(step_state.all_reached),
         }
 
     return info_dict

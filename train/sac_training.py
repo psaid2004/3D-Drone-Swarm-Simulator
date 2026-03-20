@@ -69,6 +69,7 @@ def create_env(
         num_static_obstacles: int,
         num_dynamic_obstacles: int,
         max_episode_steps: int,
+        render_mode = None
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -78,7 +79,7 @@ def create_env(
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
-        render_mode="human",
+        render_mode=render_mode,
     )
 
     # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on
@@ -182,7 +183,7 @@ def make_stage_callbacks(
         num_drones=int(num_drones),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
-        print_every=5000,
+        # print_every=5000,
         enable_stage_early_stop=True,
         reach_threshold=0.85,
         max_collision_rate=0.05,
@@ -248,6 +249,7 @@ def train(device: str = "auto"):
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
         max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS? SAME BELOW
+        render_mode = "human"
     )
 
     # create an evaluation environment
