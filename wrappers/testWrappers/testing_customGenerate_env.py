@@ -83,7 +83,7 @@ def get_ml_test_scenarios() -> dict[str, callable]:
 
 def main():
     # --- create environment ----
-    n_drones = 5
+    n_drones = 1
     n_steps = 8000
 
     pz_env = DroneSwarm3D(
@@ -93,7 +93,7 @@ def main():
         num_dynamic_obstacles = 6,
         max_steps=n_steps,
         num_swarms=1,
-        lidar=False,
+        lidar=True,
         render_mode="human")
 
     # --- Uncomment to load scenarios ---
@@ -151,7 +151,7 @@ def main():
                     f"wall={wall} obs={obs} drone={drone}"
                 )
 
-        print(len(pz_env._obstacles))
+        # print(len(pz_env._obstacles))
         # Stop if all done
         if all(term_dict.values()):
             print(f"Episode ended at step {step}")

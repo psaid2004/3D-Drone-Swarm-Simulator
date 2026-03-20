@@ -382,7 +382,7 @@ class DroneSwarm3D(ParallelEnv):
             record=False,
             user_debug_gui=False,
         )
-        self._env.SPEED_LIMIT = 2.0
+        self._env.SPEED_LIMIT = 5.0
 
         self._obstacles = []
         self._lidar_line_ids = {}
@@ -749,12 +749,12 @@ class DroneSwarm3D(ParallelEnv):
         x,y,z = float(pos[0]), float(pos[1]), float(pos[2])
 
         return (
-            x <= -self.world_scale + 0.2
-            or x >= self.world_scale - 0.2
-            or y <= -self.world_scale + 0.1
-            or y >= self.world_scale - 0.1
-            or z <= 0.1
-            or z >= self.world_scale - 0.1
+            x <= -self.world_scale
+            or x >= self.world_scale
+            or y <= -self.world_scale
+            or y >= self.world_scale
+            or z <= 0.0
+            or z >= self.world_scale
         )
 
 
@@ -1238,27 +1238,30 @@ class DroneSwarm3D(ParallelEnv):
         )
 
 
-    def _lidar_scan(self, drone_idx: int, pos: np.ndarray) -> np.ndarray:
+    def _lidar_scan(self, drone_idx: int, pos_unused: np.ndarray) -> np.ndarray:
 
         if (not self.lidar) or (self._p is None) or (self._lidar_dim <= 0):
             return np.zeros((0,), dtype=np.float32)
 
         p = self._p
-        R = np.eye(3, dtype=np.float32)
 
         did = self._drone_ids[drone_idx] if (0 <= drone_idx < len(self._drone_ids)) else None
-        if did is not None:
-            try:
-                _, orn = self._call_physics(p.getBasePositionAndOrientation, did)
-                R = self._rotmat_from_quat(np.array(orn, dtype=np.float32))
-            except Exception:
-                pass
+        if did is None:
+            return np.ones((self._lidar_dim,), dtype=np.float32)
 
-        origin = pos.astype(np.float32).copy()
-        origin[2] += 0.03
+        try:
+            base_pos, orn = self._call_physics(p.getBasePositionAndOrientation, did)
+            origin = np.array(base_pos, dtype=np.float32)
+            R = self._rotmat_from_quat(np.array(orn, dtype=np.float32))
+        except Exception:
+            return np.ones((self._lidar_dim,), dtype=np.float32)
 
         dirs_world = (R @ self._lidar_dirs_body.T).T
-        ray_from = np.repeat(origin[None, :], dirs_world.shape[0], axis=0)
+        dirs_world = dirs_world.astype(np.float32)
+
+        # move ray start slightly outside the drone body along each ray direction
+        LIDAR_START_OFFSET = 0.15
+        ray_from = origin[None, :] + dirs_world * LIDAR_START_OFFSET
         ray_to = ray_from + dirs_world * LIDAR_RANGE
 
         try:
@@ -1275,23 +1278,28 @@ class DroneSwarm3D(ParallelEnv):
 
         for i, r in enumerate(results):
             try:
+                hit_body = int(r[0])
                 hf = float(r[2])
-                hit_frac[i] = np.clip(hf, 0.0, 1.0)
                 hp = r[3]
-                hit_pos[i] = np.array(hp, dtype=np.float32)
+
+                # ignore self-hit if it still happens
+                if hit_body == did:
+                    hit_frac[i] = 1.0
+                    hit_pos[i] = ray_to[i]
+                else:
+                    hit_frac[i] = np.clip(hf, 0.0, 1.0)
+                    hit_pos[i] = np.array(hp, dtype=np.float32)
             except Exception:
                 pass
 
         if LIDAR_NOISE_STD > 0.0:
             hit_frac = np.clip(
-                hit_frac + self.rng.normal(0.0, LIDAR_NOISE_STD, size=hit_frac.shape).astype(
-                    np.float32),
+                hit_frac + self.rng.normal(0.0, LIDAR_NOISE_STD, size=hit_frac.shape).astype(np.float32),
                 0.0,
                 1.0,
             )
 
-        # GUI debug drawing
-        if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST:
+        if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
             old = self._lidar_line_ids.get(drone_idx, [])
             for lid in old:
                 self._call_gui(p.removeUserDebugItem, lid)
@@ -1376,14 +1384,6 @@ class DroneSwarm3D(ParallelEnv):
             step_state,
             self.active_drone_mask()
         )
-
-        # TODO REMOVE AFTER DEBUGGING
-        #if (
-        #        self._step_count % 50 == 0
-        #        or any(info.get("collision_now", False) for info in info_dict.values())
-        #):
-        #    self._debug_print_step(obs_dict, reward_dict, info_dict, term_dict, trunc_dict)
-
 
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
 

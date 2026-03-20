@@ -51,10 +51,10 @@ SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 # LiDAR
 # =============================================================================
 LIDAR_NUM_RAYS = 24
-LIDAR_NUM_LAYERS = 5
+LIDAR_NUM_LAYERS = 3
 LIDAR_RANGE = 6.0  # meters ahead
-LIDAR_VERTICAL_FOV_DEG = 45.0  # ±22.5° up/down
-LIDAR_HORIZONTAL_FOV_DEG = 360.0  # full circle
+LIDAR_VERTICAL_FOV_DEG = 30.0  # ±22.5° up/down # TODO CHANGED FROM 45
+LIDAR_HORIZONTAL_FOV_DEG = 180.0  # full circle # TODO I CHANGED THIS FROM 360 BECAUSE DRONE DOES NOT NECESSARILY NEED TO SEE BEHIND IT
 LIDAR_NOISE_STD = 0.0
 LIDAR_SHOW_RAYS_TRAIN = False
 LIDAR_SHOW_RAYS_TEST = True
@@ -71,7 +71,9 @@ COLLISION_DIST = 0.0
 PROG_COEF = 4.5 # reward coefficient for progressing closer to goal
 TIME_PEN = 0.05#0.05 # small time penalty each step (until drone reaches or collides)
 CNTRL_PEN = 0.001 # penalty coefficient for large / aggressive actions (prevents jittering)
-NEAR_OBS_PEN = 0.6 # penalty for being too close to an obstacle
+NEAR_OBS_PEN = 0.6
+NEAR_FRONT_OBS_PEN = 0.6 # penalty for being too close to an obstacle in front of drone
+NEAR_SIDE_OBS_PEN = 0.35 # penalty for being too close to an obstacle on side of drone
 DIST_PEN = 0.15 #0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 
 # =============================================================================
