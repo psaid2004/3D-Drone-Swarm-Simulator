@@ -89,7 +89,7 @@ WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
 OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
 DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
 ZERO_SPEED_PEN = 1.0 # penalty for drone not moving
-GOAL_BONUS = 300#150 # one-time bonus for reaching the goal
+GOAL_BONUS = 300 #150 # one-time bonus for reaching the goal
 
 # =============================================================================
 # Avoid division by zero
