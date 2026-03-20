@@ -20,6 +20,9 @@ from config.defaults import (
     ZERO_SPEED_PEN,
     LIDAR_NUM_LAYERS,
     LIDAR_NUM_RAYS,
+    FINAL_MILE_COEF,
+    FINAL_MILE_R,
+    ALIGN_COEF,
 )
 
 def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[str, float]:
@@ -31,6 +34,8 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         if i >= env.total_num_drones:
             reward_dict[agent] = 0.0
             continue
+
+        # --------------- 1. Terminal one-time outcomes ---------------
 
         # one-time collision penalty
         if step_state.wall_collisions[i]:
@@ -48,10 +53,12 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             reward_dict[agent] = float(GOAL_BONUS)
             continue
 
-        # if drone already inactive, no more updates to rewards
+        # no more updates to rewards for inactive drones
         if env._dead[i] or env._reached_once[i] or env._despawned[i]:
             reward_dict[agent] = 0.0
             continue
+
+        # --------------- 2. Goal geometry ---------------
 
         pos = obs_dict[agent][POS_SLICE]
         target = (
@@ -59,12 +66,13 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             if env._targets is not None
             else np.zeros(3, dtype=np.float32)
         )
-        dist = float(np.linalg.norm(target - pos))
-        prev = float(env._prev_dists[i])
-        env._prev_dists[i] = dist
 
-        # TODO DAVID I ADDED THIS ALIGN REWARD
         to_target_vec = target - pos
+        dist_to_target = float(np.linalg.norm(to_target_vec))
+
+        prev_dist_to_target = float(env._prev_dists[i])
+        env._prev_dists[i] = dist_to_target
+
         to_target_norm = np.linalg.norm(to_target_vec)
 
         if to_target_norm > 1e-6:
@@ -75,26 +83,51 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         else:
             alignment = 0.0
 
-        # +0.5 if moving directly toward target, else - 0.5
-        r_align = 0.5 * alignment
-        # TODO DAVID UP UNTIL HERE
+
+        # --------------- 3. Progress, distance, time, and action cost ---------------
 
         if env._step_count <= 1:
             r_progress = 0.0
         else:
-            r_progress = PROG_COEF * (prev - dist) # reward for change in distance to target
+            r_progress = PROG_COEF * (prev_dist_to_target - dist_to_target) # reward for change in distance to target
 
-        r_distance_pen = -DIST_PEN * dist # penalise not moving to target
+        r_distance_pen = -DIST_PEN * dist_to_target # penalise not moving to target
         r_time = -TIME_PEN # penalise time
         r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i])) # penalise large / aggressive actions
 
-        # TODO THE COMMENTED CODE BELOW IS WHAT WAS HERE AND THEN WHAT FOLLOWS IS MY NEW IMPLEMENTATION OF IT USING LIDAR
-        # if len(env._obstacles) > 0:
-        #     d_obs = float(np.linalg.norm(obs_dict[agent][OBS_SLICE]))
-        #     # inverse-distance obstacle penalty with floor to avoid exploding near zero
-        #     r_near = -NEAR_OBS_PEN / max(d_obs, 0.10)
-        # else:
-        #     r_near = 0.0
+
+        # --------------- 4. Alignment reward ---------------
+
+        # +0.5 if moving directly toward target, else - 0.5
+        r_align = ALIGN_COEF * alignment
+
+        # --------------- 5. Final-mile shaping ---------------
+
+        # Add a small bonus when the drone is within some radius of the goal, increasing smoothly as it gets closer.
+        if dist_to_target < FINAL_MILE_R:
+            r_final = FINAL_MILE_COEF * (1.0 - (dist_to_target / FINAL_MILE_R) ** 2)
+        else:
+            r_final = 0.0
+
+        # --------------- 6. Tangential velocity penalty near goal ---------------
+
+        vel = env._env._getDroneStateVector(i)[10:13]
+        speed = float(np.linalg.norm(vel))
+
+        if to_target_norm > 1e-6 and speed > 1e-6:
+            target_dir = to_target_vec / to_target_norm
+            vel_parallel = np.dot(vel, target_dir) * target_dir
+            vel_tangent = vel - vel_parallel
+            tangential_speed = float(np.linalg.norm(vel_tangent))
+        else:
+            tangential_speed = 0.0
+
+        if dist_to_target < FINAL_MILE_R:
+            r_tan = -0.5 * tangential_speed
+        else:
+            r_tan = 0.0
+
+        # --------------- 7. Obstacle avoidance shaping ---------------
 
         if env.lidar:
             scan = obs_dict[agent][env._base_obs_dim:]
@@ -149,7 +182,8 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         else:
             r_near = 0.0
-        # TODO DAVID UP UNTIL HERE
+
+        # --------------- 8. Combine shaping terms ---------------
 
         r = (
             r_progress
@@ -158,16 +192,20 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             + r_ctrl
             + r_near
             + r_align
+            + r_tan
+            + r_final
             + step_state.cohesion_pen
             + step_state.sep_pen
         )
+
+        # --------------- 9. Extra penalties ---------------
 
         # penalty for if time limit was reached
         if step_state.time_limit:
             r -= TRUNC_PEN
 
-        # penalty for if drone has no speed (is not moving)
-        if sim_actions[i][3] == 0:
+        # penalty for if drone has no / little speed (is not moving)
+        if sim_actions[i][3] < 1e-3:
             r -= ZERO_SPEED_PEN
 
         reward_dict[agent] = float(r)
