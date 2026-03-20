@@ -13,7 +13,6 @@ from config.defaults import (
     DRONE_COLLISION_PEN,
     OBSTACLE_COLLISION_PEN,
     WALL_COLLISION_PEN,
-    SHARED_COLLISION_PEN,
     POS_SLICE,
     OBS_SLICE,
     DIST_PEN,
@@ -71,14 +70,20 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         if to_target_norm > 1e-6:
             target_dir = to_target_vec / to_target_norm
             move_dir = sim_actions[i][0:3]
+            # values between -1 and 1
             alignment = float(np.dot(move_dir, target_dir))
         else:
             alignment = 0.0
 
+        # +0.5 if moving directly toward target, else - 0.5
         r_align = 0.5 * alignment
         # TODO DAVID UP UNTIL HERE
 
-        r_progress = PROG_COEF * (prev - dist) # reward for change in distance to target
+        if env._step_count <= 1:
+            r_progress = 0.0
+        else:
+            r_progress = PROG_COEF * (prev - dist) # reward for change in distance to target
+
         r_distance_pen = -DIST_PEN * dist # penalise not moving to target
         r_time = -TIME_PEN # penalise time
         r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i])) # penalise large / aggressive actions
@@ -130,12 +135,12 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
                 if left_min > 0.7 or right_min > 0.7:
                     r_near += 0.5
 
-            if i == 0 and env._step_count % 10 == 0:
-                print(
-                    f"front={front_min:.3f}, left={left_min:.3f}, right={right_min:.3f}, "
-                    f"front_close={front_closeness:.3f}, side_close={side_closeness:.3f}, "
-                    f"r_near={r_near:.3f}"
-                )
+            # if i == 0 and env._step_count % 10 == 0:
+            #     print(
+            #         f"front={front_min:.3f}, left={left_min:.3f}, right={right_min:.3f}, "
+            #         f"front_close={front_closeness:.3f}, side_close={side_closeness:.3f}, "
+            #         f"r_near={r_near:.3f}"
+            #     )
 
         elif len(env._obstacles) > 0:
             d_obs = float(np.linalg.norm(obs_dict[agent][OBS_SLICE]))
@@ -164,10 +169,6 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         # penalty for if drone has no speed (is not moving)
         if sim_actions[i][3] == 0:
             r -= ZERO_SPEED_PEN
-
-        # small team penalty if any collisions occur
-        if np.any(step_state.collisions):
-            r -= 0.2 * SHARED_COLLISION_PEN
 
         reward_dict[agent] = float(r)
 

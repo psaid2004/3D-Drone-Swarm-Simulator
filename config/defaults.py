@@ -73,7 +73,7 @@ CNTRL_PEN = 0.001 # penalty coefficient for large / aggressive actions (prevents
 NEAR_OBS_PEN = 0.6 # penalty for being too close to an obstacle
 NEAR_FRONT_OBS_PEN = 0.6 # penalty for being too close to an obstacle in front of drone
 NEAR_SIDE_OBS_PEN = 0.35 # penalty for being too close to an obstacle on side of drone
-DIST_PEN = 0.15 #0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
+DIST_PEN = 0.5 #0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
 
 # =============================================================================
 # Reward - swarm shaping
@@ -85,7 +85,6 @@ SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
 # Reward - terminal bonuses / penalties
 # =============================================================================
 TRUNC_PEN = 300.0 # penalty for if episode was truncated
-SHARED_COLLISION_PEN = 30.0 # small group penalty if any collision occurs
 WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
 OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
 DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
