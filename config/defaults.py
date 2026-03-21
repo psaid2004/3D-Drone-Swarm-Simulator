@@ -54,7 +54,7 @@ LIDAR_NUM_RAYS = 24
 LIDAR_NUM_LAYERS = 3
 LIDAR_RANGE = 6.0  # meters ahead
 LIDAR_VERTICAL_FOV_DEG = 30.0  # ±22.5° up/down
-LIDAR_HORIZONTAL_FOV_DEG = 180.0  # full circle
+LIDAR_HORIZONTAL_FOV_DEG = 359.0  # full circle
 LIDAR_NOISE_STD = 0.0
 LIDAR_SHOW_RAYS_TRAIN = False
 LIDAR_SHOW_RAYS_TEST = True
@@ -90,8 +90,8 @@ SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
 WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
 OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
 DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
-GOAL_BONUS = 150 # one-time bonus for reaching the goal
-TRUNC_PEN = 200 # penalty for if episode was truncated
+GOAL_BONUS = 250 # one-time bonus for reaching the goal
+TRUNC_PEN = 100 # penalty for if episode was truncated
 
 # =============================================================================
 # Reward - smoothness coefficients

@@ -79,6 +79,7 @@ def create_env(
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
+        lidar=True,                             #TODO: MAKE IT CONFIGABLE IN DEFAULTS
         render_mode=render_mode,
     )
 
@@ -249,7 +250,7 @@ def train(device: str = "auto"):
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
         max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS? SAME BELOW
-        render_mode = "human"
+        #render_mode = "human"
     )
 
     # create an evaluation environment
@@ -274,7 +275,7 @@ def train(device: str = "auto"):
         gamma=GAMMA,
         ent_coef=ENTROPY_COEF,
         tensorboard_log=f"{MODELS_DIR}/tb_logs",
-        verbose=1,
+        verbose=0,          #prints
         device=device_,
     ) # TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
 

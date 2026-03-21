@@ -13,4 +13,4 @@ ENTROPY_COEF    = "auto"
 NET_ARCH = dict(pi=[512, 256, 128], qf=[512, 256, 128])
 
 # For debugging -> set to 1 environment
-N_ENVS = 1
+N_ENVS = 4

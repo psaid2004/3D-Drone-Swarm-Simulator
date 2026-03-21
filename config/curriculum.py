@@ -19,36 +19,36 @@ class Curriculum:
         self.stages: List[Tuple[float, int, int, int, int]] = [
 
             # ---- SINGLE DRONE ----
-            (5, 1, 0, 0, 200_000),   # Stage 0: one drone, empty world
-            # (5, 1, 3, 0, 400_000),   # Stage 1: static obstacles
-            # (6, 1, 5, 0, 500_000),   # Stage 2: larger world
-            # (7, 1, 8, 0, 600_000),   # Stage 3
-            # (8, 1, 10, 0, 700_000),  # Stage 4
-            #
-            # # introduce dynamic obstacles
-            # (8, 1, 6, 2, 800_000),   # Stage 5
-            # (9, 1, 8, 3, 900_000),   # Stage 6
-            # (10, 1, 10, 4, 1_000_000),  # Stage 7
-            #
-            # # ---- TWO DRONES ----
-            # (6, 2, 0, 0, 300_000),   # Stage 8
-            # (6, 2, 3, 0, 400_000),   # Stage 9
-            # (7, 2, 5, 0, 500_000),   # Stage 10
-            # (8, 2, 6, 1, 600_000),   # Stage 11
-            # (9, 2, 8, 2, 700_000),   # Stage 12
-            # (10, 2, 10, 3, 900_000), # Stage 13
-            #
-            # # ---- FOUR DRONES ----
-            # (7, 4, 0, 0, 400_000),   # Stage 14
-            # (8, 4, 3, 0, 500_000),   # Stage 15
-            # (9, 4, 5, 1, 600_000),   # Stage 16
-            # (10, 4, 7, 2, 800_000),  # Stage 17
-            # (12, 4, 10, 3, 1_000_000), # Stage 18
-            #
-            # # ---- FULL SWARM ----
-            # (10, 8, 6, 2, 1_000_000),  # Stage 19
-            # (12, 8, 8, 3, 1_200_000),  # Stage 20
-            # (14, 8, 10, 4, 1_500_000), # Stage 21
+            (5, 1, 0, 0, 400_000),   # Stage 0: one drone, empty world
+            (5, 1, 3, 0, 600_000),   # Stage 1: static obstacles
+            (6, 1, 5, 0, 700_000),   # Stage 2: larger world
+            (7, 1, 8, 0, 800_000),   # Stage 3
+            (8, 1, 10, 0, 900_000),  # Stage 4
+
+            # introduce dynamic obstacles
+            (8, 1, 6, 2, 900_000),   # Stage 5
+            (9, 1, 8, 3, 900_000),   # Stage 6
+            (10, 1, 10, 4, 1_000_000),  # Stage 7
+
+            # ---- TWO DRONES ----
+            (6, 2, 0, 0, 500_000),   # Stage 8
+            (6, 2, 3, 0, 600_000),   # Stage 9
+            (7, 2, 5, 0, 700_000),   # Stage 10
+            (8, 2, 6, 1, 800_000),   # Stage 11
+            (9, 2, 8, 2, 900_000),   # Stage 12
+            (10, 2, 10, 3, 900_000), # Stage 13
+
+            # ---- FOUR DRONES ----
+            (7, 4, 0, 0, 500_000),   # Stage 14
+            (8, 4, 3, 0, 500_000),   # Stage 15
+            (9, 4, 5, 1, 600_000),   # Stage 16
+            (10, 4, 7, 2, 800_000),  # Stage 17
+            (12, 4, 10, 3, 1_000_000), # Stage 18
+
+            # ---- FULL SWARM ----
+            (10, 8, 6, 2, 1_400_000),  # Stage 19
+            (12, 8, 8, 3, 1_500_000),  # Stage 20
+            (14, 8, 10, 4, 1_700_000), # Stage 21
         ]
         self.current_stage = 0
 

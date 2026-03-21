@@ -1299,7 +1299,14 @@ class DroneSwarm3D(ParallelEnv):
                 1.0,
             )
 
-        if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
+        #if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
+
+        show_rays = False
+        if self.render_mode == "human":
+            show_rays = LIDAR_SHOW_RAYS_TRAIN
+            # or use TEST flag for non-training scripts if you want separate behavior
+
+        if show_rays and self._step_count % 50 == 0:
             old = self._lidar_line_ids.get(drone_idx, [])
             for lid in old:
                 self._call_gui(p.removeUserDebugItem, lid)
