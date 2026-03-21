@@ -188,7 +188,10 @@ class DroneSwarm3D(ParallelEnv):
         self._base_obs_dim = 18
 
         # LiDAR observations
-        self._lidar_dim = (LIDAR_NUM_RAYS * LIDAR_NUM_LAYERS) if self.lidar else 0
+        # IMPORTANT: keep observation dimension FIXED across all curriculum stages,
+        # even when lidar=False. When lidar is disabled, we will fill this block
+        # with neutral values (all ones) instead of removing it.
+        self._lidar_dim = LIDAR_NUM_RAYS * LIDAR_NUM_LAYERS
 
         # total observations
         obs_dim = self._base_obs_dim + self._lidar_dim
@@ -199,8 +202,9 @@ class DroneSwarm3D(ParallelEnv):
             dtype=np.float32,
         )
 
-        if self.lidar:
-            self._lidar_dirs_body = self._precompute_lidar_dirs_body()
+        # Precompute LiDAR ray directions once, regardless of whether lidar is enabled
+        # in this stage. This keeps shapes and helper logic consistent.
+        self._lidar_dirs_body = self._precompute_lidar_dirs_body()
 
 
     def _init_logging(self) -> None:
@@ -938,9 +942,11 @@ class DroneSwarm3D(ParallelEnv):
             # add lidar observation to base vector
             if self.lidar:
                 scan = self._lidar_scan(i, pos)
-                obs_dict[a] = np.concatenate([base, scan], axis=0).astype(np.float32)
             else:
-                obs_dict[a] = base
+                # Neutral LiDAR values: 1.0 means "no hit within range" for all rays
+                scan = np.ones((self._lidar_dim,), dtype=np.float32)
+
+            obs_dict[a] = np.concatenate([base, scan], axis=0).astype(np.float32)
 
         return obs_dict
 
@@ -1241,7 +1247,7 @@ class DroneSwarm3D(ParallelEnv):
     def _lidar_scan(self, drone_idx: int, pos_unused: np.ndarray) -> np.ndarray:
 
         if (not self.lidar) or (self._p is None) or (self._lidar_dim <= 0):
-            return np.zeros((0,), dtype=np.float32)
+            return np.ones((self._lidar_dim,), dtype=np.float32)
 
         p = self._p
 
