@@ -80,6 +80,7 @@ def create_env(
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
         render_mode=render_mode,
+        lidar= True,
     )
 
     # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on

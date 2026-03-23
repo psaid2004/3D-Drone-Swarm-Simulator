@@ -29,6 +29,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
     """Compute rewards given observations and actions."""
 
     reward_dict: Dict[str, float] = {}
+    reward_info: Dict[str, dict] = {}
 
     for i, agent in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
@@ -197,6 +198,11 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             + step_state.cohesion_pen
             + step_state.sep_pen
         )
+        r_info = {"r_progress": r_progress,"r_distance_pen" : r_distance_pen,
+                  "r_time":r_time, "r_ctrl":r_ctrl, "r_near":r_near, "r_final":r_final,
+                  "r_align": r_align, "r_tan":r_tan,
+            "step_state.cohesion_pen":step_state.cohesion_pen,
+            "step_state.sep_pen": step_state.sep_pen}
 
         # --------------- 9. Extra penalties ---------------
 
@@ -209,5 +215,6 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             r -= ZERO_SPEED_PEN
 
         reward_dict[agent] = float(r)
+        reward_info[agent] = r_info
 
-    return reward_dict
+    return reward_info, reward_dict

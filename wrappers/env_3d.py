@@ -941,7 +941,7 @@ class DroneSwarm3D(ParallelEnv):
                 obs_dict[a] = np.concatenate([base, scan], axis=0).astype(np.float32)
             else:
                 obs_dict[a] = base
-
+            base = np.concatenate([pos, vel, to_target, to_obs, to_centroid, to_nearest_teammate])
         return obs_dict
 
 
@@ -1368,7 +1368,8 @@ class DroneSwarm3D(ParallelEnv):
         step_state = compute_step_state(self, obs_dict, actions)
 
         # 7. Compute rewards (per agent)
-        reward_dict = compute_rewards(self, obs_dict, sim_actions, step_state)
+        r_info, reward_dict = compute_rewards(self, obs_dict, sim_actions, step_state)
+
         term_dict, trunc_dict = compute_terminations(self, step_state)
 
         # 8. Info dict (for callbacks & logging)

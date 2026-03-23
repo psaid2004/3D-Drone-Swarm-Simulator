@@ -87,7 +87,7 @@ def main():
     n_steps = 8000
 
     pz_env = DroneSwarm3D(
-        world_scale = 5.0,
+        world_scale = 4.0,
         num_drones_per_swarm=n_drones,
         num_static_obstacles = 0,
         num_dynamic_obstacles = 0,
@@ -115,6 +115,7 @@ def main():
 
     # print(n_steps)
     for step in range(n_steps):
+        print("step:", step)
         action_dict = {}
         for drone, obs in obs_dict.items():
             # Move roughly toward target + centroid
@@ -131,6 +132,7 @@ def main():
         # Print status every 50 steps
         if step % 50 == 0:
             print(f"\n===== STEP {step} =====")
+            # print(obs_dict)
             for d in obs_dict:
                 pos = obs_dict[d][:3]
                 r = reward_dict[d]

@@ -22,7 +22,6 @@ SWARM_MIN_SEPARATION = 0.15  # Min distance between drones in the swarm
 # Goal
 # =============================================================================
 GOAL_RADIUS = 0.5 # actual radius of the goal
-#TODO USE THIS FOR SPAWNING TARGETS
 GOAL_EDGE_MARGIN = 0.6  # Minimum distance between the wall and the goal
 GOAL_REACH_DISTANCE = 0.6 #0.4 # How close drone needs to be around goal to be a successful reach
 COLORS =  [
@@ -52,9 +51,9 @@ SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 # =============================================================================
 LIDAR_NUM_RAYS = 24
 LIDAR_NUM_LAYERS = 3
-LIDAR_RANGE = 6.0  # meters ahead
+LIDAR_RANGE = 3.0  # meters ahead
 LIDAR_VERTICAL_FOV_DEG = 30.0  # ±22.5° up/down
-LIDAR_HORIZONTAL_FOV_DEG = 180.0  # full circle
+LIDAR_HORIZONTAL_FOV_DEG = 359.0  # full circle
 LIDAR_NOISE_STD = 0.0
 LIDAR_SHOW_RAYS_TRAIN = False
 LIDAR_SHOW_RAYS_TEST = False
