@@ -32,6 +32,9 @@ class CommandTerminal(QFrame):
         self._build_ui()
         self._start_shell()
 
+
+    #### UI  ####
+    
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
@@ -71,6 +74,9 @@ class CommandTerminal(QFrame):
         layout.addWidget(title)
         layout.addWidget(self.output, 1)
         layout.addWidget(cmd_row)
+
+
+    #### Terminal logic ####
 
     def _shell_program_and_args(self, command: str):
         if sys.platform.startswith("win"):
