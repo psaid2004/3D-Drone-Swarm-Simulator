@@ -44,13 +44,39 @@ class SB3VecResetTupleFix(VecEnvWrapper):
 
         if isinstance(out, tuple) and len(out) == 5:
             obs, rewards, terminations, truncations, infos = out
-            dones = np.logical_or(terminations, truncations)
+
+            terminations = np.asarray(terminations, dtype=np.bool_)
+            truncations = np.asarray(truncations, dtype=np.bool_)
+
+            if terminations.ndim == 0:
+                terminations = terminations.reshape(1)
+            if truncations.ndim == 0:
+                truncations = truncations.reshape(1)
+
+            dones = np.logical_or(terminations, truncations).astype(np.bool_, copy=False)
 
             if infos is not None:
-                for i in range(len(infos)):
+                for i in range(min(len(infos), len(dones))):
                     if isinstance(infos[i], dict):
                         infos[i]["terminated"] = bool(terminations[i])
                         infos[i]["truncated"] = bool(truncations[i])
+
+            return obs, rewards, dones, infos
+
+        if isinstance(out, tuple) and len(out) == 4:
+            obs, rewards, dones, infos = out
+
+            raw_dones = dones
+            dones = np.asarray(dones, dtype=np.bool_)
+            rewards = np.asarray(rewards, dtype=np.float32)
+
+            if dones.ndim == 0:
+                dones = dones.reshape(1)
+            if rewards.ndim == 0:
+                rewards = rewards.reshape(1)
+
+            assert dones.dtype == np.bool_, f"dones dtype is {dones.dtype}"
+            assert dones.shape == (self.num_envs,), f"dones shape is {dones.shape}, expected {(self.num_envs,)}"
 
             return obs, rewards, dones, infos
 

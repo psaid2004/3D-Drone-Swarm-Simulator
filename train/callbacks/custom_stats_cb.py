@@ -6,8 +6,7 @@ from dataclasses import dataclass
 
 from stable_baselines3.common.callbacks import BaseCallback
 
-PRINT_EVERY = 5_000
-
+PRINT_EVERY = 200
 
 @dataclass
 class CurriculumStageInfo:
@@ -32,7 +31,6 @@ class StepStatsCallback(BaseCallback):
         active: bool
         reached: bool
         reached_now: bool
-        just_reached: bool
         collided: bool
         collision_now: bool
         wall_collision: bool
@@ -110,12 +108,12 @@ class StepStatsCallback(BaseCallback):
     def should_stop(self) -> bool:
         return self._should_stop
 
-
     def _rollout_reset(self) -> None:
         # one env produces many agent steps
         self._agent_steps = 0
         self._env_steps = 0
 
+        # rollout-local counters
         self._collision_now_count = 0
         self._wall_collision_now_count = 0
         self._obstacle_collision_now_count = 0
@@ -126,13 +124,30 @@ class StepStatsCallback(BaseCallback):
         self._obstacle_collision_ever_count = 0
         self._drone_collision_ever_count = 0
 
+        # print-window counters (reset only after console print)
+        if not hasattr(self, "_print_collision_now_count"):
+            self._print_collision_now_count = 0
+            self._print_wall_collision_now_count = 0
+            self._print_obstacle_collision_now_count = 0
+            self._print_drone_collision_now_count = 0
+
+            self._print_collision_ever_count = 0
+            self._print_wall_collision_ever_count = 0
+            self._print_obstacle_collision_ever_count = 0
+            self._print_drone_collision_ever_count = 0
+
+            self._print_agent_steps = 0
+            self._print_env_steps = 0
+
+            self._print_dist_to_target_sum = 0.0
+            self._print_cmd_speed_sum = 0.0
+            self._print_actual_speed_sum = 0.0
+
         self._reached_ever = set()
         self._reached_now = set()
 
         # did drone every reach target
         self._env_drone_reached_anytime = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
-        # did swarm succeed simultaneously
-        self._env_team_simul_flag = np.zeros((self.num_envs,), dtype=np.bool_)
 
         self._swarm_too_close_steps = 0
         self._swarm_too_far_steps = 0
@@ -143,7 +158,9 @@ class StepStatsCallback(BaseCallback):
         self._dist_to_target_sum = 0.0
         self._cmd_speed_sum = 0.0
         self._actual_speed_sum = 0.0
-        self._dist_samples = 0
+
+        self.episode_done_collision = bool
+        self.episode_done_all_reached = bool
 
 
     def _on_rollout_start(self) -> None:
@@ -162,6 +179,7 @@ class StepStatsCallback(BaseCallback):
 
         env_step_idx = self._env_steps
         self._env_steps += 1
+        self._print_env_steps += 1
 
         reached_this_step = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
         active_this_step = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
@@ -195,13 +213,20 @@ class StepStatsCallback(BaseCallback):
             cmd_speed = float(info.get("cmd_speed", 0.0))
             actual_speed = float(info.get("actual_speed", 0.0))
 
+            self.episode_done_collision = bool(info.get("episode_done_collision", False))
+            self.episode_done_all_reached = bool(info.get("episode_done_all_reached", False))
+
             self._agent_steps += 1
+
             self._dist_to_target_sum += dist_to_target
             self._cmd_speed_sum += cmd_speed
             self._actual_speed_sum += actual_speed
-            self._dist_samples += 1
 
+            self._print_agent_steps += 1
 
+            self._print_dist_to_target_sum += dist_to_target
+            self._print_cmd_speed_sum += cmd_speed
+            self._print_actual_speed_sum += actual_speed
 
             if active:
                 active_this_step[env_i, drone_i] = True
@@ -214,44 +239,41 @@ class StepStatsCallback(BaseCallback):
                 reached_this_step[env_i, drone_i] = True
                 self._reached_now.add(flat_idx)
 
-            if collided:
-                self._collision_ever_count += 1
-                if flat_idx not in self._first_collision_env_step:
-                    self._first_collision_env_step[flat_idx] = env_step_idx
-
             if collision_now:
                 self._collision_now_count += 1
+                self._collision_ever_count += 1
+
+                self._print_collision_now_count += 1
+                self._print_collision_ever_count += 1
+
                 if flat_idx not in self._first_collision_env_step:
                     self._first_collision_env_step[flat_idx] = env_step_idx
 
-            if wall_collision:
-                self._wall_collision_ever_count += 1
             if wall_collision_now:
                 self._wall_collision_now_count += 1
+                self._wall_collision_ever_count += 1
 
-            if obstacle_collision:
-                self._obstacle_collision_ever_count += 1
+                self._print_wall_collision_now_count += 1
+                self._print_wall_collision_ever_count += 1
+
             if obstacle_collision_now:
                 self._obstacle_collision_now_count += 1
+                self._obstacle_collision_ever_count += 1
 
-            if drone_collision:
-                self._drone_collision_ever_count += 1
+                self._print_obstacle_collision_now_count += 1
+                self._print_obstacle_collision_ever_count += 1
+
             if drone_collision_now:
                 self._drone_collision_now_count += 1
+                self._drone_collision_ever_count += 1
+
+                self._print_drone_collision_now_count += 1
+                self._print_drone_collision_ever_count += 1
 
             if swarm_too_close:
                 self._swarm_too_close_steps += 1
             if swarm_too_far:
                 self._swarm_too_far_steps += 1
-
-        # simultaneous reach: all ACTIVE drones in an env reached on same env-step
-        for e in range(self.num_envs):
-            act = active_this_step[e]
-            if not act.any():
-                continue
-            all_active_reached_same_step = np.all(np.logical_or(~act, reached_this_step[e]))
-            if all_active_reached_same_step:
-                self._env_team_simul_flag[e] = True
 
         return True
 
@@ -260,41 +282,42 @@ class StepStatsCallback(BaseCallback):
         if self._agent_steps <= 0:
             return
 
-        denom_all_drones = max(1, self.total_drone_count)
-        denom_agent_steps = max(1, self._agent_steps)
+        denom_all_drones_count = max(1, self.total_drone_count)
+        denom_drones_steps = max(1, self._agent_steps)
         denom_env_steps = max(1, self._env_steps)
-        denom_dist_samples = max(1, self._dist_samples)
-        mean_dist_to_target = self._dist_to_target_sum / denom_dist_samples
-        mean_cmd_speed = self._cmd_speed_sum / denom_dist_samples
-        mean_actual_speed = self._actual_speed_sum / denom_dist_samples
 
         reaches_ever = len(self._reached_ever)
         reaches_now = len(self._reached_now)
 
-        collision_step_rate = self._collision_now_count / denom_agent_steps
-        wall_collision_step_rate = self._wall_collision_now_count / denom_agent_steps
-        obstacle_collision_step_rate = self._obstacle_collision_now_count / denom_agent_steps
-        drone_collision_step_rate = self._drone_collision_now_count / denom_agent_steps
+        # out of all drone decisions taken, how many of them resulted in a collision right now
+        collision_step_rate = self._collision_now_count / denom_drones_steps
+        wall_collision_step_rate = self._wall_collision_now_count / denom_drones_steps
+        obstacle_collision_step_rate = self._obstacle_collision_now_count / denom_drones_steps
+        drone_collision_step_rate = self._drone_collision_now_count / denom_drones_steps
+
+        mean_dist_to_target = self._dist_to_target_sum / denom_drones_steps
+        mean_cmd_speed = self._cmd_speed_sum / denom_drones_steps
+        mean_actual_speed = self._actual_speed_sum / denom_drones_steps
 
         team_any = 0
         team_all = 0
-        team_simultaneous = 0
 
         for e in range(self.num_envs):
             reached_anytime = self._env_drone_reached_anytime[e]
             team_any += int(np.any(reached_anytime))
             team_all += int(np.all(reached_anytime))
-            team_simultaneous += int(self._env_team_simul_flag[e])
 
         # ---- scalar logs ----
         self.logger.record("stats/reaches_ever_count", float(reaches_ever))
         self.logger.record("stats/reaches_now_count", float(reaches_now))
-        self.logger.record("stats/reaches_denom", float(denom_all_drones))
-        self.logger.record("stats/reach_rate", float(reaches_ever) / float(denom_all_drones))
+        self.logger.record("stats/reaches_denom", float(denom_all_drones_count))
+        self.logger.record("stats/reach_rate", float(reaches_ever) / float(denom_all_drones_count))
 
         self.logger.record("stats/team_reach_any_count", float(team_any))
         self.logger.record("stats/team_reach_all_count", float(team_all))
-        self.logger.record("stats/team_reach_simultaneous_count", float(team_simultaneous))
+
+        self.logger.record("stats/episode_ended_collisions", self.episode_done_collision)
+        self.logger.record("stats/episode_ended_all_reached", self.episode_done_all_reached)
 
         self.logger.record("stats/collision_step_rate", float(collision_step_rate))
         self.logger.record("stats/wall_collision_step_rate", float(wall_collision_step_rate))
@@ -306,8 +329,8 @@ class StepStatsCallback(BaseCallback):
         self.logger.record("stats/obstacle_collision_ever_count", float(self._obstacle_collision_ever_count))
         self.logger.record("stats/drone_collision_ever_count", float(self._drone_collision_ever_count))
 
-        self.logger.record("stats/swarm_too_close_rate", float(self._swarm_too_close_steps) / float(denom_agent_steps))
-        self.logger.record("stats/swarm_too_far_rate", float(self._swarm_too_far_steps) / float(denom_agent_steps))
+        self.logger.record("stats/swarm_too_close_rate", float(self._swarm_too_close_steps) / float(denom_drones_steps))
+        self.logger.record("stats/swarm_too_far_rate", float(self._swarm_too_far_steps) / float(denom_drones_steps))
 
         self.logger.record("debug/mean_dist_to_target", float(mean_dist_to_target))
         self.logger.record("debug/mean_cmd_speed", float(mean_cmd_speed))
@@ -326,14 +349,37 @@ class StepStatsCallback(BaseCallback):
             si = self.stage_info
             total = max(1, si.total_planned_timesteps)
 
+            num_total_obstacles = float(si.num_dynamic_obstacles) + float(si.num_static_obstacles)
+
             self.logger.record("curriculum/stage_idx", float(si.stage_idx))
             self.logger.record("curriculum/world_scale", float(si.world_scale))
             self.logger.record("curriculum/num_drones", float(si.num_drones))
             self.logger.record("curriculum/num_static_obstacles", float(si.num_static_obstacles))
             self.logger.record("curriculum/num_dynamic_obstacles", float(si.num_dynamic_obstacles))
-            self.logger.record("curriculum/num_obstacles", float(self.stage_info.num_total_obstacles)) # TODO FIX - done?
+            self.logger.record("curriculum/num_obstacles", num_total_obstacles)
             self.logger.record("curriculum/stage_timesteps", float(si.stage_timesteps))
             self.logger.record("curriculum/progress_frac", float(self.num_timesteps) / float(total))
+
+        print_denom_drones_steps = max(1, self._print_agent_steps)
+
+        print_mean_dist_to_target = self._print_dist_to_target_sum / print_denom_drones_steps
+        print_mean_cmd_speed = self._print_cmd_speed_sum / print_denom_drones_steps
+        print_mean_actual_speed = self._print_actual_speed_sum / print_denom_drones_steps
+
+        print_episode_done_all_collided = self.episode_done_collision
+        print_episode_done_all_reached = self.episode_done_all_reached
+
+        print_collision_step_rate = self._print_collision_now_count / print_denom_drones_steps
+        print_wall_collision_step_rate = self._print_wall_collision_now_count / print_denom_drones_steps
+        print_obstacle_collision_step_rate = self._print_obstacle_collision_now_count / print_denom_drones_steps
+        print_drone_collision_step_rate = self._print_drone_collision_now_count / print_denom_drones_steps
+
+        print_total_wall_collisions = self._print_wall_collision_ever_count
+        print_total_collisions = (
+                self._print_wall_collision_ever_count
+                + self._print_obstacle_collision_ever_count
+                + self._print_drone_collision_ever_count
+        )
 
         # ---- console print ----
         if self.verbose >= 1 and (self.num_timesteps - self._last_print_ts) >= self.print_every:
@@ -357,18 +403,38 @@ class StepStatsCallback(BaseCallback):
             print(
                 prefix
                 + "[Stats] "
-                + f"reached={reaches_ever}/{denom_all_drones} "
+                + f"reached={reaches_ever}/{denom_all_drones_count} "
                 + f"team_any_reached={team_any} "
                 + f"team_all_reached={team_all} "
-                + f"team_simultaneous={team_simultaneous} "
-                + f"collision_rate={collision_step_rate:.4f} "
-                + f"wall_collision_rate={wall_collision_step_rate:.4f} "
-                + f"obs_collision_rate={obstacle_collision_step_rate:.4f} "
-                + f"drone_collision_rate={drone_collision_step_rate:.4f} "
-                + f"mean_dist_to_target={mean_dist_to_target:.3f} "
-                + f"mean_cmd_speed={mean_cmd_speed:.3f} "
-                + f"mean_actual_speed={mean_actual_speed:.3f} "
+                + f"collision_rate={print_collision_step_rate:.4f} "
+                + f"wall_collision_rate={print_wall_collision_step_rate:.4f} "
+                + f"obs_collision_rate={print_obstacle_collision_step_rate:.4f} "
+                + f"drone_collision_rate={print_drone_collision_step_rate:.4f} "
+                + f"mean_dist_to_target={print_mean_dist_to_target:.3f} "
+                + f"mean_cmd_speed={print_mean_cmd_speed:.3f} "
+                + f"mean_actual_speed={print_mean_actual_speed:.3f} "
+                + f"total_wall_collisions={print_total_wall_collisions:.0f} "
+                + f"total_collisions={print_total_collisions:.0f} "
+                + f"episode_done_all_collided={print_episode_done_all_collided} "
+                + f"episode_done_all_reached={print_episode_done_all_reached} "
             )
+
+            self._print_collision_now_count = 0
+            self._print_wall_collision_now_count = 0
+            self._print_obstacle_collision_now_count = 0
+            self._print_drone_collision_now_count = 0
+
+            self._print_collision_ever_count = 0
+            self._print_wall_collision_ever_count = 0
+            self._print_obstacle_collision_ever_count = 0
+            self._print_drone_collision_ever_count = 0
+
+            self._print_agent_steps = 0
+            self._print_env_steps = 0
+
+            self._print_dist_to_target_sum = 0.0
+            self._print_cmd_speed_sum = 0.0
+            self._print_actual_speed_sum = 0.0
 
         # ---- Early stop decision ----
         if not self.enable_stage_early_stop:
@@ -378,7 +444,7 @@ class StepStatsCallback(BaseCallback):
         if steps_in_stage < self.min_stage_timesteps:
             return
 
-        reach_rate = float(reaches_ever) / float(denom_all_drones)
+        reach_rate = float(reaches_ever) / float(denom_all_drones_count)
         meets_reach = reach_rate >= self.reach_threshold
         meets_collision = collision_step_rate <= self.max_collision_rate
 

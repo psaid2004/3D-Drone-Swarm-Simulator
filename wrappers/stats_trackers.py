@@ -53,7 +53,7 @@ class EpisodeStatsTracker:
         contributing_drones = []
 
         for i, a in enumerate(possible_agents[:total_num_drones]):
-            if active_mask[i] or step_state.just_reached[i] or step_state.collisions[i]:
+            if active_mask[i] or step_state.reached_now[i] or step_state.collisions[i]:
                 contributing_drones.append(reward_dict[a])
 
         step_mean_reward = float(np.mean(contributing_drones) if contributing_drones else 0.0)
@@ -64,7 +64,7 @@ class EpisodeStatsTracker:
         self.drone_collisions += int(np.sum(step_state.drone_collisions[:total_num_drones]))
         self.obstacle_collisions += int(np.sum(step_state.obstacle_collisions[:total_num_drones]))
 
-        self.reached_total += int(np.sum(step_state.just_reached[:total_num_drones]))
+        self.reached_total += int(np.sum(step_state.reached_now[:total_num_drones]))
 
 
     def write_episode(self, step_count: int) -> None:
