@@ -157,6 +157,8 @@ class DroneSwarm3D(ParallelEnv):
             user_debug_gui=False,
         )
 
+
+
         self._env.SPEED_LIMIT = 5.0 # m/s
 
         self._p = None
@@ -484,7 +486,7 @@ class DroneSwarm3D(ParallelEnv):
 
         positions = [
             ("z_pos_wall", [0, 0, s]),  # ceiling
-            ("z_pos_wall", [0, 0, -s]),  # floor
+            ("z_pos_wall", [0, 0, 0]),  # floor
             ("x_pos_wall", [s, 0, 0]),  # front
             ("x_pos_wall", [-s, 0, 0]),  # back
             ("y_pos_wall", [0, s, 0]),  # right
@@ -749,12 +751,12 @@ class DroneSwarm3D(ParallelEnv):
         x,y,z = float(pos[0]), float(pos[1]), float(pos[2])
 
         return (
-            x <= -self.world_scale + 0.2
-            or x >= self.world_scale - 0.2
-            or y <= -self.world_scale + 0.1
-            or y >= self.world_scale - 0.1
-            or z <= 0.1
-            or z >= self.world_scale - 0.1
+            x <= -self.world_scale
+            or x >= self.world_scale
+            or y <= -self.world_scale
+            or y >= self.world_scale
+            or z <= 0
+            or z >= self.world_scale
         )
 
 
