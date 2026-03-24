@@ -291,7 +291,7 @@ def main():
     n_drones = 5
     n_steps = 8000
     use_lidar = True
-    world_scale = 3.0
+    world_scale = 10.0
 
     env = DroneSwarm3D(
         world_scale=world_scale,
@@ -299,7 +299,7 @@ def main():
         num_static_obstacles=10,
         num_dynamic_obstacles=4,
         max_steps=n_steps,
-        num_swarms=1,
+        num_swarms=4,
         lidar=use_lidar,
         render_mode="human",
     )
