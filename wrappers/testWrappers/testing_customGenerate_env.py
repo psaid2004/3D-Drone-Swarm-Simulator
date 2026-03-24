@@ -14,7 +14,7 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
 
 # Pre-set folder with configs
 def _configs_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "interface" / "configs"
+    return Path(__file__).resolve().parents[2] / "interface" / "configs"
 
 # Load object configurations from JSON files
 def _load_object_config(config_name: str) -> list[dict]:
@@ -97,15 +97,15 @@ def main():
         render_mode="human")
 
     # --- Uncomment to load scenarios ---
-    # scenarios = get_ml_test_scenarios()
-    # selected_scenario = "wall_holes"
-    # object_configs = scenarios[selected_scenario]()
+    scenarios = get_ml_test_scenarios()
+    selected_scenario = "hallway"
+    object_configs = scenarios[selected_scenario]()
 
     obs_dict, info = pz_env.reset()
     
     # --- Uncomment to apply scenario ---
     
-    # apply_object_config(pz_env, object_configs)
+    apply_object_config(pz_env, object_configs)
 
 
     print("Initial observations:")
