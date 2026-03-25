@@ -188,7 +188,7 @@ def make_stage_callbacks(
         num_envs=int(N_ENVS),
         stage_info=stage_info,
         # print_every=5000,
-        enable_stage_early_stop=True,
+        enable_stage_early_stop=False,
         reach_threshold=0.85,
         max_collision_rate=0.05,
         patience=10,

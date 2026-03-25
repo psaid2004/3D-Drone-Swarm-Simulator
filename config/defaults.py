@@ -69,14 +69,14 @@ COLLISION_DIST = 0.0
 # =============================================================================
 PROG_COEF = 12 # reward coefficient for progressing closer to goal
 TIME_PEN = 0.01 # small time penalty each step (until drone reaches or collides)
-CNTRL_PEN = 0.0005 # penalty coefficient for large / aggressive actions (prevents jittering)
+CNTRL_PEN = 0.0 # penalty coefficient for large / aggressive actions (prevents jittering)
 
-NEAR_OBS_PEN = 0.4 # penalty for being too close to an obstacle
-NEAR_FRONT_OBS_PEN = 0.4 # penalty for being too close to an obstacle in front of drone
-NEAR_SIDE_OBS_PEN = 0.2 # penalty for being too close to an obstacle on side of drone
-DIST_PEN = 0.01 #0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
-ZERO_SPEED_PEN = 0.001 # penalty for drone not moving
-ALIGN_COEF = 0.2
+NEAR_OBS_PEN = 0.0 # penalty for being too close to an obstacle
+NEAR_FRONT_OBS_PEN = 0.0 # penalty for being too close to an obstacle in front of drone
+NEAR_SIDE_OBS_PEN = 0.0 # penalty for being too close to an obstacle on side of drone
+DIST_PEN = 0.03 #0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
+ZERO_SPEED_PEN = 0.0 # penalty for drone not moving
+ALIGN_COEF = 0.1
 
 # =============================================================================
 # Reward - swarm shaping
@@ -87,11 +87,11 @@ SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
 # =============================================================================
 # Reward - terminal bonuses / penalties
 # =============================================================================
-WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
-OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
-DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
+WALL_COLLISION_PEN = 40.0 # drone vs wall collision penalty
+OBSTACLE_COLLISION_PEN = 40.0 # drone vs obstacle collision penalty
+DRONE_COLLISION_PEN = 40.0 # drone vs drone collision penalty
 GOAL_BONUS = 150 # one-time bonus for reaching the goal
-TRUNC_PEN = 20 # penalty for if episode was truncated
+TRUNC_PEN = 65 # penalty for if episode was truncated
 
 # =============================================================================
 # Reward - smoothness coefficients
