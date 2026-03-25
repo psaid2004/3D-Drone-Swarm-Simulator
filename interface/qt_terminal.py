@@ -135,12 +135,19 @@ class CommandTerminal(QFrame):
         QTimer.singleShot(0, self._start_shell)
 
 class StreamRedirect(QObject):
+    store = []
     text_written = pyqtSignal(str)
-
+    
     def write(self, text):
         if text:
-            self.text_written.emit(str(text))
-
+            cleaned_text = str(text).strip()
+            
+            if not cleaned_text:
+                return
+            
+            self.text_written.emit(text)
+            self.store.append(cleaned_text)
+            
     def flush(self):
         pass
 

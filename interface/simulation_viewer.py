@@ -509,6 +509,13 @@ class SimulationViewer(QWidget):
 
         self._rebuild_object_controls()
 
+    def _save_log(self):
+        configs_dir = Path(__file__).resolve().parent / "logs"
+        configs_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        file_path = configs_dir / f"obj_{timestamp}.json"
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(self.console.app_terminal.redirect.store, f, indent=4)
 
     def _save_config(self):
         self._object_configs = self._get_object_configs_snapshot()
@@ -852,6 +859,7 @@ class SimulationViewer(QWidget):
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.status_lbl.setText("Stopped")
+        self._save_log()
 
     def closeEvent(self, event):
         self._stop()
