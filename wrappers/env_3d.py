@@ -501,13 +501,13 @@ class DroneSwarm3D(ParallelEnv):
         or other drones.
         """
         for _ in range(max_attempts):
-            #t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
+            t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
 
-            #TODO: UNCOMMENT ABOVE AND REMOVE IF ELSE (JUST FOR TESTING NO REACH ISSUE IN STAGE 0)
-            if self.num_static_obstacles == 0 and self.num_dynamic_obstacles == 0 and self.total_num_drones == 1:
-                t = self.generate_xyz()
-            else:
-                t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
+            # #TODO: UNCOMMENT ABOVE AND REMOVE IF ELSE (JUST FOR TESTING NO REACH ISSUE IN STAGE 0)
+            # if self.num_static_obstacles == 0 and self.num_dynamic_obstacles == 0 and self.total_num_drones == 1:
+            #     t = self.generate_xyz()
+            # else:
+            #     t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
 
             drone_positions = self.spawn_positions
             possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
@@ -920,7 +920,7 @@ class DroneSwarm3D(ParallelEnv):
             # get raw state vector from simulator, and extract position and velocity
             state = self._env._getDroneStateVector(i)
             pos = np.array(state[POS_SLICE], dtype=np.float32)
-            vel = np.array(state[10:13], dtype=np.float32) # TODO IS VEL 10:13?
+            vel = np.array(state[10:13], dtype=np.float32)
 
             # compute distance to assigned target
             target = self._targets[i].start_pos
@@ -1386,14 +1386,6 @@ class DroneSwarm3D(ParallelEnv):
             step_state,
             self.active_drone_mask()
         )
-
-        # TODO REMOVE AFTER DEBUGGING
-        #if (
-        #        self._step_count % 50 == 0
-        #        or any(info.get("collision_now", False) for info in info_dict.values())
-        #):
-        #    self._debug_print_step(obs_dict, reward_dict, info_dict, term_dict, trunc_dict)
-
 
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
 

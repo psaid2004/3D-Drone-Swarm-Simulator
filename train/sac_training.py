@@ -146,6 +146,7 @@ def make_stage_callbacks(
     num_static_obs: int,
     num_dynamic_obs: int,
     stage_steps: int,
+    episode_horizon: int,
     total_planned_timesteps: int,
     model_num_timesteps: int,
     eval_env,
@@ -161,6 +162,7 @@ def make_stage_callbacks(
         num_static_obstacles=int(num_static_obs),
         num_dynamic_obstacles=int(num_dynamic_obs),
         stage_timesteps=int(stage_steps),
+        episode_horizon = int(episode_horizon),
         total_planned_timesteps=int(total_planned_timesteps),
     )
 
@@ -232,12 +234,13 @@ def train(device: str = "auto"):
     else:
         device_ = device
     print(f"Device: {device_}")
+    print(torch.cuda.is_available())
 
     curr = Curriculum().stages
     total_planned_timesteps = int(sum(int(s[4]) for s in curr)) #sum of all curriculum stage timesteps
 
     # --- build stage-0 env ---
-    ws0, nd0, ns0, ndyn0, steps0 = curr[0]
+    ws0, nd0, ns0, ndyn0, steps0, steps_per_episode = curr[0]
     print(
         f"\n=== Stage 0 | world={ws0} drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
@@ -249,7 +252,7 @@ def train(device: str = "auto"):
         num_drones=nd0,
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
-        max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS? SAME BELOW
+        max_episode_steps=steps_per_episode,
         render_mode = "human"
     )
 
@@ -259,7 +262,7 @@ def train(device: str = "auto"):
         num_drones=nd0,
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
-        max_episode_steps=steps0,
+        max_episode_steps=steps_per_episode,
     )
 
     # --- create SAC model ---
@@ -289,6 +292,7 @@ def train(device: str = "auto"):
         num_static_obs=ns0,
         num_dynamic_obs=ndyn0,
         stage_steps=steps0,
+        episode_horizon = steps_per_episode,
         total_planned_timesteps=total_planned_timesteps,
         model_num_timesteps=model.num_timesteps,
         eval_env=eval_env,
@@ -315,7 +319,7 @@ def train(device: str = "auto"):
         print(f"[SAVED VECNORMALIZE] {norm_path}")
 
     # --- curriculum stages ---
-    for idx, (world_scale, num_drones, num_static_obs, num_dynamic_obs, stage_steps) in enumerate(curr[1:], start=1):
+    for idx, (world_scale, num_drones, num_static_obs, num_dynamic_obs, stage_steps, steps_per_episode) in enumerate(curr[1:], start=1):
         stage_steps = int(stage_steps)
 
         print(
@@ -333,7 +337,7 @@ def train(device: str = "auto"):
             num_drones=num_drones,
             num_static_obstacles=num_static_obs,
             num_dynamic_obstacles=num_dynamic_obs,
-            max_episode_steps=stage_steps,
+            max_episode_steps=steps_per_episode,
         )
 
         new_eval_env = create_env(
@@ -341,7 +345,7 @@ def train(device: str = "auto"):
             num_drones=num_drones,
             num_static_obstacles=num_static_obs,
             num_dynamic_obstacles=num_dynamic_obs,
-            max_episode_steps=stage_steps,
+            max_episode_steps=steps_per_episode,
         )
 
         # Carry normalization stats forward.
@@ -358,6 +362,7 @@ def train(device: str = "auto"):
             num_static_obs=num_static_obs,
             num_dynamic_obs=num_dynamic_obs,
             stage_steps=stage_steps,
+            episode_horizon = steps_per_episode,
             total_planned_timesteps=total_planned_timesteps,
             model_num_timesteps=model.num_timesteps,
             eval_env=eval_env,

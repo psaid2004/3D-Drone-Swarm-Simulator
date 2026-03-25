@@ -3,7 +3,7 @@ The following class contains the curriculum by which training is performed.
 """
 
 from __future__ import annotations
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 
 class Curriculum:
@@ -16,10 +16,11 @@ class Curriculum:
 
     def __init__(self):
 
-        self.stages: List[Tuple[float, int, int, int, int]] = [
+        self.stages: List[Tuple[float, int, int, int, int, int]] = [
 
             # ---- SINGLE DRONE ----
-            # (5, 1, 0, 0, 200_000),   # Stage 0: one drone, empty world
+            (3, 1, 0, 0, 300_000,1500),   # Stage 0.0: one drone, empty world, smaller world
+            (5, 1, 0, 0, 200_000, 1500),  # Stage 0.1: one drone, empty world, bigger world
             # (5, 1, 3, 0, 400_000),   # Stage 1: static obstacles
             # (6, 1, 5, 0, 500_000),   # Stage 2: larger world
             # (7, 1, 8, 0, 600_000),   # Stage 3
@@ -32,7 +33,7 @@ class Curriculum:
             #
             # # ---- TWO DRONES ----
             # (6, 2, 0, 0, 300_000),   # Stage 8
-            (6, 2, 3, 0, 400_000),   # Stage 9
+            # (6, 2, 3, 0, 400_000),   # Stage 9
             # (7, 2, 5, 0, 500_000),   # Stage 10
             # (8, 2, 6, 1, 600_000),   # Stage 11
             # (9, 2, 8, 2, 700_000),   # Stage 12

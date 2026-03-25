@@ -16,6 +16,7 @@ class CurriculumStageInfo:
     num_static_obstacles: int
     num_dynamic_obstacles: int
     stage_timesteps: int
+    episode_horizon: int
     total_planned_timesteps: int
 
     @property
@@ -295,6 +296,7 @@ class StepStatsCallback(BaseCallback):
                         info.get("obstacle_collision", False) or info.get("obstacle_collision_now", False)),
                     "drone_collision": bool(
                         info.get("drone_collision", False) or info.get("drone_collision_now", False)),
+                    "truncated": bool(info.get("truncated", False)),
                 }
 
                 self._episode_batch[env_i] = episode_summary
@@ -319,6 +321,10 @@ class StepStatsCallback(BaseCallback):
                             outcome = "drone_collision"
                         elif ep["collision"]:
                             outcome = "collision"
+                        elif ep["truncated"]:
+                            outcome = "time_limit"
+                        elif self.stage_info is not None and ep["ep_len"] >= self.stage_info.episode_horizon:
+                            outcome = "time_limit"
 
                         print(
                             f"  env={ep['env']} "

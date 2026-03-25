@@ -66,7 +66,7 @@ COLLISION_DIST = 0.0
 # =============================================================================
 # Reward - per-step shaping
 # =============================================================================
-PROG_COEF = 6.5 # reward coefficient for progressing closer to goal
+PROG_COEF = 5 # reward coefficient for progressing closer to goal
 TIME_PEN = 0.02 # small time penalty each step (until drone reaches or collides)
 CNTRL_PEN = 0.001 # penalty coefficient for large / aggressive actions (prevents jittering)
 
@@ -86,16 +86,16 @@ SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
 # =============================================================================
 # Reward - terminal bonuses / penalties
 # =============================================================================
-WALL_COLLISION_PEN = 30.0 # drone vs wall collision penalty
+WALL_COLLISION_PEN = 50.0 # drone vs wall collision penalty
 OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
 DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
 GOAL_BONUS = 150 # one-time bonus for reaching the goal
-TRUNC_PEN = 200 # penalty for if episode was truncated
+TRUNC_PEN = 30 # penalty for if episode was truncated
 
 # =============================================================================
 # Reward - smoothness coefficients
 # =============================================================================
-FINAL_MILE_R = 3.0
+FINAL_MILE_R = 2.0
 FINAL_MILE_COEF = 2.0
 
 # =============================================================================

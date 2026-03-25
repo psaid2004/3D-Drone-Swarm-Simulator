@@ -99,8 +99,14 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # --------------- 4. Alignment reward ---------------
 
+        vel = env._env._getDroneStateVector(i)[10:13]
+        speed = float(np.linalg.norm(vel))
+
         # +0.5 if moving directly toward target, else - 0.5
-        r_align = ALIGN_COEF * alignment
+        if speed > 0.1:
+            r_align = ALIGN_COEF * alignment
+        else:
+            r_align = 0.0
 
         # --------------- 5. Final-mile shaping ---------------
 
@@ -112,8 +118,6 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # --------------- 6. Tangential velocity penalty near goal ---------------
 
-        vel = env._env._getDroneStateVector(i)[10:13]
-        speed = float(np.linalg.norm(vel))
 
         if to_target_norm > 1e-6 and speed > 1e-6:
             target_dir = to_target_vec / to_target_norm
@@ -124,7 +128,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             tangential_speed = 0.0
 
         if dist_to_target < FINAL_MILE_R:
-            r_tan = -0.5 * tangential_speed
+            r_tan = -0.0 * tangential_speed # TODO changed this to zero bcs unsure if correct
         else:
             r_tan = 0.0
 
@@ -169,12 +173,6 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
                 if left_min > 0.7 or right_min > 0.7:
                     r_near += 0.5
 
-            # if i == 0 and env._step_count % 10 == 0:
-            #     print(
-            #         f"front={front_min:.3f}, left={left_min:.3f}, right={right_min:.3f}, "
-            #         f"front_close={front_closeness:.3f}, side_close={side_closeness:.3f}, "
-            #         f"r_near={r_near:.3f}"
-            #     )
 
         elif len(env._obstacles) > 0:
             d_obs = float(np.linalg.norm(obs_dict[agent][OBS_SLICE]))
@@ -188,21 +186,17 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         r = (
             r_progress
-            + r_distance_pen
-            + r_time
-            + r_ctrl
-            + r_near
-            + r_align
-            + r_tan
-            + r_final
+            # + r_distance_pen
+            # + r_time
+            # + r_ctrl
+            # + r_near
+            # + r_align
+            # + r_tan
+            # + r_final
             + step_state.cohesion_pen
             + step_state.sep_pen
         )
-        r_info = {"r_progress": r_progress,"r_distance_pen" : r_distance_pen,
-                  "r_time":r_time, "r_ctrl":r_ctrl, "r_near":r_near, "r_final":r_final,
-                  "r_align": r_align, "r_tan":r_tan,
-            "step_state.cohesion_pen":step_state.cohesion_pen,
-            "step_state.sep_pen": step_state.sep_pen}
+        r_info = {"r_progress": r_progress}
 
         # --------------- 9. Extra penalties ---------------
 
@@ -211,8 +205,15 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             r -= TRUNC_PEN
 
         # penalty for if drone has no / little speed (is not moving)
-        if sim_actions[i][3] < 1e-3:
+        if speed < 0.1:
+            print("slow!")
             r -= ZERO_SPEED_PEN
+
+
+
+        # print(r_info)
+        # print(r)
+
 
         reward_dict[agent] = float(r)
         reward_info[agent] = r_info

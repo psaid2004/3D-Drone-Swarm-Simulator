@@ -66,6 +66,7 @@ class EvaluateTraining:
             num_drones_per_swarm=self.n_drones,
             num_static_obstacles=self.n_static_obstacles,
             num_dynamic_obstacles=self.n_dynamic_obstacles,
+            lidar=self.lidar,
             max_steps=self.max_steps,
             render_mode=render_mode,
         )
@@ -241,15 +242,15 @@ class EvaluateTraining:
 
 
 if __name__ == "__main__":
-    model_number = 1
+    model_number = 0
 
     evaluation = EvaluateTraining(
         model_num = model_number,
         n_drones= 1,
         n_static_obstacles= 0,
         n_dynamic_obstacles= 0,
-        lidar= False,
-        render_mode= "human",
+        lidar= True,
+        render_mode= None,
     )
     evaluation.evaluate_model()
 

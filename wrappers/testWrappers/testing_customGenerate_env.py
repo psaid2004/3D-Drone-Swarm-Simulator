@@ -97,15 +97,15 @@ def main():
         render_mode="human")
 
     # --- Uncomment to load scenarios ---
-    scenarios = get_ml_test_scenarios()
-    selected_scenario = "hallway"
-    object_configs = scenarios[selected_scenario]()
+    # scenarios = get_ml_test_scenarios()
+    # selected_scenario = "wall_holes"
+    # object_configs = scenarios[selected_scenario]()
 
     obs_dict, info = pz_env.reset()
     
     # --- Uncomment to apply scenario ---
     
-    apply_object_config(pz_env, object_configs)
+    # apply_object_config(pz_env, object_configs)
 
 
     print("Initial observations:")
