@@ -45,7 +45,7 @@ class Curriculum:
             #TODO: LOOK AT TIMES IT TAKES DRONE TO REACH TARGET AND REDUCE TIME PER EPISODE
             #TODO: DOUBLE CHECK LIDAR=TRUE REWARD
 
-            #(5, 1, 1, 0, 7_000_000, 1300, True),    # Stage 1: static obstacles
+            #(5, 1, 1, 0, 650_000, 1300, True),    # Stage 1: static obstacles
             #(6, 1, 5, 0, 700_000, 1500, True),    # Stage 2: larger world
             #(7, 1, 8, 0, 800_000, 1550, True),    # Stage 3
             #(8, 1, 10, 0, 900_000, 1550, True),   # Stage 4
