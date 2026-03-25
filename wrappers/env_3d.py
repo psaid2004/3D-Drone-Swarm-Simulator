@@ -918,7 +918,30 @@ class DroneSwarm3D(ParallelEnv):
             # get raw state vector from simulator, and extract position and velocity
             state = self._env._getDroneStateVector(i)
             pos = np.array(state[POS_SLICE], dtype=np.float32)
-            vel = np.array(state[10:13], dtype=np.float32) # TODO IS VEL 10:13?
+
+            #if self._p is not None and i < len(self._drone_ids) and self._step_count % 100 == 0:
+            #    try:
+            #        lin_vel_pb, ang_vel_pb = self._call_physics(
+            #            self._p.getBaseVelocity,
+            #            self._drone_ids[i]
+            #        )
+
+            #        lin_vel_pb = np.array(lin_vel_pb, dtype=np.float32)
+            #        ang_vel_pb = np.array(ang_vel_pb, dtype=np.float32)
+
+            #        print(f"\n[VEL SEARCH] drone {i} step {self._step_count}")
+            #        for start in range(len(state) - 2):
+            #            chunk = np.array(state[start:start + 3], dtype=np.float32)
+            #            lin_err = np.linalg.norm(chunk - lin_vel_pb)
+            #            ang_err = np.linalg.norm(chunk - ang_vel_pb)
+            #            print(
+            #                f"slice[{start}:{start + 3}] = {chunk} | "
+            #                f"lin_err={lin_err:.6f} | ang_err={ang_err:.6f}"
+            #            )
+            #    except Exception as e:
+            #        print("[VEL SEARCH ERROR]", e)
+
+            vel = np.array(state[10:13], dtype=np.float32)
 
             # compute distance to assigned target
             target = self._targets[i].start_pos

@@ -213,7 +213,7 @@ def build_info_dict(env, step_state) -> dict:
         target = env._targets[i].start_pos if env._targets is not None else np.zeros(3, dtype=np.float32)
         dist_to_target = float(np.linalg.norm(target - pos))
 
-        vel = env._env._getDroneStateVector(i)[10:13]
+        vel = np.array(env._env._getDroneStateVector(i)[10:13], dtype=np.float32)
         actual_speed = float(np.linalg.norm(vel))
 
         cmd_speed = float(env._last_sim_actions[i][3]) if hasattr(env, "_last_sim_actions") else 0.0

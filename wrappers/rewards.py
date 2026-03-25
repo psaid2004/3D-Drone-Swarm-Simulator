@@ -117,7 +117,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # --------------- 6. Tangential velocity penalty near goal ---------------
 
-        vel = env._env._getDroneStateVector(i)[10:13]
+        vel = np.array(env._env._getDroneStateVector(i)[10:13], dtype=np.float32)
         speed = float(np.linalg.norm(vel))
 
         if to_target_norm > 1e-6 and speed > 1e-6:
