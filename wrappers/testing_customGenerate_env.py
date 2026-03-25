@@ -1,7 +1,12 @@
 import time
 import numpy as np
 from wrappers.env_3d import DroneSwarm3D
+from pathlib import Path
+import sys
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 def safe_unit(v: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(v)
