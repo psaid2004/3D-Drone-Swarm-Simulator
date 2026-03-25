@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from interface.environment_viewer import EnvironmentViewer
 from interface.qt_terminal import DualTerminal
+from generate_random_obj import generate_random_objects
 
 
 #TODO: Allow experimental settings (dynamic world size, other untested settings)
@@ -25,6 +26,7 @@ from interface.qt_terminal import DualTerminal
 # Load Qt bindings and assign classes to variables
 _QT_CORE = importlib.import_module("PyQt6.QtCore")
 _QT_WIDGETS = importlib.import_module("PyQt6.QtWidgets")
+_QT_GUI = importlib.import_module("PyQt6.QtGui")
 Qt = _QT_CORE.Qt
 QTimer = _QT_CORE.QTimer
 QPropertyAnimation = _QT_CORE.QPropertyAnimation
@@ -47,6 +49,7 @@ QSpinBox = _QT_WIDGETS.QSpinBox
 QCheckBox = _QT_WIDGETS.QCheckBox
 QStackedWidget = _QT_WIDGETS.QStackedWidget
 QFileDialog = _QT_WIDGETS.QFileDialog
+QIcon = _QT_GUI.QIcon
 
 # Constants for object configuration
 SHAPES = ("box", "wall", "sphere", "cylinder")
@@ -284,14 +287,15 @@ class SimulationViewer(QWidget):
             }
         ]
         
-        # Use config if provided, otherwise use defaults
-        if config and config.get('num_obstacles', 0) > 0:
-            for i in range(config.get('num_obstacles', 2)):
-                obj = default_objects[i % len(default_objects)].copy()
-                obj["name"] = f"Object {i + 1}"
-                self._object_configs.append(obj)
-        else:
-            self._object_configs = default_objects.copy()
+        # use config if provided, otherwise use defaults
+        #if config and config.get('num_obstacles', 0) > 0:
+        #    for i in range(config.get('num_obstacles', 2)):
+        #        obj = default_objects[i % len(default_objects)].copy()
+        #        obj["name"] = f"object {i + 1}"
+        #        self._object_configs.append(obj)
+        #else:
+        #    self._object_configs = default_objects.copy()
+        self._object_configs = generate_random_objects(config['num_obstacles'], config)
         
         # Start a timer to consume state updates
         self._update_timer = QTimer()
@@ -894,7 +898,11 @@ class SimulationViewer(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon("davids_drones\interface\img\drones.ico"))
+    
     window = MainWindow()
+    window.setWindowIcon(QIcon("davids_drones\interface\img\drones.png"))
+
     window.show()
     sys.exit(app.exec())
 
