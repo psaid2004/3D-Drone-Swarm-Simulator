@@ -70,7 +70,7 @@ def create_env(
     num_dynamic_obstacles,
     max_episode_steps,
     lidar_enabled,
-    render_mode=None            #"human"
+    render_mode=None #"human"
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -198,11 +198,13 @@ def make_stage_callbacks(
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
 
-    stop_no_improve_cb = StopTrainingOnNoModelImprovement(
-        max_no_improvement_evals=8,
-        min_evals=3,
-        verbose=1,
-    )
+#TODO: ES CODE UNCOMMENT FOR ES
+
+    #stop_no_improve_cb = StopTrainingOnNoModelImprovement(
+    #    max_no_improvement_evals=8,
+    #    min_evals=3,
+    #    verbose=1,
+    #)
 
     # evaluate current policy on clean evaluate environment
     eval_cb = EvalCallback(
@@ -213,7 +215,7 @@ def make_stage_callbacks(
         n_eval_episodes=5,
         deterministic=True,
         render=False,
-        callback_after_eval=stop_no_improve_cb,
+        #callback_after_eval=stop_no_improve_cb,
         verbose=1,
     )
 

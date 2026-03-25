@@ -32,7 +32,20 @@ class Curriculum:
         self.stages: List[Tuple[float, int, int, int, int, int, bool]] = [
 
             # ---- SINGLE DRONE ----
-            (5, 1, 0, 0, 3_000_000, 1300, False),   # Stage 0: one drone, empty world
+            (2, 1, 0, 0, 1_000_000, 1300, False),   # Stage 0: one drone, empty world
+            (3, 1, 0, 0, 1_000_000, 1300, False),  # Stage 0: one drone, empty world
+            (4, 1, 0, 0, 500_000, 1300, False),  # Stage 0: one drone, empty world
+            (5, 1, 0, 0, 500_000, 1300, False),  # Stage 0: one drone, empty world
+
+            (2, 1, 0, 0, 1_000_000, 1300, True),   # Stage 0: one drone, empty world
+            (3, 1, 0, 0, 1_000_000, 1300, True),  # Stage 0: one drone, empty world
+            (4, 1, 0, 0, 500_000, 1300, True),  # Stage 0: one drone, empty world
+            (5, 1, 0, 0, 500_000, 1300, True),  # Stage 0: one drone, empty world
+
+
+
+
+
             (5, 1, 1, 0, 7_000_000, 1300, True),    # Stage 1: static obstacles
             (6, 1, 5, 0, 700_000, 1500, True),    # Stage 2: larger world
             (7, 1, 8, 0, 800_000, 1550, True),    # Stage 3
