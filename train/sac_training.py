@@ -70,7 +70,7 @@ def create_env(
     num_dynamic_obstacles,
     max_episode_steps,
     lidar_enabled,
-    render_mode=None
+    render_mode=None            #"human"
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -221,7 +221,7 @@ def make_stage_callbacks(
         progress_cb,
         stats_cb,
         ckpt_cb,
-        #eval_cb,
+        eval_cb,
     ])
 
 

@@ -91,20 +91,26 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         else:
             r_progress = PROG_COEF * (prev_dist_to_target - dist_to_target) # reward for change in distance to target
 
-        r_distance_pen = -DIST_PEN * dist_to_target # penalise not moving to target
-        r_time = -TIME_PEN # penalise time
-        r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i])) # penalise large / aggressive actions
+        if not env.lidar:
+            # easier reward during early curriculum
+            r_distance_pen = -0.25 * DIST_PEN * dist_to_target
+            r_time = -0.25 * TIME_PEN
+            r_ctrl = 0.0
+        else:
+            r_distance_pen = -DIST_PEN * dist_to_target
+            r_time = -TIME_PEN
+            r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i]))
 
 
         # --------------- 4. Alignment reward ---------------
 
         # +0.5 if moving directly toward target, else - 0.5
-        r_align = ALIGN_COEF * alignment
+        r_align = 0.0 if not env.lidar else ALIGN_COEF * alignment
 
         # --------------- 5. Final-mile shaping ---------------
 
         # Add a small bonus when the drone is within some radius of the goal, increasing smoothly as it gets closer.
-        if dist_to_target < FINAL_MILE_R:
+        if env.lidar and dist_to_target < FINAL_MILE_R:
             r_final = FINAL_MILE_COEF * (1.0 - (dist_to_target / FINAL_MILE_R) ** 2)
         else:
             r_final = 0.0
@@ -122,7 +128,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         else:
             tangential_speed = 0.0
 
-        if dist_to_target < FINAL_MILE_R:
+        if env.lidar and dist_to_target < FINAL_MILE_R:
             r_tan = -0.15 * tangential_speed
         else:
             r_tan = 0.0
@@ -177,7 +183,10 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # penalty for if time limit was reached
         if step_state.time_limit:
-            r -= TRUNC_PEN
+            if env.lidar:
+                r -= TRUNC_PEN
+            else:
+                r -= 0.25 * TRUNC_PEN
 
         # penalty for if drone has no / little speed (is not moving)
         if sim_actions[i][3] < 1e-3:

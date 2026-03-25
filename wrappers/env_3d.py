@@ -505,13 +505,7 @@ class DroneSwarm3D(ParallelEnv):
         or other drones.
         """
         for _ in range(max_attempts):
-            #t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
-
-            #TODO: UNCOMMENT ABOVE AND REMOVE IF ELSE (JUST FOR TESTING NO REACH ISSUE IN STAGE 0)
-            if self.num_static_obstacles == 0 and self.num_dynamic_obstacles == 0 and self.total_num_drones == 1:
-                t = self.generate_xyz()
-            else:
-                t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
+            t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
 
             drone_positions = self.spawn_positions
             possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
@@ -1390,7 +1384,13 @@ class DroneSwarm3D(ParallelEnv):
         # despawn newly reached drones
         self.despawn_newly_reached_drones(step_state.reached_now)
 
-        self.agents = self.possible_agents[:]
+        #self.agents = self.possible_agents[:]
+        self.agents = [
+            a for i, a in enumerate(self.possible_agents)
+            if i < self.total_num_drones
+               and not (self._dead[i] or self._reached_once[i] or self._despawned[i])
+        ]
+
         self.stats.record_step(
             reward_dict,
             self.possible_agents,
