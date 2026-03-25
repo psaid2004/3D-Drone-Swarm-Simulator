@@ -13,10 +13,11 @@ PRINT_EVERY = 5_000  # only print to console every N timesteps
 class CurriculumStageInfo:
     stage_idx: int
     world_scale: float
-    active_drones: int
-    num_obstacles: int
+    num_drones: int
+    num_static_obstacles: int
+    num_dynamic_obstacles: int
     stage_timesteps: int
-    total_planned_timesteps: int
+    total_planned_timesteps: int # TODO FIGURE OUT WHAT THIS IS
 
 
 class StepStatsCallback(BaseCallback):

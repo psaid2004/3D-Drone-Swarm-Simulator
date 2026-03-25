@@ -36,25 +36,47 @@ class EnvObject:
                 "collision_kwargs": lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
                 "visual_kwargs":    lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
                 "use_orientation": False,
+                "radius" : 0.2*size
             },
             "wall": {
                 "geom": p.GEOM_BOX,
                 "collision_kwargs": lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
                 "visual_kwargs":    lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
                 "use_orientation": True,
+                "radius" : 0.3 * size
             },
             "sphere": {
                 "geom": p.GEOM_SPHERE,
                 "collision_kwargs": lambda s: {"radius": 0.2 * s},
                 "visual_kwargs":    lambda s: {"radius": 0.2 * s},
                 "use_orientation": False,
+                "radius" : 0.2 * size
             },
             "cylinder": {
                 "geom": p.GEOM_CYLINDER,
                 "collision_kwargs": lambda s: {"radius": 0.1 * s, "height": 0.5 * s},
                 "visual_kwargs":    lambda s: {"radius": 0.1 * s},
                 "use_orientation": True,
+                "radius" : 0.25 * size
             },
+            "x_pos_wall": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([0.05, s, s])},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([0.05, s, s])},
+                "use_orientation": False
+            },
+            "y_pos_wall": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([s, 0.05, s])},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([s, 0.05, s])},
+                "use_orientation": False
+            },
+            "z_pos_wall": {
+                "geom": p.GEOM_BOX,
+                "collision_kwargs": lambda s: {"halfExtents": np.array([s, s, 0.05])},
+                "visual_kwargs":    lambda s: {"halfExtents": np.array([s, s, 0.05])},
+                "use_orientation": False
+            }
         }
     
     # kwargs = keyword arguments
@@ -95,6 +117,33 @@ class EnvObject:
         else:
             return False
 
+    def is_in_swept_area(self, object, safety_margin = 0.3):
+        center, half_extents = object.get_swept_area()
+        p = self.start_pos
+        for axis in range(3):
+            if abs(p[axis] - center[axis]) > half_extents[axis] + safety_margin:
+                return False
+        return True
+    
+    # Check if obstacle is too close to drones or the targets
+    def isValidPosition(self, dronePositions, targets, min_dist):
+        if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
+            return False
+
+        targets_pos = []
+        for target in targets:
+            try:
+                targets_pos.append(target.start_pos)
+            except Exception:
+                pass
+
+        targets_pos = np.array(targets_pos, dtype=np.float32)
+        if len(targets_pos) > 0:
+            if np.any(np.linalg.norm(targets_pos - self.start_pos, axis=-1) < min_dist):
+                return False
+
+        return True
+
 
 
 class Dynamic(EnvObject):
@@ -123,6 +172,13 @@ class Dynamic(EnvObject):
 
         self.physics_call(p.resetBasePositionAndOrientation, self.body_id, pos, orn)
 
+    def get_swept_area(self):
+        center = self.start_pos.copy()
+        center[self.axis] = (self.min + self.max) / 2
+        object_radius = 0.3 * self.size
+        half_extents = [object_radius for _ in range(3)]
+        half_extents[self.axis] = (self.max - self.min) / 2
+        return center, half_extents
 
     # TODO CHANGE SO IT DETECTS IF OVERLAP WILL HAPPEN DURING ITS PATH
     def isOverlapping(self, obstacle):
@@ -139,27 +195,30 @@ class Dynamic(EnvObject):
 
 
 class Target():
-    def __init__(self, start_pos, radius, physics_call, call_gui):
+    def __init__(self, color, start_pos, radius, physics_call, call_gui):
         self.start_pos = start_pos
         self.radius = radius
         self.physics_call = physics_call
         self.call_gui = call_gui
+        self.color = color
 
-    def isValidPosition(self, dronePositions, obstacles, min_dist):
+    # Check if the target is too close to drones and other targets
+    def isValidPosition(self, dronePositions, targets, min_dist):
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
             return False
 
-        obs_pos = []
-        for object in obstacles:
+        target_pos = []
+        for target in targets:
             try:
-                pos, _ = self.physics_call(p.getBasePositionAndOrientation, object.body_id)
-                obs_pos.append(pos)
+                if not np.allclose(target.start_pos, self.start_pos):
+                    target_pos.append(target.start_pos)
             except Exception:
                 pass
 
-        obs_pos = np.array(obs_pos, dtype=np.float32)
-        if len(obs_pos) > 0:
-            if np.any(np.linalg.norm(obs_pos - self.start_pos, axis=-1) < min_dist):
+        target_pos = np.array(target_pos, dtype=np.float32)
+        if len(target_pos) > 0:
+            target_pos = np.array(target_pos, dtype=np.float32).reshape(-1, 3)
+            if np.any(np.linalg.norm(target_pos - self.start_pos, axis=-1) < min_dist):
                 return False
 
         return True
@@ -169,7 +228,7 @@ class Target():
             p.createVisualShape,
             p.GEOM_SPHERE,
             radius=self.radius,
-            rgbaColor=[0.1, 1.0, 0.1, 0.9],
+            rgbaColor=self.color,
         )
 
 
