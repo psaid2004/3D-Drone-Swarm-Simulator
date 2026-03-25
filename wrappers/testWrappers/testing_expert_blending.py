@@ -23,9 +23,10 @@ class ExpertPolicy:
     Reactive 3-D expert:
       1. Fly toward target.
       2. If obstacle is ahead, project target direction away from it.
-      3. Add a small LiDAR-based steering bias.
-      4. Add wall avoidance.
-      5. Slow down smoothly near danger.
+      3. Use LiDAR to softly bias away from clutter.
+      4. Avoid walls.
+      5. Avoid teammates.
+      6. Slow down smoothly near any danger.
 
     Observation layout:
       [0:3]   pos
@@ -41,24 +42,30 @@ class ExpertPolicy:
 
     def __init__(
         self,
-        avoid_radius: float = 3.0,
-        wall_margin: float = 2.0,
+        avoid_radius: float = 3.5, # if obstacle in radius -> react
+        wall_margin: float = 2.5,  # if wall in margin -> react
+        target_brake_dist: float = 1.5, # if target in radius -> brake
+        teammate_avoid_radius: float = 2.0,  # if teammate in radius -> react
+
         world_scale: float = 5.0,
         use_lidar: bool = True,
+
         speed_default: float = 0.75,
         speed_near_obs: float = 0.25,
         speed_near_target: float = 0.30,
-        speed_near_teammate: float = 0.35,
-        target_brake_dist: float = 1.5,
-        obstacle_dir_weight: float = 1.0,
-        lidar_weight: float = 0.35,
-        wall_weight: float = 0.55,
-        teammate_avoid_radius: float = 2.0,
-        teammate_weight: float = 0.8,
-        fly_over_gain: float = 0.35,
+        speed_near_teammate: float = 0.30,
+
+        lidar_weight: float = 0.30, # how strongly lidar influences final direction
+        wall_weight: float = 0.55, # how strongly wall avoidance influences final direction
+        teammate_weight: float = 0.8,  # how strongly teammate avoidance influences final direction
+
+        fly_over_gain: float = 0.30, # obstacle directly ahead -> add  upward bias so the drone can go over it
     ):
         self.avoid_radius = avoid_radius
         self.wall_margin = wall_margin
+        self.target_brake_dist = target_brake_dist
+        self.teammate_avoid_radius = teammate_avoid_radius
+
         self.world_scale = world_scale
         self.use_lidar = use_lidar
 
@@ -66,31 +73,35 @@ class ExpertPolicy:
         self.speed_near_obs = speed_near_obs
         self.speed_near_target = speed_near_target
         self.speed_near_teammate = speed_near_teammate
-        self.target_brake_dist = target_brake_dist
 
-        self.obstacle_dir_weight = obstacle_dir_weight
         self.lidar_weight = lidar_weight
         self.wall_weight = wall_weight
-        self.teammate_avoid_radius = teammate_avoid_radius
         self.teammate_weight = teammate_weight
+
         self.fly_over_gain = fly_over_gain
 
 
     def action(self, obs: np.ndarray) -> np.ndarray:
+        """
+        Derive the expert action given the current observation.
+
+        Returns: Action: [dir_x, dir_y, dir_z, speed] in [-1, 1]
+
+         """
         obs = np.asarray(obs, dtype=np.float32)
 
         pos = obs[0:3]
         to_target = obs[6:9]
         to_obs = obs[9:12]
+        to_teammate = obs[15:18]
 
+        # get distance to target, nearest obstacle and nearest teammate
         dist_to_target = np.linalg.norm(to_target)
         dist_to_obs = np.linalg.norm(to_obs)
+        dist_to_teammate = np.linalg.norm(to_teammate)
 
+        # get direction to target
         dir_target = safe_unit(to_target)
-
-        to_mate = obs[15:18]
-        dist_to_mate = np.linalg.norm(to_mate)
-        teammate_bias = self._teammate_avoidance(obs)
 
         # 1) start from target direction
         steer_dir = dir_target.copy()
@@ -103,6 +114,9 @@ class ExpertPolicy:
 
         # 4) add soft wall avoidance
         wall_bias = self._wall_avoidance(pos)
+
+        # 5) add soft teammate avoidance
+        teammate_bias = self._teammate_avoidance(obs, to_teammate, dist_to_teammate)
 
         action_dir = (
                 steer_dir
@@ -128,8 +142,8 @@ class ExpertPolicy:
             target_scale = self.speed_near_target + alpha_t * (1.0 - self.speed_near_target)
             speed *= target_scale
 
-        if dist_to_mate < self.teammate_avoid_radius:
-            alpha_m = np.clip(dist_to_mate / max(self.teammate_avoid_radius, 1e-6), 0.0, 1.0)
+        if dist_to_teammate < self.teammate_avoid_radius:
+            alpha_m = np.clip(dist_to_teammate / max(self.teammate_avoid_radius, 1e-6), 0.0, 1.0)
             mate_scale = self.speed_near_teammate + alpha_m * (1.0 - self.speed_near_teammate)
             speed *= mate_scale
 
@@ -146,24 +160,26 @@ class ExpertPolicy:
     def _steer_around_obstacle(self, obs: np.ndarray, dir_target: np.ndarray) -> np.ndarray:
         """
         Avoid the nearest obstacle by removing the part of the target direction
-        that points into it, instead of adding a big repulsive force.
-        This avoids wide circular orbits.
+        that points into it, instead of adding a big repulsive force. This avoids wide circular orbits.
         """
         to_obs = obs[9:12]
         dist_to_obs = np.linalg.norm(to_obs)
 
+        # check whether (almost zero) distance / far enough
         if dist_to_obs <= 1e-6 or dist_to_obs >= self.avoid_radius:
             return dir_target
 
+        # convert to unit vector
         obs_dir = safe_unit(to_obs)
 
-        # How much the target direction points toward the obstacle
+        # how much the target direction points toward the obstacle
         forwardness = float(np.dot(dir_target, obs_dir))
 
-        # Obstacle not ahead => keep target direction
+        # obstacle not ahead -> keep target direction
         if forwardness <= 0.0:
             return dir_target
 
+        # compute weight based on distance away from drone
         weight = np.clip(1.0 - dist_to_obs / max(self.avoid_radius, 1e-6), 0.0, 1.0)
 
         # Remove the component that points into obstacle
@@ -171,31 +187,33 @@ class ExpertPolicy:
         tangential_norm = np.linalg.norm(tangential)
 
         if tangential_norm < 1e-5:
-            # Nearly head-on: pick a horizontal sidestep
+            # obstacle is directly in front so pick horizontal direction
             side = np.array([-obs_dir[1], obs_dir[0], 0.0], dtype=np.float32)
+            # check that it is still not small
             if np.linalg.norm(side) < 1e-5:
                 side = np.array([1.0, 0.0, 0.0], dtype=np.float32)
             tangential = safe_unit(side)
         else:
             tangential = tangential / tangential_norm
 
-        # Small upward bias when obstacle is strongly ahead
+        # small upward bias when obstacle is strongly in front
         over = np.zeros(3, dtype=np.float32)
         if forwardness > 0.4:
             over[2] = self.fly_over_gain * weight
 
-        corrected = (
-            (1.0 - weight) * dir_target
-            + weight * tangential
+        new_direction_vec = (
+            (1.0 - weight) * dir_target # if weight small -> stay close to target direction
+            + weight * tangential # if weight large -> move more tangential
             + over
         )
-        return safe_unit(corrected)
+        return safe_unit(new_direction_vec)
 
 
     def _lidar_bias(self, obs: np.ndarray) -> np.ndarray:
         """
-        LiDAR creates a soft steering bias away from clutter.
-        This is intentionally weak to avoid oscillation.
+        Soft repulsion with LiDAR.
+
+        Returns a 3D array for the direction vector.
         """
         lidar_start = 18
         n_lidar = LIDAR_NUM_LAYERS * LIDAR_NUM_RAYS
@@ -203,6 +221,7 @@ class ExpertPolicy:
         if not self.use_lidar:
             return np.zeros(3, dtype=np.float32)
 
+        # check that LiDAR contains enough data
         if obs.shape[0] < lidar_start + n_lidar or n_lidar <= 0:
             return np.zeros(3, dtype=np.float32)
 
@@ -212,6 +231,7 @@ class ExpertPolicy:
         # middle layer for horizontal steering
         mid = lidar[LIDAR_NUM_LAYERS // 2]
         angles = np.linspace(0.0, 2.0 * np.pi, LIDAR_NUM_RAYS, endpoint=False)
+        # mid = 1 means no nearby obstacle, and vice versa
         proximity = np.clip(1.0 - mid, 0.0, 1.0)
 
         rx = -np.sum(proximity * np.cos(angles))
@@ -224,18 +244,23 @@ class ExpertPolicy:
 
         bias = np.array([rx, ry, rz], dtype=np.float32)
 
-        # If lidar sees almost nothing, return zero
+        # if lidar sees almost nothing, return zero
         if np.linalg.norm(bias) < 1e-3:
             return np.zeros(3, dtype=np.float32)
 
         # Scale by sensed clutter strength
         clutter = float(np.max(proximity))
         bias = safe_unit(bias) * clutter
+
         return clamp_norm(bias, 1.0)
 
 
     def _wall_avoidance(self, pos: np.ndarray) -> np.ndarray:
         """
+        Soft repulsion from wall.
+
+        Returns a 3D array for the direction vector.
+
         World:
           x in [-s, s]
           y in [-s, s]
@@ -246,78 +271,77 @@ class ExpertPolicy:
         avoid = np.zeros(3, dtype=np.float32)
 
         def wall_push(dist_to_wall: float, gain: float = 1.0) -> float:
+            """
+            If farther than wall margin -> no push
+            If within wall margin -> push increases linearly as drone gets closer
+            If at wall -> maximum push
+            """
             if dist_to_wall >= m:
                 return 0.0
             return gain * (1.0 - max(dist_to_wall, 0.0) / m)
 
         # x walls
-        avoid[0] += wall_push(s - x, gain=1.0) * -1.0   # near +x wall -> push -x
-        avoid[0] += wall_push(x + s, gain=1.0) *  1.0   # near -x wall -> push +x
+        avoid[0] += wall_push(s - x, gain=1.0) * -1.0 # near +x wall -> push -x
+        avoid[0] += wall_push(x + s, gain=1.0) *  1.0 # near -x wall -> push +x
 
         # y walls
-        avoid[1] += wall_push(s - y, gain=1.0) * -1.0   # near +y wall -> push -y
-        avoid[1] += wall_push(y + s, gain=1.0) *  1.0   # near -y wall -> push +y
+        avoid[1] += wall_push(s - y, gain=1.0) * -1.0 # near +y wall -> push -y
+        avoid[1] += wall_push(y + s, gain=1.0) *  1. # near -y wall -> push +y
 
         # z bounds
-        avoid[2] += wall_push(s - z, gain=0.8) * -1.0   # near ceiling -> push down
-        avoid[2] += wall_push(z,     gain=1.0) *  1.0   # near floor   -> push up
+        avoid[2] += wall_push(s - z, gain=0.8) * -1.0 # near ceiling -> push down
+        avoid[2] += wall_push(z,     gain=1.0) *  1.0 # near floor   -> push up
 
         return clamp_norm(avoid, 1.0)
 
-    def _teammate_avoidance(self, obs: np.ndarray) -> np.ndarray:
+
+    def _teammate_avoidance(self, obs: np.ndarray, teammate_pos: np.ndarray, distance_to_teammate: float) -> np.ndarray:
         """
         Soft repulsion from nearest teammate.
-        Assumes obs[15:18] = nearest_teammate - pos
-        """
-        to_mate = obs[15:18]
-        dist = np.linalg.norm(to_mate)
 
-        if dist <= 1e-6 or dist >= self.teammate_avoid_radius:
+        Returns a 3D array for the direction vector.
+        """
+        # check for almost zero distance / teammate far enough away
+        if distance_to_teammate <= 1e-6 or distance_to_teammate >= self.teammate_avoid_radius:
             return np.zeros(3, dtype=np.float32)
 
-        # Repel away from teammate
-        away = -safe_unit(to_mate)
+        # compute unit vector from teammate
+        away = -safe_unit(teammate_pos)
 
-        # Stronger when closer
-        weight = 1.0 - dist / max(self.teammate_avoid_radius, 1e-6)
+        # stronger weight applied when closer
+        weight = 1.0 - distance_to_teammate / max(self.teammate_avoid_radius, 1e-6)
 
-        # Slight preference to separate horizontally first
+        # preference to separate horizontally first (avoids just flying up)
         away = away.copy()
         away[2] *= 0.5
 
+        # scale by closeness and clamp norm
         return clamp_norm(weight * away, 1.0)
 
 
 def main():
     n_drones = 10
+    n_static_obstacles = 0
+    n_dynamic_obstacles = 10
     n_steps = 8000
     use_lidar = True
+    num_swarms = 1
     world_scale = 3.0
 
     env = DroneSwarm3D(
         world_scale=world_scale,
         num_drones_per_swarm=n_drones,
-        num_static_obstacles=40,
-        num_dynamic_obstacles=4,
+        num_static_obstacles=n_static_obstacles,
+        num_dynamic_obstacles=n_dynamic_obstacles,
         max_steps=n_steps,
-        num_swarms=1,
+        num_swarms=num_swarms,
         lidar=use_lidar,
-        # render_mode="human",
+        render_mode="human",
     )
 
     expert = ExpertPolicy(
-        avoid_radius=3.5,
-        wall_margin=2.5,
         world_scale=world_scale,
         use_lidar=use_lidar,
-        speed_default=0.75,
-        speed_near_obs=0.20,
-        speed_near_target=0.30,
-        target_brake_dist=1.5,
-        obstacle_dir_weight=1.0,
-        lidar_weight=0.30,
-        wall_weight=0.55,
-        fly_over_gain=0.30,
     )
 
     obs_dict, info = env.reset()

@@ -82,7 +82,7 @@ class DroneSwarm3D(ParallelEnv):
         self.total_num_drones = max(
             1,
             self.num_drones_per_swarm * self.num_swarms
-        ) 
+        )
 
         # Spawn position of every drone
         self.spawn_positions = np.empty((0,3))
@@ -365,7 +365,7 @@ class DroneSwarm3D(ParallelEnv):
             record=False,
             user_debug_gui=False,
         )
-        self._env.SPEED_LIMIT = 5.0
+        self._env.SPEED_LIMIT = 3.0
 
         self._p = None
         self._client_id = None
@@ -611,13 +611,13 @@ class DroneSwarm3D(ParallelEnv):
             speed = self.rng.uniform(0.8, 1.2)
             direction = self.rng.choice([-1,1])
 
-            
+
             obj = Dynamic(axis,min_pos,max_pos,speed,direction,candidate, size, ori)
             obj.set_shape_spec(shape)
             #BRING THIS BACK LATER
             # if self.candidate_collides_over_time(obj,horizon_steps=self.max_steps, dt=1.0/60.0):
             #     continue
-            
+
             body = obj.create(shape, physics_call= self._call_physics)
 
             # Check if the obstacle is overlapping with any other obstacle and is far enough from targets and drones
@@ -683,10 +683,10 @@ class DroneSwarm3D(ParallelEnv):
 
 
     # UNTESTED
-    
+
     def _init_query_world(self):
         self._qworld = CollisionQueryWorld()
-    
+
     def _rebuild_query_world_from_current_scene(self):
         self._qworld.clear()
         print("IM RESETING")
@@ -697,32 +697,32 @@ class DroneSwarm3D(ParallelEnv):
                 self._qworld.add_dynamic_object(id(obs), obs)
             else:
                 self._qworld.add_static_object(obs)
-                
+
     def candidate_collides_over_time(self, candidate, horizon_steps, dt=1.0/60.0, margin=0.0):
         temp_body = self._qworld.add_temp_object(candidate)
-        
+
         try:
             for step in range(horizon_steps + 1):
                 t = step * dt
                 cand_pos, cand_quat = candidate.pose_at_time(t)
                 self._qworld.set_body_pose(temp_body, cand_pos, cand_quat)
-                
+
                 for obs in self._obstacles:
                     if isinstance(obs, Dynamic):
                         body_id = self._qworld.dynamic_bodies[id(obs)]
                         pos, quat = obs.pose_at_time(t)
                         self._qworld.set_body_pose(body_id, pos, quat)
-                
+
                 for obs in self._obstacles:
                     if isinstance(obs, Dynamic):
                         body_id = self._qworld.dynamic_bodies[id(obs)]
                         if self._qworld.bodies_collide(temp_body, body_id, margin=margin):
                             return True
-            return False    
+            return False
         finally:
             self._qworld.remove_body(temp_body)
-        
-        
+
+
     # UNTESTED
 
     def drone_out_of_bounds(self, pos:np.ndarray) -> bool:
