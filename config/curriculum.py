@@ -32,15 +32,15 @@ class Curriculum:
         self.stages: List[Tuple[float, int, int, int, int, int, bool]] = [
 
             # ---- SINGLE DRONE ----
-            (2, 1, 0, 0, 700_000, 700, False),   # Stage 0: one drone, empty world
-            (3, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
-            (4, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
-            (5, 1, 0, 0, 700_000, 800, False),  # Stage 0: one drone, empty world
+            (2, 1, 0, 0, 800_000, 750, False),   # Stage 0: one drone, empty world
+            (3, 1, 0, 0, 900_000, 1200, False),  # Stage 0: one drone, empty world
+            (4, 1, 0, 0, 1_000_000, 1600, False),  # Stage 0: one drone, empty world
+            (5, 1, 0, 0, 1_100_000, 2000, False),  # Stage 0: one drone, empty world
 
-            (2, 1, 0, 0, 650_000, 900, True),   # Stage 0: one drone, empty world
-            (3, 1, 0, 0, 650_000, 1000, True),  # Stage 0: one drone, empty world
-            (4, 1, 0, 0, 700_000, 1000, True),  # Stage 0: one drone, empty world
-            (5, 1, 0, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            (2, 1, 0, 0, 1_000_000, 1250, True),   # Stage 0: one drone, empty world
+            (3, 1, 0, 0, 1_100_000, 2250, True),  # Stage 0: one drone, empty world
+            (4, 1, 0, 0, 1_200_000, 3000, True),  # Stage 0: one drone, empty world
+            (5, 1, 0, 0, 1_300_000, 3750, True),  # Stage 0: one drone, empty world
 
             #TODO: LOOK AT TIMES IT TAKES DRONE TO REACH TARGET AND REDUCE TIME PER EPISODE
             #TODO: DOUBLE CHECK LIDAR=TRUE REWARD
