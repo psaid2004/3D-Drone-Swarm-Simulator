@@ -1368,7 +1368,7 @@ class DroneSwarm3D(ParallelEnv):
         step_state = compute_step_state(self, obs_dict, actions)
 
         # 7. Compute rewards (per agent)
-        r_info, reward_dict = compute_rewards(self, obs_dict, sim_actions, step_state)
+        reward_dict = compute_rewards(self, obs_dict, sim_actions, step_state)
 
         term_dict, trunc_dict = compute_terminations(self, step_state)
 
