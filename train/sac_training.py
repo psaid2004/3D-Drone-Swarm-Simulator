@@ -1,12 +1,3 @@
-"""
-SAC training.
-
-All required defaults and curriculum stages are imported from the config file.
-
-Run:
-  python -m train.sac_training
-"""
-
 from __future__ import annotations
 
 import os, time
