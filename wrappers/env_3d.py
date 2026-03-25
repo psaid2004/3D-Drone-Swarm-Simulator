@@ -157,7 +157,7 @@ class DroneSwarm3D(ParallelEnv):
             user_debug_gui=False,
         )
 
-        self._env.SPEED_LIMIT = 5.0 # m/s
+        self._env.SPEED_LIMIT = 10.0 # m/s
 
         self._p = None
         self._client_id = None
@@ -382,7 +382,7 @@ class DroneSwarm3D(ParallelEnv):
             record=False,
             user_debug_gui=False,
         )
-        self._env.SPEED_LIMIT = 5.0
+        self._env.SPEED_LIMIT = 10.0
 
         self._obstacles = []
         self._lidar_line_ids = {}

@@ -17,13 +17,14 @@ def clamp_norm(v: np.ndarray, max_norm: float = 1.0, eps: float = 1e-8) -> np.nd
         return v
     return v / (n + eps) * max_norm
 
+
 class ExpertPolicy:
     """
     Reactive 3-D expert:
       1. Fly toward target.
       2. If obstacle is ahead, project target direction away from it.
       3. Add a small LiDAR-based steering bias.
-      4. Add soft wall avoidance.
+      4. Add wall avoidance.
       5. Slow down smoothly near danger.
 
     Observation layout:
@@ -288,20 +289,20 @@ class ExpertPolicy:
 
 
 def main():
-    n_drones = 5
+    n_drones = 10
     n_steps = 8000
     use_lidar = True
-    world_scale = 10.0
+    world_scale = 3.0
 
     env = DroneSwarm3D(
         world_scale=world_scale,
         num_drones_per_swarm=n_drones,
-        num_static_obstacles=10,
+        num_static_obstacles=40,
         num_dynamic_obstacles=4,
         max_steps=n_steps,
-        num_swarms=4,
+        num_swarms=1,
         lidar=use_lidar,
-        render_mode="human",
+        # render_mode="human",
     )
 
     expert = ExpertPolicy(
