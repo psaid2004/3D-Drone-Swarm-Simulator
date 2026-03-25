@@ -1,4 +1,6 @@
-# -*- utf-8 -*-
+"""
+This file defines defaults for the parameters of SAC.
+"""
 
 # ---- SAC HYPERPARAMETERS ----
 GAMMA           = 0.99

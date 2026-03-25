@@ -23,7 +23,6 @@ from wrappers.rewards import compute_rewards
 from wrappers.stats_trackers import EpisodeStatsTracker
 
 from config.defaults import *
-from config.defaults import *
 
 
 class DroneSwarm3D(ParallelEnv):
@@ -1422,14 +1421,6 @@ class DroneSwarm3D(ParallelEnv):
             self.active_drone_mask()
         )
 
-        # TODO REMOVE AFTER DEBUGGING
-        #if (
-        #        self._step_count % 50 == 0
-        #        or any(info.get("collision_now", False) for info in info_dict.values())
-        #):
-        #    self._debug_print_step(obs_dict, reward_dict, info_dict, term_dict, trunc_dict)
-
-
         return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
 
 
@@ -1668,32 +1659,3 @@ class DroneSwarm3D(ParallelEnv):
             self._env.close()
         except Exception:
             pass
-
-
-    # TODO REMOVE AFTER DEBUGGING
-    def _debug_print_step(self, obs_dict, reward_dict, info_dict, term_dict, trunc_dict):
-        print(f"\n--- env step {self._step_count} ---")
-        for agent in self.possible_agents:
-            obs = obs_dict.get(agent)
-            info = info_dict.get(agent, {})
-            rew = reward_dict.get(agent, 0.0)
-            term = term_dict.get(agent, False)
-            trunc = trunc_dict.get(agent, False)
-
-            pos = obs[:3] if obs is not None and len(obs) >= 3 else [0.0, 0.0, 0.0]
-
-            print(
-                f"{agent:8s} | "
-                f"pos=({pos[0]:6.2f},{pos[1]:6.2f},{pos[2]:6.2f}) | "
-                f"reward={float(rew):7.3f} | "
-                f"dist={float(info.get('dist_to_target', 0.0)):6.2f} | "
-                f"active={bool(info.get('active', False))} | "
-                f"reached={bool(info.get('reached', False))} | "
-                f"just_reached={bool(info.get('just_reached', False))} | "
-                f"collided={bool(info.get('collided', False))} | "
-                f"wall_now={bool(info.get('wall_collision_now', False))} | "
-                f"obs_now={bool(info.get('obstacle_collision_now', False))} | "
-                f"drone_now={bool(info.get('drone_collision_now', False))} | "
-                f"term={bool(term)} | trunc={bool(trunc)}"
-            )
-
