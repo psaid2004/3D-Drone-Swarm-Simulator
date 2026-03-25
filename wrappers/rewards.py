@@ -206,7 +206,6 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # penalty for if drone has no / little speed (is not moving)
         if speed < 0.1:
-            print("slow!")
             r -= ZERO_SPEED_PEN
 
 
@@ -218,4 +217,4 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         reward_dict[agent] = float(r)
         reward_info[agent] = r_info
 
-    return reward_info, reward_dict
+    return reward_dict
