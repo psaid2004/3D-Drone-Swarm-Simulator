@@ -688,8 +688,8 @@ class DroneSwarm3D(ParallelEnv):
     
     def _rebuild_query_world_from_current_scene(self):
         self._qworld.clear()
-        print("IM RESETING")
-        print(len(self._obstacles))
+        #print("IM RESETING")
+        #print(len(self._obstacles))
 
         for obs in self._obstacles:
             if isinstance(obs, Dynamic):

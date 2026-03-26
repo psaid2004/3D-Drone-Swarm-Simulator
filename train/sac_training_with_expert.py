@@ -9,9 +9,15 @@ import warnings
 
 import supersuit as ss
 from stable_baselines3 import SAC
-from stable_baselines3.common.callbacks import (
-    CallbackList, CheckpointCallback, EvalCallback, ProgressBarCallback, StopTrainingOnNoModelImprovement
 
+#UPDATED CALLBACKS
+from stable_baselines3.common.callbacks import (
+    BaseCallback,
+    CallbackList,
+    CheckpointCallback,
+    EvalCallback,
+    ProgressBarCallback,
+    StopTrainingOnNoModelImprovement,
 )
 from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
 from stable_baselines3.sac.policies import SACPolicy
@@ -78,70 +84,103 @@ class ExpertBlendPolicy(SACPolicy):
     def blend_ratio(self, v: float):
         self._blend_ratio = float(np.clip(v, 0.0, 1.0))
 
-
+    #CHANGED
     def _predict(self, obs: torch.Tensor, deterministic: bool = False) -> torch.Tensor:
-        # --- RL action from the SAC actor ---
-        # retrieve the SAC action
+        # RL action from SAC actor
         rl_action = self.actor(obs, deterministic=deterministic)
 
-        # if blend ratio is zero or less, only follow SAC action.
-        if self._blend_ratio <= 0.0:
+        # no expert / no blending -> pure RL
+        if self.expert is None or self._blend_ratio <= 0.0:
             return rl_action
 
-        # --- expert action (per observation in batch) ---
+        # expert action for each item in batch
         obs_np = obs.detach().cpu().numpy()
-        # determine the expert action for each observation in the batched sample
         expert_np = np.array(
             [self.expert.action(o) for o in obs_np],
             dtype=np.float32,
         )
-        # create tensor
         expert_t = torch.as_tensor(expert_np, device=obs.device)
 
-        # blend the expert action with the SAC action
         blended = self._blend_ratio * expert_t + (1.0 - self._blend_ratio) * rl_action
-
         return torch.clamp(blended, -1.0, 1.0)
 
+#ADDED CLASS
+class BlendScheduleCallback(BaseCallback):
+    """
+    Linearly decay expert blending from INITIAL_BLEND to FINAL_BLEND
+    over BLEND_DECAY_FRAC of the total planned curriculum timesteps.
+    """
 
-# ---- CREATE ENV ----
+    def __init__(
+        self,
+        total_planned_timesteps: int,
+        initial_blend: float = INITIAL_BLEND,
+        final_blend: float = FINAL_BLEND,
+        decay_frac: float = BLEND_DECAY_FRAC,
+        verbose: int = 0,
+    ):
+        super().__init__(verbose)
+        self.total_planned_timesteps = int(total_planned_timesteps)
+        self.initial_blend = float(initial_blend)
+        self.final_blend = float(final_blend)
+        self.decay_frac = float(decay_frac)
+
+    def _current_blend(self) -> float:
+        decay_steps = max(1, int(self.total_planned_timesteps * self.decay_frac))
+        t = min(int(self.model.num_timesteps), decay_steps)
+        alpha = t / decay_steps
+        blend = self.initial_blend + alpha * (self.final_blend - self.initial_blend)
+        return float(np.clip(blend, 0.0, 1.0))
+
+    def _set_blend(self) -> None:
+        if hasattr(self.model, "policy") and hasattr(self.model.policy, "blend_ratio"):
+            blend = self._current_blend()
+            self.model.policy.blend_ratio = blend
+            self.logger.record("expert_blend/blend_ratio", blend)
+
+    def _on_training_start(self) -> None:
+        self._set_blend()
+
+    def _on_step(self) -> bool:
+        self._set_blend()
+        return True
+
+# ---- CREATE ENV ---- updated
 def create_env(
-        world_scale: float,
-        num_drones: int,
-        num_static_obstacles: int,
-        num_dynamic_obstacles: int,
-        max_episode_steps: int,
-        render_mode = None
+    world_scale,
+    num_drones,
+    num_static_obstacles,
+    num_dynamic_obstacles,
+    max_episode_steps,
+    lidar_enabled,
+    render_mode=None,
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
     env = DroneSwarm3D(
-        world_scale = world_scale,
+        world_scale=world_scale,
         num_drones_per_swarm=num_drones,
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
+        lidar=lidar_enabled,
         render_mode=render_mode,
-        lidar= True,
     )
 
-    # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
-    # create number of copies of env in parallel
     vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
 
     vec = SB3VecResetTupleFix(vec)
-    # record episode-level statistics from the vectorized environment
     vec = VecMonitor(vec)
 
-    # normalizes observations and/or rewards to stabilize training
+    # IMPORTANT:
+    # ExpertPolicy expects raw semantic observations, so norm_obs must stay False.
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
         norm_reward=False,
-        norm_obs=True,
+        norm_obs=False,
         clip_obs=5.0,
-        # clip_reward=10.0,
     )
 
     return vec
@@ -234,10 +273,19 @@ def make_stage_callbacks(
         max_collision_rate=0.05,
         patience=10,
         min_stage_timesteps=10000,
-        verbose=1,
+        verbose=0,
     )
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
+
+    #ADDED
+    blend_cb = BlendScheduleCallback(
+        total_planned_timesteps=total_planned_timesteps,
+        initial_blend=INITIAL_BLEND,
+        final_blend=FINAL_BLEND,
+        decay_frac=BLEND_DECAY_FRAC,
+        verbose=0,
+    )
 
     stop_no_improve_cb = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=8,
@@ -258,11 +306,13 @@ def make_stage_callbacks(
         verbose=1,
     )
 
+    #UPDATED
     return CallbackList([
+        blend_cb,
         progress_cb,
         stats_cb,
         ckpt_cb,
-        #eval_cb,
+        # eval_cb,
     ])
 
 
@@ -282,34 +332,40 @@ def train(device: str = "auto"):
     total_planned_timesteps = int(sum(int(s[4]) for s in curr)) #sum of all curriculum stage timesteps
 
     # --- build stage-0 env ---
-    ws0, nd0, ns0, ndyn0, steps0, steps_per_episode = curr[0]
+
+    #UPDATED
+    ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0 = curr[0]
     print(
         f"\n=== Stage 0 | world={ws0} drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
     )
 
     # --- SAC model with expert-blend policy ---
-    expert = ExpertPolicy(world_scale=ws0, use_lidar=False) # TODO ADD THIS BELOW
+    # TODO ADD THIS BELOW
     # TODO GET LIDAR FROM CURRICULUM
     # TODO THERE IS SOME ISSUE FOR THE NORM_OBS = TRUE CASE
 
-    # create the training environment
+    #CHANGED
+    expert = ExpertPolicy(world_scale=ws0, use_lidar=lidar0)
+
     train_env = create_env(
         world_scale=ws0,
         num_drones=nd0,
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
         max_episode_steps=steps_per_episode,
-        render_mode = "human"
+        lidar_enabled=lidar0,
+        render_mode=None,
     )
 
-    # create an evaluation environment
     eval_env = create_env(
         world_scale=ws0,
         num_drones=nd0,
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
         max_episode_steps=steps_per_episode,
+        lidar_enabled=lidar0,
+        render_mode=None,
     )
 
     # --- create SAC model ---
@@ -370,7 +426,15 @@ def train(device: str = "auto"):
         print(f"[SAVED VECNORMALIZE] {norm_path}")
 
     # --- curriculum stages ---
-    for idx, (world_scale, num_drones, num_static_obs, num_dynamic_obs, stage_steps, steps_per_episode) in enumerate(curr[1:], start=1):
+    for idx, (
+            world_scale,
+            num_drones,
+            num_static_obs,
+            num_dynamic_obs,
+            stage_steps,
+            steps_per_episode,
+            lidar_enabled,
+    ) in enumerate(curr[1:], start=1):
         stage_steps = int(stage_steps)
 
         print(
@@ -383,12 +447,14 @@ def train(device: str = "auto"):
         old_train_env = model.get_env()
         old_eval_env = eval_env
 
+        #CHANGE
         new_train_env = create_env(
             world_scale=world_scale,
             num_drones=num_drones,
             num_static_obstacles=num_static_obs,
             num_dynamic_obstacles=num_dynamic_obs,
             max_episode_steps=steps_per_episode,
+            lidar_enabled=lidar_enabled,
         )
 
         new_eval_env = create_env(
@@ -397,6 +463,7 @@ def train(device: str = "auto"):
             num_static_obstacles=num_static_obs,
             num_dynamic_obstacles=num_dynamic_obs,
             max_episode_steps=steps_per_episode,
+            lidar_enabled=lidar_enabled,
         )
 
         # Carry normalization stats forward.
@@ -405,6 +472,12 @@ def train(device: str = "auto"):
 
         model.set_env(new_train_env)
         eval_env = new_eval_env
+
+        #CHANGE
+        # update expert to match the current curriculum stage
+        if hasattr(model.policy, "expert") and model.policy.expert is not None:
+            model.policy.expert.world_scale = float(world_scale)
+            model.policy.expert.use_lidar = bool(lidar_enabled)
 
         callbacks = make_stage_callbacks(
             stage_idx=idx,
