@@ -22,6 +22,7 @@ SWARM_MIN_SEPARATION = 0.15  # Min distance between drones in the swarm
 # Goal
 # =============================================================================
 GOAL_RADIUS = 0.5 # actual radius of the goal
+#TODO USE THIS FOR SPAWNING TARGETS
 GOAL_EDGE_MARGIN = 0.6  # Minimum distance between the wall and the goal
 GOAL_REACH_DISTANCE = 0.6 #0.4 # How close drone needs to be around goal to be a successful reach
 COLORS =  [
@@ -51,12 +52,12 @@ SUPPORTED_SHAPES = ["box", "wall", "sphere", "cylinder"]
 # =============================================================================
 LIDAR_NUM_RAYS = 24
 LIDAR_NUM_LAYERS = 3
-LIDAR_RANGE = 3.0  # meters ahead
+LIDAR_RANGE = 6.0  # meters ahead
 LIDAR_VERTICAL_FOV_DEG = 30.0  # ±22.5° up/down
 LIDAR_HORIZONTAL_FOV_DEG = 359.0  # full circle
 LIDAR_NOISE_STD = 0.0
 LIDAR_SHOW_RAYS_TRAIN = False
-LIDAR_SHOW_RAYS_TEST = False
+LIDAR_SHOW_RAYS_TEST = True
 
 # =============================================================================
 # Collision
@@ -66,16 +67,16 @@ COLLISION_DIST = 0.0
 # =============================================================================
 # Reward - per-step shaping
 # =============================================================================
-PROG_COEF = 5 # reward coefficient for progressing closer to goal
-TIME_PEN = 0.02 # small time penalty each step (until drone reaches or collides)
-CNTRL_PEN = 0.001 # penalty coefficient for large / aggressive actions (prevents jittering)
+PROG_COEF = 25 # reward coefficient for progressing closer to goal
+TIME_PEN = 0.03 # small time penalty each step (until drone reaches or collides)
+CNTRL_PEN = 0.0 # penalty coefficient for large / aggressive actions (prevents jittering)
 
-NEAR_OBS_PEN = 0.6 # penalty for being too close to an obstacle
-NEAR_FRONT_OBS_PEN = 0.6 # penalty for being too close to an obstacle in front of drone
-NEAR_SIDE_OBS_PEN = 0.35 # penalty for being too close to an obstacle on side of drone
-DIST_PEN = 0.5 #0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
-ZERO_SPEED_PEN = 1.0 # penalty for drone not moving
-ALIGN_COEF = 0.5
+NEAR_OBS_PEN = 0.0 # penalty for being too close to an obstacle
+NEAR_FRONT_OBS_PEN = 0.0 # penalty for being too close to an obstacle in front of drone
+NEAR_SIDE_OBS_PEN = 0.0 # penalty for being too close to an obstacle on side of drone
+DIST_PEN = 0.03 #0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
+ZERO_SPEED_PEN = 0.0 # penalty for drone not moving
+ALIGN_COEF = 0.1
 
 # =============================================================================
 # Reward - swarm shaping
@@ -86,17 +87,17 @@ SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
 # =============================================================================
 # Reward - terminal bonuses / penalties
 # =============================================================================
-WALL_COLLISION_PEN = 50.0 # drone vs wall collision penalty
-OBSTACLE_COLLISION_PEN = 30.0 # drone vs obstacle collision penalty
-DRONE_COLLISION_PEN = 30.0 # drone vs drone collision penalty
-GOAL_BONUS = 150 # one-time bonus for reaching the goal
-TRUNC_PEN = 30 # penalty for if episode was truncated
+WALL_COLLISION_PEN = 40.0 # drone vs wall collision penalty
+OBSTACLE_COLLISION_PEN = 40.0 # drone vs obstacle collision penalty
+DRONE_COLLISION_PEN = 40.0 # drone vs drone collision penalty
+GOAL_BONUS = 250 # one-time bonus for reaching the goal
+TRUNC_PEN = 50 # penalty for if episode was truncated
 
 # =============================================================================
 # Reward - smoothness coefficients
 # =============================================================================
 FINAL_MILE_R = 2.0
-FINAL_MILE_COEF = 2.0
+FINAL_MILE_COEF = 1.0
 
 # =============================================================================
 # Avoid division by zero

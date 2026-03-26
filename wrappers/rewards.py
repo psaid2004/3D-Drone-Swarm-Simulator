@@ -92,9 +92,15 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         else:
             r_progress = PROG_COEF * (prev_dist_to_target - dist_to_target) # reward for change in distance to target
 
-        r_distance_pen = -DIST_PEN * dist_to_target # penalise not moving to target
-        r_time = -TIME_PEN # penalise time
-        r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i])) # penalise large / aggressive actions
+        if not env.lidar:
+            # easier reward during early curriculum
+            r_distance_pen = -0.25 * DIST_PEN * dist_to_target
+            r_time = -0.25 * TIME_PEN
+            r_ctrl = 0.0
+        else:
+            r_distance_pen = -DIST_PEN * dist_to_target
+            r_time = -TIME_PEN
+            r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i]))
 
 
         # --------------- 4. Alignment reward ---------------
@@ -103,21 +109,20 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         speed = float(np.linalg.norm(vel))
 
         # +0.5 if moving directly toward target, else - 0.5
-        if speed > 0.1:
-            r_align = ALIGN_COEF * alignment
-        else:
-            r_align = 0.0
+        r_align = 0.0 if not env.lidar else ALIGN_COEF * alignment
 
         # --------------- 5. Final-mile shaping ---------------
 
         # Add a small bonus when the drone is within some radius of the goal, increasing smoothly as it gets closer.
-        if dist_to_target < FINAL_MILE_R:
+        if env.lidar and dist_to_target < FINAL_MILE_R:
             r_final = FINAL_MILE_COEF * (1.0 - (dist_to_target / FINAL_MILE_R) ** 2)
         else:
             r_final = 0.0
 
         # --------------- 6. Tangential velocity penalty near goal ---------------
 
+        vel = np.array(env._env._getDroneStateVector(i)[10:13], dtype=np.float32)
+        speed = float(np.linalg.norm(vel))
 
         if to_target_norm > 1e-6 and speed > 1e-6:
             target_dir = to_target_vec / to_target_norm
@@ -127,56 +132,38 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         else:
             tangential_speed = 0.0
 
-        if dist_to_target < FINAL_MILE_R:
-            r_tan = -0.0 * tangential_speed # TODO changed this to zero bcs unsure if correct
+        if env.lidar and dist_to_target < FINAL_MILE_R:
+            r_tan = -0.15 * tangential_speed
         else:
             r_tan = 0.0
 
         # --------------- 7. Obstacle avoidance shaping ---------------
 
+        r_near = 0.0
+
         if env.lidar:
             scan = obs_dict[agent][env._base_obs_dim:]
-
-            # reshape flat scan -> [num_layers, num_rays]
             scan_2d = scan.reshape(LIDAR_NUM_LAYERS, LIDAR_NUM_RAYS)
 
-            # 180 deg FOV, 24 rays:
-            # center = front, low idx = right, high idx = left
-            front_idx = np.array([10, 11, 12, 13], dtype=np.int32)
-            right_idx = np.array([0, 1, 2, 3, 4, 5, 6], dtype=np.int32)
-            left_idx = np.array([17, 18, 19, 20, 21, 22, 23], dtype=np.int32)
+            front_idx = np.array([23, 0, 1], dtype=np.int32)
+            left_idx = np.array([4, 5, 6, 7, 8], dtype=np.int32)
+            right_idx = np.array([16, 17, 18, 19, 20], dtype=np.int32)
 
             # take closest return across all vertical layers
             front_min = float(np.min(scan_2d[:, front_idx]))
             left_min = float(np.min(scan_2d[:, left_idx]))
             right_min = float(np.min(scan_2d[:, right_idx]))
 
-            front_closeness = 1.0 - front_min
-            left_closeness = 1.0 - left_min
-            right_closeness = 1.0 - right_min
-            side_closeness = max(left_closeness, right_closeness)
-
-            r_near = 0.0
-
-            # Penalize obstacle directly in front
-            r_near -= NEAR_FRONT_OBS_PEN * front_closeness
-
-            # Penalize obstacles on the sides, but less strongly
-            r_near -= NEAR_SIDE_OBS_PEN * side_closeness
-
-            # Small bonus if the front is very open
-            if front_min > 0.8:
-                r_near += 0.5
-
-            # Small bonus for having an escape side if front is blocked
-            if front_min < 0.4:
-                if left_min > 0.7 or right_min > 0.7:
-                    r_near += 0.5
-
+            if front_min < 0.35:
+                r_near = -NEAR_FRONT_OBS_PEN * (0.35 - front_min) / 0.35
+            elif min(left_min, right_min) < 0.25:
+                d_obs = min(left_min, right_min)
+                r_near = -NEAR_SIDE_OBS_PEN * (0.25 - d_obs) / 0.25
+            else:
+                r_near = 0.0
 
         elif len(env._obstacles) > 0:
             d_obs = float(np.linalg.norm(obs_dict[agent][OBS_SLICE]))
-            # inverse-distance obstacle penalty with floor to avoid exploding near zero
             r_near = -NEAR_OBS_PEN / max(d_obs, 0.10)
 
         else:
@@ -186,13 +173,13 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         r = (
             r_progress
-            # + r_distance_pen
-            # + r_time
-            # + r_ctrl
-            # + r_near
-            # + r_align
-            # + r_tan
-            # + r_final
+            + r_distance_pen
+            + r_time
+            + r_ctrl
+            + r_near
+            + r_align
+            + r_tan
+            + r_final
             + step_state.cohesion_pen
             + step_state.sep_pen
         )
@@ -202,7 +189,10 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # penalty for if time limit was reached
         if step_state.time_limit:
-            r -= TRUNC_PEN
+            if env.lidar:
+                r -= TRUNC_PEN
+            else:
+                r -= 0.25 * TRUNC_PEN
 
         # penalty for if drone has no / little speed (is not moving)
         if speed < 0.1:

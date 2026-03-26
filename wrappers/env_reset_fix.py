@@ -91,5 +91,3 @@ class SB3VecResetTupleFix(VecEnvWrapper):
             assert dones.shape == (self.num_envs,), f"dones shape is {dones.shape}, expected {(self.num_envs,)}"
 
             return obs, rewards, dones, infos
-
-        return out

@@ -53,15 +53,19 @@ def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.nda
             u = np.array(actions[a], dtype=np.float32).reshape(-1)
             u = np.clip(u[:4], -1.0, 1.0)
 
-            v = u[:3].astype(np.float32)
-            n = np.linalg.norm(v)
+            #v = u[:3].astype(np.float32)
+            #n = np.linalg.norm(v)
 
-            if n > 1e-6:
-                dir_vec = v / n
-                speed_scale = float((u[3] + 1.0) * 0.5)  # map [-1,1] -> [0,1]
-            else:
-                dir_vec = np.zeros(3, dtype=np.float32)
-                speed_scale = 0.0
+            #if n > 1e-6:
+            #    dir_vec = v / n
+            #    speed_scale = float((u[3] + 1.0) * 0.5)  # map [-1,1] -> [0,1]
+            #else:
+            #    dir_vec = np.zeros(3, dtype=np.float32)
+            #    speed_scale = 0.0
+
+            v = u[:3].astype(np.float32)
+            dir_vec = np.clip(v, -1.0, 1.0)
+            speed_scale = float((u[3] + 1.0) * 0.5)  # map [-1,1] -> [0,1]
 
         act[i, 0:3] = dir_vec
         act[i, 3] = speed_scale
@@ -135,7 +139,9 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
     no_active_drones_left = len(active_idx) == 0
 
     # episode ends if all collided or no more active drones present (episode is truncated below if time limit is reached)
-    episode_done = bool(all_collided or all_reached)
+    #episode_done = bool(all_collided or all_reached)
+    # episode ends if all collided, all reached, or there are no active drones left
+    episode_done = bool(all_collided or all_reached or no_active_drones_left)
 
     return StepState(
         time_limit=time_limit,
@@ -207,7 +213,7 @@ def build_info_dict(env, step_state) -> dict:
         target = env._targets[i].start_pos if env._targets is not None else np.zeros(3, dtype=np.float32)
         dist_to_target = float(np.linalg.norm(target - pos))
 
-        vel = env._env._getDroneStateVector(i)[10:13]
+        vel = np.array(env._env._getDroneStateVector(i)[10:13], dtype=np.float32)
         actual_speed = float(np.linalg.norm(vel))
 
         cmd_speed = float(env._last_sim_actions[i][3]) if hasattr(env, "_last_sim_actions") else 0.0

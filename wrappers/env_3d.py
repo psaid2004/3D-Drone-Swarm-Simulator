@@ -82,7 +82,7 @@ class DroneSwarm3D(ParallelEnv):
         self.total_num_drones = max(
             1,
             self.num_drones_per_swarm * self.num_swarms
-        )
+        ) 
 
         # Spawn position of every drone
         self.spawn_positions = np.empty((0,3))
@@ -142,6 +142,7 @@ class DroneSwarm3D(ParallelEnv):
         for i in range(self.num_swarms):
             edge, center, drones = self.generate_drone_swarm_spawn()
             self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones":drones}
+
             self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
         self.spawn_positions = self.spawn_positions.astype(np.float32)
@@ -165,7 +166,7 @@ class DroneSwarm3D(ParallelEnv):
         self._base_obs_dim = 18
 
         # LiDAR observations
-        self._lidar_dim = (LIDAR_NUM_RAYS * LIDAR_NUM_LAYERS)
+        self._lidar_dim = (LIDAR_NUM_RAYS * LIDAR_NUM_LAYERS) if self.lidar else 0
 
         # total observations
         obs_dim = self._base_obs_dim + self._lidar_dim
@@ -176,8 +177,9 @@ class DroneSwarm3D(ParallelEnv):
             dtype=np.float32,
         )
 
-        if self.lidar:
-            self._lidar_dirs_body = self._precompute_lidar_dirs_body()
+        # Precompute LiDAR ray directions once, regardless of whether lidar is enabled
+        # in this stage. This keeps shapes and helper logic consistent.
+        self._lidar_dirs_body = self._precompute_lidar_dirs_body()
 
 
     def _init_logging(self) -> None:
@@ -342,7 +344,6 @@ class DroneSwarm3D(ParallelEnv):
             return bool(p.isConnected(cid))
         except Exception:
             return False
-
 
     def _rebuild_aviary(self) -> None:
         """Recreate VelocityAviary from scratch (fresh PyBullet connection)."""
@@ -611,13 +612,13 @@ class DroneSwarm3D(ParallelEnv):
             speed = self.rng.uniform(0.8, 1.2)
             direction = self.rng.choice([-1,1])
 
-
+            
             obj = Dynamic(axis,min_pos,max_pos,speed,direction,candidate, size, ori)
             obj.set_shape_spec(shape)
             #BRING THIS BACK LATER
             # if self.candidate_collides_over_time(obj,horizon_steps=self.max_steps, dt=1.0/60.0):
             #     continue
-
+            
             body = obj.create(shape, physics_call= self._call_physics)
 
             # Check if the obstacle is overlapping with any other obstacle and is far enough from targets and drones
@@ -683,10 +684,10 @@ class DroneSwarm3D(ParallelEnv):
 
 
     # UNTESTED
-
+    
     def _init_query_world(self):
         self._qworld = CollisionQueryWorld()
-
+    
     def _rebuild_query_world_from_current_scene(self):
         self._qworld.clear()
         print("IM RESETING")
@@ -901,6 +902,29 @@ class DroneSwarm3D(ParallelEnv):
             # get raw state vector from simulator, and extract position and velocity
             state = self._env._getDroneStateVector(i)
             pos = np.array(state[POS_SLICE], dtype=np.float32)
+
+            #if self._p is not None and i < len(self._drone_ids) and self._step_count % 100 == 0:
+            #    try:
+            #        lin_vel_pb, ang_vel_pb = self._call_physics(
+            #            self._p.getBaseVelocity,
+            #            self._drone_ids[i]
+            #        )
+
+            #        lin_vel_pb = np.array(lin_vel_pb, dtype=np.float32)
+            #        ang_vel_pb = np.array(ang_vel_pb, dtype=np.float32)
+
+            #        print(f"\n[VEL SEARCH] drone {i} step {self._step_count}")
+            #        for start in range(len(state) - 2):
+            #            chunk = np.array(state[start:start + 3], dtype=np.float32)
+            #            lin_err = np.linalg.norm(chunk - lin_vel_pb)
+            #            ang_err = np.linalg.norm(chunk - ang_vel_pb)
+            #            print(
+            #                f"slice[{start}:{start + 3}] = {chunk} | "
+            #                f"lin_err={lin_err:.6f} | ang_err={ang_err:.6f}"
+            #            )
+            #    except Exception as e:
+            #        print("[VEL SEARCH ERROR]", e)
+
             vel = np.array(state[10:13], dtype=np.float32)
 
             # compute distance to assigned target
@@ -920,6 +944,7 @@ class DroneSwarm3D(ParallelEnv):
             if self.lidar:
                 scan = self._lidar_scan(i, pos)
             else:
+                # Neutral LiDAR values: 1.0 means "no hit within range" for all rays
                 scan = np.ones((self._lidar_dim,), dtype=np.float32)
 
             obs_dict[a] = np.concatenate([base, scan], axis=0).astype(np.float32)
@@ -1281,7 +1306,14 @@ class DroneSwarm3D(ParallelEnv):
                 1.0,
             )
 
-        if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
+        #if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
+
+        show_rays = False
+        if self.render_mode == "human":
+            show_rays = LIDAR_SHOW_RAYS_TRAIN
+            # or use TEST flag for non-training scripts if you want separate behavior
+
+        if show_rays and self._step_count % 50 == 0:
             old = self._lidar_line_ids.get(drone_idx, [])
             for lid in old:
                 self._call_gui(p.removeUserDebugItem, lid)
@@ -1359,7 +1391,13 @@ class DroneSwarm3D(ParallelEnv):
         # despawn newly reached drones
         self.despawn_newly_reached_drones(step_state.reached_now)
 
-        self.agents = self.possible_agents[:]
+        #self.agents = self.possible_agents[:]
+        self.agents = [
+            a for i, a in enumerate(self.possible_agents)
+            if i < self.total_num_drones
+               and not (self._dead[i] or self._reached_once[i] or self._despawned[i])
+        ]
+
         self.stats.record_step(
             reward_dict,
             self.possible_agents,

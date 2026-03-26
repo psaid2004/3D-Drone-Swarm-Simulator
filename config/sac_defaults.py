@@ -1,4 +1,6 @@
-# -*- utf-8 -*-
+"""
+This file defines defaults for the parameters of SAC.
+"""
 
 # ---- SAC HYPERPARAMETERS ----
 GAMMA           = 0.99
@@ -13,7 +15,7 @@ ENTROPY_COEF    = "auto"
 NET_ARCH = dict(pi=[512, 256, 128], qf=[512, 256, 128])
 
 # For debugging -> set to 1 environment
-N_ENVS = 1
+N_ENVS = 4
 
 # ---- EXPERT CONFIG ----
 INITIAL_BLEND   = 0.8        # expert weight at start
