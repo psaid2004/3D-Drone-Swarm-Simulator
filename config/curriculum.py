@@ -32,15 +32,26 @@ class Curriculum:
         self.stages: List[Tuple[float, int, int, int, int, int, bool]] = [
 
             # ---- SINGLE DRONE ----
-            (2, 1, 0, 0, 700_000, 700, False),   # Stage 0: one drone, empty world
-            (3, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
-            (4, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
-            (5, 1, 0, 0, 700_000, 800, False),  # Stage 0: one drone, empty world
+            #(2, 1, 0, 0, 700_000, 700, True),   # Stage 0: one drone, empty world
+            #(3, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
+            #(4, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
+            #(5, 1, 0, 0, 700_000, 800, False),  # Stage 0: one drone, empty world
 
             (2, 1, 0, 0, 650_000, 900, True),   # Stage 0: one drone, empty world
+            (2, 2, 0, 0, 650_000, 900, True),  # Stage 0: one drone, empty world
+            (2, 2, 2, 0, 650_000, 900, True),  # Stage 0: one drone, empty world
+            (2, 2, 2, 2, 650_000, 900, True),  # Stage 0: one drone, empty world
             (3, 1, 0, 0, 650_000, 1000, True),  # Stage 0: one drone, empty world
+            (3, 3, 0, 0, 650_000, 1000, True),  # Stage 0: one drone, empty world
+            (3, 3, 3, 0, 650_000, 1000, True),  # Stage 0: one drone, empty world
+            (3, 3, 3, 3, 650_000, 1000, True),  # Stage 0: one drone, empty world
             (4, 1, 0, 0, 700_000, 1000, True),  # Stage 0: one drone, empty world
+            (4, 4, 0, 0, 700_000, 1000, True),  # Stage 0: one drone, empty world
+            (4, 4, 4, 0, 700_000, 1000, True),  # Stage 0: one drone, empty world
+            (4, 4, 4, 4, 700_000, 1000, True),  # Stage 0: one drone, empty world
             (5, 1, 0, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            (5, 5, 5, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            (5, 5, 5, 5, 700_000, 1100, True),  # Stage 0: one drone, empty world
 
             #TODO: LOOK AT TIMES IT TAKES DRONE TO REACH TARGET AND REDUCE TIME PER EPISODE
             #TODO: DOUBLE CHECK LIDAR=TRUE REWARD
