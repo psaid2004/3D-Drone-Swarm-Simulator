@@ -18,7 +18,7 @@ class Curriculum:
         num_dynamic_obstacles,
         stage_training_timesteps,
         episode_horizon,
-        lidar_enabled,
+        lidar_enabled
     )
 
     Notes:
