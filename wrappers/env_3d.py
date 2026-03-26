@@ -307,21 +307,6 @@ class DroneSwarm3D(ParallelEnv):
 
         return fn(*args, **kwargs)
 
-
-    # def _call_gui(self, fn, *args, **kwargs):
-    #     """ Find gui client, add label and call function. """
-    #     if self._p is None:
-    #         return None
-
-    #     # retrieve id of gui simulation
-    #     pcid = self._pcid_for_gui_draw()
-    #     try:
-    #         if pcid is not None and "physicsClientId" not in kwargs:
-    #             return fn(*args, **kwargs, physicsClientId=pcid)
-    #         return fn(*args, **kwargs)
-    #     except Exception:
-    #         return None
-
     def _call_gui(self, fn, *args, **kwargs):
         if self._p is None:
             return None
@@ -723,7 +708,7 @@ class DroneSwarm3D(ParallelEnv):
                 return False
 
 
-    # UNTESTED
+    
     
     def _init_query_world(self):
         self._qworld = CollisionQueryWorld()
@@ -763,8 +748,6 @@ class DroneSwarm3D(ParallelEnv):
         finally:
             self._qworld.remove_body(temp_body)
         
-        
-    # UNTESTED
 
     def drone_out_of_bounds(self, pos:np.ndarray) -> bool:
         """ Helper function to see if drones are going out of bounds (considered as a collision)."""
