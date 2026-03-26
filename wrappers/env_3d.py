@@ -56,11 +56,12 @@ class DroneSwarm3D(ParallelEnv):
             render_mode=render_mode,
         )
 
+        self.placingtarget = False
         self._init_rng(seed)
         self._init_agents()
         self._init_episode_state()
         self._init_simulator()
-        # self._init_query_world()
+        self._init_query_world()
         self._init_spaces()
         self._init_logging()
 
@@ -212,6 +213,9 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def _init_pybullet_handles(self) -> None:
+        self._gui_client_id = None
+        if self.render_mode == "human":
+            self._gui_client_id = self._client_id
         try:
             import pybullet as p
 
@@ -274,7 +278,7 @@ class DroneSwarm3D(ParallelEnv):
                 pass
 
         ids = self._connected_ids()
-
+        # print("HELLO HERE IS THE NUMBER OF IDS SPAWNED: ",len(ids))
         return ids[0] if ids else None
 
 
@@ -287,6 +291,8 @@ class DroneSwarm3D(ParallelEnv):
 
     def _call_physics(self, fn, *args, **kwargs):
         """ Find physics client, add label and call function. """
+        if (self.placingtarget) :
+            print("I was here before placing the target")
         if self._p is None:
             raise RuntimeError("PyBullet not available")
 
@@ -302,21 +308,31 @@ class DroneSwarm3D(ParallelEnv):
         return fn(*args, **kwargs)
 
 
+    # def _call_gui(self, fn, *args, **kwargs):
+    #     """ Find gui client, add label and call function. """
+    #     if self._p is None:
+    #         return None
+
+    #     # retrieve id of gui simulation
+    #     pcid = self._pcid_for_gui_draw()
+    #     try:
+    #         if pcid is not None and "physicsClientId" not in kwargs:
+    #             return fn(*args, **kwargs, physicsClientId=pcid)
+    #         return fn(*args, **kwargs)
+    #     except Exception:
+    #         return None
+
     def _call_gui(self, fn, *args, **kwargs):
-        """ Find gui client, add label and call function. """
         if self._p is None:
             return None
-
-        # retrieve id of gui simulation
-        pcid = self._pcid_for_gui_draw()
+        pcid = self._gui_client_id  # use stored ID, not max()
         try:
             if pcid is not None and "physicsClientId" not in kwargs:
                 return fn(*args, **kwargs, physicsClientId=pcid)
             return fn(*args, **kwargs)
         except Exception:
             return None
-
-
+    
     def _refresh_drone_ids_from_pybullet(self) -> None:
         """ Check PyBullet simulation itself to find the drones - useful if env does not give it. """
         if self._p is None:
@@ -512,11 +528,14 @@ class DroneSwarm3D(ParallelEnv):
                 t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
 
             drone_positions = self.spawn_positions
+            self.placingtarget = True
             possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
             if possible_target.isValidPosition(drone_positions, self._obstacles, min_dist):
                 possible_target.spawn_target()
+                self.placingtarget = False
                 return possible_target
             else:
+                self.placingtarget = False
                 continue
 
         backup = self.generate_xyz()
@@ -532,6 +551,7 @@ class DroneSwarm3D(ParallelEnv):
 
         if self.num_swarms == 1:
             swarm_edge = self.drones_in_swarm[0]["edge"]
+            print("I am spawning a target")
             t = self.make_valid_target(swarm_edge,COLORS[0])
             # repeat shared target for all drones
             targets = [t] * self.total_num_drones
@@ -567,7 +587,7 @@ class DroneSwarm3D(ParallelEnv):
             axis = self.rng.choice([0, 1, 2])
             shape = self.rng.choice(SUPPORTED_SHAPES)
             self._spawn_dynamic_obstacles(max_attempts, shape, axis)
-            # self._rebuild_query_world_from_current_scene()
+            self._rebuild_query_world_from_current_scene()
 
         for _ in range(self.num_static_obstacles):
             shape = self.rng.choice(SUPPORTED_SHAPES)
@@ -1448,7 +1468,7 @@ class DroneSwarm3D(ParallelEnv):
 
         # refresh episode content
         self._targets = self._make_targets()
-        # self._rebuild_query_world_from_current_scene()
+        self._rebuild_query_world_from_current_scene()
         self._spawn_obstacles()
         self._spawn_walls()
 
