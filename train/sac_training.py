@@ -1,12 +1,3 @@
-"""
-SAC training.
-
-All required defaults and curriculum stages are imported from the config file.
-
-Run:
-  python -m train.sac_training
-"""
-
 from __future__ import annotations
 
 import os, time
@@ -27,7 +18,6 @@ from config.curriculum import Curriculum
 from config.defaults import *
 from config.sac_defaults import *
 
-#from callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
 from train.callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.env_3d import DroneSwarm3D
 from wrappers.env_reset_fix import SB3VecResetTupleFix
@@ -64,12 +54,13 @@ def get_next_checkpoint_dir(
 
 # ---- CREATE ENV ----
 def create_env(
-        world_scale: float,
-        num_drones: int,
-        num_static_obstacles: int,
-        num_dynamic_obstacles: int,
-        max_episode_steps: int,
-        render_mode = None
+    world_scale,
+    num_drones,
+    num_static_obstacles,
+    num_dynamic_obstacles,
+    max_episode_steps,
+    lidar_enabled,
+    render_mode=None #"human"
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -79,6 +70,7 @@ def create_env(
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
+        lidar=lidar_enabled,
         render_mode=render_mode,
     )
 
@@ -95,7 +87,7 @@ def create_env(
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
-        norm_reward=False,
+        norm_reward=True, # TODO CHECK THIS
         norm_obs=True,
         clip_obs=5.0,
         # clip_reward=10.0,
@@ -145,6 +137,7 @@ def make_stage_callbacks(
     num_static_obs: int,
     num_dynamic_obs: int,
     stage_steps: int,
+    episode_horizon: int,
     total_planned_timesteps: int,
     model_num_timesteps: int,
     eval_env,
@@ -160,6 +153,7 @@ def make_stage_callbacks(
         num_static_obstacles=int(num_static_obs),
         num_dynamic_obstacles=int(num_dynamic_obs),
         stage_timesteps=int(stage_steps),
+        episode_horizon=int(episode_horizon),
         total_planned_timesteps=int(total_planned_timesteps),
     )
 
@@ -184,7 +178,7 @@ def make_stage_callbacks(
         num_envs=int(N_ENVS),
         stage_info=stage_info,
         # print_every=5000,
-        enable_stage_early_stop=True,
+        enable_stage_early_stop=False,
         reach_threshold=0.85,
         max_collision_rate=0.05,
         patience=10,
@@ -194,11 +188,13 @@ def make_stage_callbacks(
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
 
-    stop_no_improve_cb = StopTrainingOnNoModelImprovement(
-        max_no_improvement_evals=8,
-        min_evals=3,
-        verbose=1,
-    )
+#TODO: ES CODE UNCOMMENT FOR ES
+
+    #stop_no_improve_cb = StopTrainingOnNoModelImprovement(
+    #    max_no_improvement_evals=8,
+    #    min_evals=3,
+    #    verbose=1,
+    #)
 
     # evaluate current policy on clean evaluate environment
     eval_cb = EvalCallback(
@@ -209,7 +205,7 @@ def make_stage_callbacks(
         n_eval_episodes=5,
         deterministic=True,
         render=False,
-        callback_after_eval=stop_no_improve_cb,
+        #callback_after_eval=stop_no_improve_cb,
         verbose=1,
     )
 
@@ -217,7 +213,7 @@ def make_stage_callbacks(
         progress_cb,
         stats_cb,
         ckpt_cb,
-        #eval_cb,
+        eval_cb,
     ])
 
 
@@ -236,7 +232,7 @@ def train(device: str = "auto"):
     total_planned_timesteps = int(sum(int(s[4]) for s in curr)) #sum of all curriculum stage timesteps
 
     # --- build stage-0 env ---
-    ws0, nd0, ns0, ndyn0, steps0 = curr[0]
+    ws0, nd0, ns0, ndyn0, steps0, horizon0, lidar0 = curr[0]
     print(
         f"\n=== Stage 0 | world={ws0} drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
@@ -248,8 +244,8 @@ def train(device: str = "auto"):
         num_drones=nd0,
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
-        max_episode_steps=steps0, # TODO IS THIS CONSIDERED THE MAX STEPS? SAME BELOW
-        render_mode = "human"
+        max_episode_steps=horizon0,
+        lidar_enabled=lidar0,
     )
 
     # create an evaluation environment
@@ -258,7 +254,8 @@ def train(device: str = "auto"):
         num_drones=nd0,
         num_static_obstacles=ns0,
         num_dynamic_obstacles=ndyn0,
-        max_episode_steps=steps0,
+        max_episode_steps=horizon0,
+        lidar_enabled=lidar0,
     )
 
     # --- create SAC model ---
@@ -273,8 +270,9 @@ def train(device: str = "auto"):
         gradient_steps=GRADIENT_STEPS,
         gamma=GAMMA,
         ent_coef=ENTROPY_COEF,
+        policy_kwargs=dict(net_arch=NET_ARCH),
         tensorboard_log=f"{MODELS_DIR}/tb_logs",
-        verbose=1,
+        verbose=0,
         device=device_,
     ) # TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
 
@@ -288,6 +286,7 @@ def train(device: str = "auto"):
         num_static_obs=ns0,
         num_dynamic_obs=ndyn0,
         stage_steps=steps0,
+        episode_horizon=horizon0,
         total_planned_timesteps=total_planned_timesteps,
         model_num_timesteps=model.num_timesteps,
         eval_env=eval_env,
@@ -314,7 +313,15 @@ def train(device: str = "auto"):
         print(f"[SAVED VECNORMALIZE] {norm_path}")
 
     # --- curriculum stages ---
-    for idx, (world_scale, num_drones, num_static_obs, num_dynamic_obs, stage_steps) in enumerate(curr[1:], start=1):
+    for idx, (
+            world_scale,
+            num_drones,
+            num_static_obs,
+            num_dynamic_obs,
+            stage_steps,
+            episode_horizon,
+            lidar_enabled,
+    ) in enumerate(curr[1:], start=1):
         stage_steps = int(stage_steps)
 
         print(
@@ -332,7 +339,8 @@ def train(device: str = "auto"):
             num_drones=num_drones,
             num_static_obstacles=num_static_obs,
             num_dynamic_obstacles=num_dynamic_obs,
-            max_episode_steps=stage_steps,
+            max_episode_steps=episode_horizon,
+            lidar_enabled=lidar_enabled,
         )
 
         new_eval_env = create_env(
@@ -340,7 +348,8 @@ def train(device: str = "auto"):
             num_drones=num_drones,
             num_static_obstacles=num_static_obs,
             num_dynamic_obstacles=num_dynamic_obs,
-            max_episode_steps=stage_steps,
+            max_episode_steps=episode_horizon,
+            lidar_enabled=lidar_enabled,
         )
 
         # Carry normalization stats forward.
@@ -357,6 +366,7 @@ def train(device: str = "auto"):
             num_static_obs=num_static_obs,
             num_dynamic_obs=num_dynamic_obs,
             stage_steps=stage_steps,
+            episode_horizon=episode_horizon,
             total_planned_timesteps=total_planned_timesteps,
             model_num_timesteps=model.num_timesteps,
             eval_env=eval_env,
