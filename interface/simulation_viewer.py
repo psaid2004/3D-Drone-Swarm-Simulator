@@ -38,7 +38,8 @@ from envs.createWorld import SUPPORTED_SHAPES
 KINDS = ("static", "dynamic")
 AXIS_LABEL_TO_INT = {"x": 0, "y": 1, "z": 2}
 AXIS_INT_TO_LABEL = {0: "x", 1: "y", 2: "z"}
-LEFT_SIDEBAR_WIDTH = 400
+SIDEBAR_MODES = ("object_spawns", "drone_spawns", "target_spawns")
+LEFT_SIDEBAR_WIDTH = 700
 
 
 class SimulationViewer(QWidget):
@@ -50,6 +51,9 @@ class SimulationViewer(QWidget):
 
         # Initialize all attributes
         self._object_configs = []
+        self._drone_spawn_configs = []
+        self._target_spawn_configs = []
+        self._sidebar_mode = "object_spawns"
         self._config_lock = threading.Lock()
         self._running = False
         self._episode = 0
@@ -64,7 +68,7 @@ class SimulationViewer(QWidget):
         self._replay_timer = QTimer(self)
         self._replay_timer.timeout.connect(self._advance_replay)
 
-        # Initialize with default objects
+        # Initialize with default object
         default_objects = [
             {
                 "name": "Static Box",
@@ -97,7 +101,6 @@ class SimulationViewer(QWidget):
                 "direction": -1
             }
         ]
-        
         # Use config if provided, otherwise use defaults
         if config and config.get('num_obstacles', 0) > 0:
             for i in range(config.get('num_obstacles', 2)):
@@ -106,6 +109,10 @@ class SimulationViewer(QWidget):
                 self._object_configs.append(obj)
         else:
             self._object_configs = default_objects.copy()
+
+        total_drones = int(self.config.get("num_drones", 3)) * int(self.config.get("num_swarms", 1))
+        self._drone_spawn_configs = [self._default_drone_spawn_config(i) for i in range(max(1, total_drones))]
+        self._target_spawn_configs = [self._default_target_spawn_config(i) for i in range(max(1, int(self.config.get("num_swarms", 1))))]
         
         # Start a timer to consume state updates
         self._update_timer = QTimer()
@@ -120,6 +127,8 @@ class SimulationViewer(QWidget):
 
         self._env_viewer = EnvironmentViewer(
             object_configs_getter=self._get_object_configs_snapshot,
+            drone_spawn_configs_getter=self._get_drone_spawn_configs_snapshot,
+            target_spawn_configs_getter=self._get_target_spawn_configs_snapshot,
             on_state=self._enqueue_state,
             on_stopped=self._enqueue_stopped,
             on_error=self._enqueue_error,
@@ -128,6 +137,9 @@ class SimulationViewer(QWidget):
             lidar=bool(self.config.get("lidar", False)),
             render_mode=str(self.config.get("render_mode", "human")),
             model_path=str(self.config.get("model_path", "")),
+                world_scale=float(self.config.get("world_scale", 5)),
+                num_swarms=int(self.config.get("num_swarms", 1)),
+                seed=self.config.get("seed", None),
         )
     ####### UI Building Methods #######
 
@@ -251,8 +263,25 @@ class SimulationViewer(QWidget):
 
         side_title = QLabel("Objects")
         side_title.setStyleSheet("font-weight: 700;")
+        self.side_title = side_title
+
+        mode_row = QWidget()
+        mode_layout = QHBoxLayout(mode_row)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(4)
+
+        self.mode_btn_objects = QPushButton("Obstacles")
+        self.mode_btn_drones = QPushButton("Drones")
+        self.mode_btn_targets = QPushButton("Targets")
+        for btn in (self.mode_btn_objects, self.mode_btn_drones, self.mode_btn_targets):
+            btn.setCheckable(True)
+            mode_layout.addWidget(btn)
+        self.mode_btn_objects.clicked.connect(lambda: self._set_sidebar_mode("object_spawns"))
+        self.mode_btn_drones.clicked.connect(lambda: self._set_sidebar_mode("drone_spawns"))
+        self.mode_btn_targets.clicked.connect(lambda: self._set_sidebar_mode("target_spawns"))
 
         count_label = QLabel("Object count")
+        self.count_label = count_label
         self.object_spinbox = QSpinBox()
         self.object_spinbox.setRange(0, 100) 
         self.object_spinbox.setValue(len(self._object_configs))
@@ -267,6 +296,7 @@ class SimulationViewer(QWidget):
         self.scroll_area.setWidget(self.scroll_host)
 
         left_layout.addWidget(side_title)
+        left_layout.addWidget(mode_row)
         left_layout.addWidget(count_label)
         left_layout.addWidget(self.object_spinbox)
         left_layout.addWidget(self.scroll_area)
@@ -280,8 +310,8 @@ class SimulationViewer(QWidget):
         panel_title.setStyleSheet("font-weight: 700;")
 
         panel_text = QLabel(
-            "The sidebar controls each object individually: name, type, shape, position, size, yaw, and dynamic motion.\n"
-            "Any changes while running automatically restart the episode with the new object setup."
+            "Any changes while running automatically restart the episode with the new object setup.\n"
+            "Statistics:"
         )
         panel_text.setWordWrap(True)
 
@@ -307,7 +337,7 @@ class SimulationViewer(QWidget):
         root_layout.addWidget(timeline_scroll)
         root_layout.addWidget(body, 1)
 
-        self._rebuild_object_controls()
+        self._set_sidebar_mode("object_spawns")
 
     def _add_labeled_entry(self, parent: QWidget, label: str, value, on_apply):
         row = QWidget(parent)
@@ -316,7 +346,7 @@ class SimulationViewer(QWidget):
         layout.setSpacing(6)
 
         title = QLabel(label)
-        title.setFixedWidth(38)
+        title.setFixedWidth(70)
         entry = QLineEdit(str(value))
 
         entry.returnPressed.connect(lambda e=entry: on_apply(e.text()))
@@ -333,7 +363,7 @@ class SimulationViewer(QWidget):
         layout.setSpacing(6)
 
         title = QLabel(label)
-        title.setFixedWidth(38)
+        title.setFixedWidth(70)
         combo = _NoScrollComboBox()
         combo.addItems(list(options))
         combo.setCurrentText(str(current))
@@ -351,12 +381,55 @@ class SimulationViewer(QWidget):
                 widget.deleteLater()
 
         with self._config_lock:
-            configs = [dict(cfg) for cfg in self._object_configs]
+            if self._sidebar_mode == "object_spawns":
+                configs = [dict(cfg) for cfg in self._object_configs]
+            elif self._sidebar_mode == "drone_spawns":
+                configs = [dict(cfg) for cfg in self._drone_spawn_configs]
+            else:
+                configs = [dict(cfg) for cfg in self._target_spawn_configs]
 
         if not configs:
-            empty = QLabel("No objects configured")
+            empty = QLabel("No entries configured")
             empty.setStyleSheet("color: #666;")
             self.scroll_layout.addWidget(empty)
+            self.scroll_layout.addStretch(1)
+            return
+
+        if self._sidebar_mode in ("drone_spawns", "target_spawns"):
+            title = "Drone" if self._sidebar_mode == "drone_spawns" else "Target"
+            for i, raw_cfg in enumerate(configs):
+                cfg = self._ensure_spawn_fields(raw_cfg, title)
+                card = QGroupBox(f"{title} {i + 1}")
+                card_layout = QVBoxLayout(card)
+                card_layout.setContentsMargins(8, 8, 8, 8)
+                card_layout.setSpacing(4)
+
+                header_row = QWidget(card)
+                header_layout = QHBoxLayout(header_row)
+                header_layout.setContentsMargins(0, 0, 0, 0)
+                header_layout.setSpacing(0)
+                header_layout.addStretch(1)
+                header_layout.addWidget(self._remove_object_button(i), 0, Qt.AlignmentFlag.AlignRight)
+                card_layout.addWidget(header_row)
+
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Name", cfg["name"],
+                    partial(self._set_object_field, i, "name")
+                ))
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Coordinate X", cfg["x"],
+                    partial(self._set_object_field, i, "x")
+                ))
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Coordinate Y", cfg["y"],
+                    partial(self._set_object_field, i, "y")
+                ))
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Coordinate Z", cfg["z"],
+                    partial(self._set_object_field, i, "z")
+                ))
+                self.scroll_layout.addWidget(card)
+
             self.scroll_layout.addStretch(1)
             return
 
@@ -396,16 +469,16 @@ class SimulationViewer(QWidget):
 
             # Position fields
             card_layout.addWidget(self._add_labeled_entry(
-                card, "X", cfg["x"], 
+                card, "Coordinate X", cfg["x"], 
                 partial(self._set_object_field, i, "x")
             ))
             card_layout.addWidget(self._add_labeled_entry(
-                card, "Y", cfg["y"], 
+                card, "Coordinate Y", cfg["y"], 
                 partial(self._set_object_field, i, "y")
             ))
 
             card_layout.addWidget(self._add_labeled_entry(
-                card, "Z", cfg["z"], 
+                card, "Coordinate Z", cfg["z"], 
                 partial(self._set_object_field, i, "z")
             ))
             
@@ -443,6 +516,45 @@ class SimulationViewer(QWidget):
             ))
             self.scroll_layout.addWidget(card)
         self.scroll_layout.addStretch(1)
+
+    def _set_sidebar_mode(self, mode: str):
+        if mode not in SIDEBAR_MODES:
+            return
+        self._sidebar_mode = mode
+
+        self.mode_btn_objects.setChecked(mode == "object_spawns")
+        self.mode_btn_drones.setChecked(mode == "drone_spawns")
+        self.mode_btn_targets.setChecked(mode == "target_spawns")
+
+        if mode == "object_spawns":
+            self.side_title.setText("Objects")
+            self.count_label.setText("Object count")
+            count = len(self._object_configs)
+        elif mode == "drone_spawns":
+            self.side_title.setText("Drones")
+            self.count_label.setText("Drone count")
+            count = len(self._drone_spawn_configs)
+        else:
+            self.side_title.setText("Targets")
+            self.count_label.setText("Target count")
+            count = len(self._target_spawn_configs)
+
+        self.object_spinbox.blockSignals(True)
+        self.object_spinbox.setValue(count)
+        self.object_spinbox.blockSignals(False)
+        self._rebuild_object_controls()
+
+    def _ensure_spawn_fields(self, config, prefix: str):
+        defaults = {
+            "name": f"{prefix} count",
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.5,
+        }
+        for key, value in defaults.items():
+            if key not in config:
+                config[key] = value
+        return config
 
     def _remove_object_button(self, index: int):
         btn = QPushButton("X")
@@ -577,12 +689,12 @@ class SimulationViewer(QWidget):
         if not file_name:
             return
 
-        ok, message = self._env_viewer.set_policy_model_path(file_name)
+        ok, message = self._env_viewer.set_model_path(file_name)
         if not ok:
             self.status_lbl.setText(f"Error: {message}")
             return
 
-        self.config["policy_model_path"] = file_name
+        self.config["model_path"] = file_name
         model_name = Path(file_name).name
         self.status_lbl.setText(f"Model changed to {model_name}")
         if self._running:
@@ -650,13 +762,29 @@ class SimulationViewer(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
         with self._config_lock:
-            if 0 <= index < len(self._object_configs):
-                del self._object_configs[index]
+            if self._sidebar_mode == "object_spawns":
+                if 0 <= index < len(self._object_configs):
+                    del self._object_configs[index]
+                else:
+                    return
+            elif self._sidebar_mode == "drone_spawns":
+                if 0 <= index < len(self._drone_spawn_configs):
+                    del self._drone_spawn_configs[index]
+                else:
+                    return
             else:
-                return
+                if 0 <= index < len(self._target_spawn_configs):
+                    del self._target_spawn_configs[index]
+                else:
+                    return
 
         self.object_spinbox.blockSignals(True)
-        self.object_spinbox.setValue(len(self._object_configs))
+        if self._sidebar_mode == "object_spawns":
+            self.object_spinbox.setValue(len(self._object_configs))
+        elif self._sidebar_mode == "drone_spawns":
+            self.object_spinbox.setValue(len(self._drone_spawn_configs))
+        else:
+            self.object_spinbox.setValue(len(self._target_spawn_configs))
         self.object_spinbox.blockSignals(False)
         self._rebuild_object_controls()
         self._request_restart(f"Restarting after removing {object_name}...")
@@ -682,6 +810,23 @@ class SimulationViewer(QWidget):
             "direction": 1,
         }
 
+    def _default_drone_spawn_config(self, index: int):
+        return {
+            "name": f"Drone Spawn {index + 1}",
+            "x": round((index % 3) * 0.9 - 0.1, 2),
+            "y": round((index // 3) * 0.9 - 0.1, 2),
+            "z": 0.8,
+        }
+
+    def _default_target_spawn_config(self, index: int):
+        return {
+            "name": f"Target Spawn {index + 1}",
+            "x": 0.0,
+            "y": 2.0,
+            "z": 0.5,
+        }
+
+    #TODO: Add speed change
     def _on_speed_changed(self, value: int):
         return value
 
@@ -689,7 +834,7 @@ class SimulationViewer(QWidget):
         """Handle spin box value changes"""
         self._sync_object_config_count(int(value))
         self._rebuild_object_controls()
-        self._request_restart(f"Restarting with updated object count: {value}")
+        self._request_restart(f"Restarting with updated count: {value}")
         
     def _ensure_config_fields(self, config):
         """Ensure config has all required fields with defaults"""
@@ -716,66 +861,90 @@ class SimulationViewer(QWidget):
         return config
 
     def _sync_object_config_count(self, count: int):
-        current_count = len(self._object_configs)
-        if count > current_count:
-            # Add new configs with all default fields
-            for i in range(current_count, count):
-                new_config = {
-                    "name": f"Object {i + 1}",
-                    "kind": "static",
-                    "shape": "box",
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0,
-                    "size": 0.5,
-                    "yaw": 0.0,
-                    "axis": 0,
-                    "min": -1.0,
-                    "max": 1.0,
-                    "speed": 0.2,
-                    "direction": 1
-                }
-                self._object_configs.append(new_config)
-        elif count < current_count:
-            # Remove excess configs
-            self._object_configs = self._object_configs[:count]
+        if self._sidebar_mode == "object_spawns":
+            current_count = len(self._object_configs)
+            if count > current_count:
+                for i in range(current_count, count):
+                    self._object_configs.append(self._default_object_config(i))
+            elif count < current_count:
+                self._object_configs = self._object_configs[:count]
+        elif self._sidebar_mode == "drone_spawns":
+            current_count = len(self._drone_spawn_configs)
+            if count > current_count:
+                for i in range(current_count, count):
+                    self._drone_spawn_configs.append(self._default_drone_spawn_config(i))
+            elif count < current_count:
+                self._drone_spawn_configs = self._drone_spawn_configs[:count]
+        else:
+            current_count = len(self._target_spawn_configs)
+            if count > current_count:
+                for i in range(current_count, count):
+                    self._target_spawn_configs.append(self._default_target_spawn_config(i))
+            elif count < current_count:
+                self._target_spawn_configs = self._target_spawn_configs[:count]
 
     def _set_object_field(self, index: int, key: str, raw_value):
         with self._config_lock:
-            if not (0 <= index < len(self._object_configs)):
-                return
-            old = self._object_configs[index].get(key)
-            if isinstance(old, float):
-                value = self._coerce_float(raw_value, old)
-            elif isinstance(old, int):
-                value = self._coerce_int(raw_value, old)
-            else:
-                value = str(raw_value).strip() if str(raw_value).strip() else str(old)
-            
-            if key == "shape" and value not in SUPPORTED_SHAPES:
-                value = old
-            if key == "kind" and value not in KINDS:
-                value = old
-            if key == "axis":
-                if isinstance(value, str):
-                    value = AXIS_LABEL_TO_INT.get(value, old)
-                value = max(0, min(2, int(value)))
-            if key == "size":
-                value = max(0.1, float(value))
-            if key == "speed":
-                value = max(0.0, float(value))
-            if key == "direction":
-                value = -1 if int(value) < 0 else 1
+            if self._sidebar_mode == "object_spawns":
+                if not (0 <= index < len(self._object_configs)):
+                    return
+                old = self._object_configs[index].get(key)
+                if isinstance(old, float):
+                    value = self._coerce_float(raw_value, old)
+                elif isinstance(old, int):
+                    value = self._coerce_int(raw_value, old)
+                else:
+                    value = str(raw_value).strip() if str(raw_value).strip() else str(old)
 
-            self._object_configs[index][key] = value
+                if key == "shape" and value not in SUPPORTED_SHAPES:
+                    value = old
+                if key == "kind" and value not in KINDS:
+                    value = old
+                if key == "axis":
+                    if isinstance(value, str):
+                        value = AXIS_LABEL_TO_INT.get(value, old)
+                    value = max(0, min(2, int(value)))
+                if key == "size":
+                    value = max(0.1, float(value))
+                if key == "speed":
+                    value = max(0.0, float(value))
+                if key == "direction":
+                    value = -1 if int(value) < 0 else 1
+
+                self._object_configs[index][key] = value
+            else:
+                configs = self._drone_spawn_configs if self._sidebar_mode == "drone_spawns" else self._target_spawn_configs
+                if not (0 <= index < len(configs)):
+                    return
+                old = configs[index].get(key)
+                if key in ("x", "y", "z"):
+                    value = self._coerce_float(raw_value, old)
+                else:
+                    value = str(raw_value).strip() if str(raw_value).strip() else str(old)
+                configs[index][key] = value
 
         self._request_restart(f"Restarting after updating {self._object_name(index)}...")
 
     def _object_name(self, index: int) -> str:
         with self._config_lock:
-            if 0 <= index < len(self._object_configs):
-                return str(self._object_configs[index].get("name", f"Object {index + 1}"))
+            if self._sidebar_mode == "object_spawns":
+                if 0 <= index < len(self._object_configs):
+                    return str(self._object_configs[index].get("name", f"Object {index + 1}"))
+            elif self._sidebar_mode == "drone_spawns":
+                if 0 <= index < len(self._drone_spawn_configs):
+                    return str(self._drone_spawn_configs[index].get("name", f"Drone {index + 1}"))
+            else:
+                if 0 <= index < len(self._target_spawn_configs):
+                    return str(self._target_spawn_configs[index].get("name", f"Target {index + 1}"))
         return f"Object {index + 1}"
+
+    def _get_drone_spawn_configs_snapshot(self):
+        with self._config_lock:
+            return [dict(cfg) for cfg in self._drone_spawn_configs]
+
+    def _get_target_spawn_configs_snapshot(self):
+        with self._config_lock:
+            return [dict(cfg) for cfg in self._target_spawn_configs]
 
     def _save_config(self):
         self._object_configs = self._get_object_configs_snapshot()

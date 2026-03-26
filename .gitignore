@@ -11,3 +11,4 @@ models/
 old_files/
 interface/__pycache__/
 .vscode/
+envs/realWorldGeneration.py

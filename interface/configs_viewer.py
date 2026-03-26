@@ -121,10 +121,37 @@ class LandingPage(QWidget):
         world_layout.addWidget(QLabel("World Scale:"))
         self.world_scale_spinbox = QSpinBox()
         self.world_scale_spinbox.setRange(1, 100)
-        self.world_scale_spinbox.setValue(10)
+        self.world_scale_spinbox.setValue(5)
         world_layout.addWidget(self.world_scale_spinbox)
         world_layout.addStretch()
         experimental_layout.addLayout(world_layout)
+
+        # Number of swarms
+        swarms_layout = QHBoxLayout()
+        swarms_layout.addWidget(QLabel("Number of Swarms:"))
+        self.swarms_spinbox = QSpinBox()
+        self.swarms_spinbox.setRange(1, 4)
+        self.swarms_spinbox.setValue(1)
+        swarms_layout.addWidget(self.swarms_spinbox)
+        swarms_layout.addStretch()
+        experimental_layout.addLayout(swarms_layout)
+
+        # Optional fixed seed
+        self.use_seed_checkbox = QCheckBox("Use Custom Seed")
+        experimental_layout.addWidget(self.use_seed_checkbox)
+
+        seed_layout = QHBoxLayout()
+        seed_layout.addWidget(QLabel("Seed:"))
+        self.seed_spinbox = QSpinBox()
+        self.seed_spinbox.setRange(0, 9999999)
+        self.seed_spinbox.setValue(1)
+        self.seed_spinbox.setEnabled(False)
+        self.use_seed_checkbox.toggled.connect(self.seed_spinbox.setEnabled)
+        seed_layout.addWidget(self.seed_spinbox)
+        seed_layout.addStretch()
+        experimental_layout.addLayout(seed_layout)
+
+        experimental_layout.addStretch()
 
         self.start_btn = QPushButton("Launch Simulation")
         self.start_btn.setStyleSheet("""
@@ -182,6 +209,10 @@ class LandingPage(QWidget):
             'max_steps': self.steps_spinbox.value(),
             'render_mode': self.render_combo.currentText(),
             'lidar': self.lidar_checkbox.isChecked(),
+            'model_path': selected_model_path,
             'policy_model_path': selected_model_path,
+            'world_scale': self.world_scale_spinbox.value(),
+            'num_swarms': self.swarms_spinbox.value(),
+            'seed': self.seed_spinbox.value() if self.use_seed_checkbox.isChecked() else None,
         }
         self.switch_to_simulation(config)

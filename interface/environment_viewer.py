@@ -17,6 +17,8 @@ class EnvironmentViewer:
     def __init__(
         self,
         object_configs_getter,
+        drone_spawn_configs_getter,
+        target_spawn_configs_getter,
         on_state,
         on_stopped,
         on_error,
@@ -25,10 +27,16 @@ class EnvironmentViewer:
         lidar=False,
         render_mode="human",
         model_path="",
+        world_scale=5,
+        num_swarms=1,
+        seed=None,
     ):
+        self._max_recorded_frames = 999999
         #### Initialize attributes
         # Basic attributes
         self._get_object_configs = object_configs_getter
+        self._get_drone_spawn_configs = drone_spawn_configs_getter
+        self._get_target_spawn_configs = target_spawn_configs_getter
         self._on_state = on_state
         self._on_stopped = on_stopped
         self._on_error = on_error
@@ -36,6 +44,9 @@ class EnvironmentViewer:
         self._max_steps = max(1, int(max_steps))
         self._lidar = bool(lidar)
         self._render_mode = render_mode
+        self._world_scale = max(1.0, float(world_scale))
+        self._num_swarms = max(1, int(num_swarms))
+        self._seed = int(seed) if seed is not None else None
 
         # Simulation control attributes
         self._running = False
@@ -53,7 +64,6 @@ class EnvironmentViewer:
         self._record_lock = threading.Lock()
         self._recorded_frames: List[Dict[str, Any]] = []
         self._replay_index = 0
-        self._max_recorded_frames = 8000
 
         ## Model management
         self._model_path = str(model_path or "").strip()
@@ -149,6 +159,11 @@ class EnvironmentViewer:
 
                 obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1))
                 self._apply_object_configs(current_env, configs)
+                self._apply_spawn_configs(
+                    current_env,
+                    self._get_drone_spawn_configs() if callable(self._get_drone_spawn_configs) else [],
+                    self._get_target_spawn_configs() if callable(self._get_target_spawn_configs) else [],
+                )
                 # print("Env made")
                 self._episode += 1
                 self._step = 0
@@ -215,9 +230,11 @@ class EnvironmentViewer:
             num_static_obstacles=static_count,
             num_dynamic_obstacles=dynamic_count,
             max_steps=self._max_steps,
+            num_swarms=self._num_swarms,
             lidar=self._lidar,
             render_mode=self._render_mode,
-            world_scale=5
+            seed=self._seed,
+            world_scale=self._world_scale,
         )
 
     ## Set current env to None close if still existing
@@ -277,6 +294,66 @@ class EnvironmentViewer:
         env_instance._obstacles = new_obstacles
         env_instance.num_static_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "static")
         env_instance.num_dynamic_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
+
+    def _apply_spawn_configs(self, env_instance, drone_spawns, target_spawns):
+        p = getattr(env_instance, "_p", None)
+        if p is None:
+            return
+        drone_ids = list(getattr(env_instance, "_drone_ids", []))
+        if drone_ids and drone_spawns:
+            for i, body_id in enumerate(drone_ids[: len(drone_spawns)]):
+                cfg = drone_spawns[i]
+                pos = [
+                    float(cfg.get("x", 0.0)),
+                    float(cfg.get("y", 0.0)),
+                    float(cfg.get("z", 0.8)),
+                ]
+                try:
+                    env_instance._call_physics(
+                        p.resetBasePositionAndOrientation,
+                        int(body_id),
+                        pos,
+                        [0.0, 0.0, 0.0, 1.0],
+                    )
+                    env_instance._call_physics(
+                        p.resetBaseVelocity,
+                        int(body_id),
+                        [0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0],
+                    )
+                except Exception:
+                    continue
+        seen = set()
+        unique_targets = []
+        for tgt in list(getattr(env_instance, "_targets", []) or []):
+            body_id = getattr(tgt, "body_id", None)
+            if body_id is None or body_id in seen:
+                continue
+            seen.add(body_id)
+            unique_targets.append(tgt)
+
+        if unique_targets and target_spawns:
+            for i, target in enumerate(unique_targets[: len(target_spawns)]):
+                cfg = target_spawns[i]
+                pos = [
+                    float(cfg.get("x", 0.0)),
+                    float(cfg.get("y", 2.0)),
+                    float(cfg.get("z", 0.5)),
+                ]
+                body_id = getattr(target, "body_id", None)
+                if body_id is None:
+                    continue
+                try:
+                    env_instance._call_physics(
+                        p.resetBasePositionAndOrientation,
+                        int(body_id),
+                        pos,
+                        [0.0, 0.0, 0.0, 1.0],
+                    )
+                    if hasattr(target, "start_pos"):
+                        target.start_pos = np.array(pos, dtype=np.float32)
+                except Exception:
+                    continue
 
     ################ Model Load logic ################
 
