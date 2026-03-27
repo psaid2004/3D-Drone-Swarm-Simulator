@@ -155,7 +155,6 @@ def create_env(
     vec = SB3VecResetTupleFix(vec)
     vec = VecMonitor(vec)
 
-    # IMPORTANT:
     vec = VecNormalize(
         vec,
         gamma=GAMMA,

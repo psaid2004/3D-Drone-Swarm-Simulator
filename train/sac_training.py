@@ -65,13 +65,14 @@ def create_env(
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
     env = DroneSwarm3D(
-        world_scale = world_scale,
+        world_scale=world_scale,
         num_drones_per_swarm=num_drones,
         num_static_obstacles=num_static_obstacles,
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
         render_mode=render_mode,
+        max_drones_per_swarm=MAX_DRONES_PER_SWARM
     )
 
     # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on
@@ -87,10 +88,9 @@ def create_env(
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
-        norm_reward=True, # TODO CHECK THIS
+        norm_reward=False,
         norm_obs=True,
         clip_obs=5.0,
-        # clip_reward=10.0,
     )
 
     return vec
@@ -174,16 +174,16 @@ def make_stage_callbacks(
     progress_cb = ProgressBarCallback()
 
     stats_cb = StepStatsCallback(
-        num_drones=int(num_drones),
+        num_drones=int(MAX_DRONES_PER_SWARM),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
         # print_every=5000,
-        enable_stage_early_stop=False,
+        enable_stage_early_stop=True,
         reach_threshold=0.85,
         max_collision_rate=0.05,
         patience=10,
         min_stage_timesteps=10000,
-        verbose=1,
+        verbose=0,
     )
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
@@ -355,6 +355,20 @@ def train(device: str = "auto"):
         # Carry normalization stats forward.
         copy_vec_normalize_stats(old_train_env, new_train_env)
         copy_vec_normalize_stats(old_train_env, new_eval_env)
+
+        if model.observation_space != new_train_env.observation_space:
+            raise ValueError(
+                f"Observation space changed across stages.\n"
+                f"model.observation_space={model.observation_space}\n"
+                f"new_train_env.observation_space={new_train_env.observation_space}"
+            )
+
+        if model.action_space != new_train_env.action_space:
+            raise ValueError(
+                f"Action space changed across stages.\n"
+                f"model.action_space={model.action_space}\n"
+                f"new_train_env.action_space={new_train_env.action_space}"
+            )
 
         model.set_env(new_train_env)
         eval_env = new_eval_env

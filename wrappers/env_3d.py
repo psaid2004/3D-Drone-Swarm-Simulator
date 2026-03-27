@@ -1463,9 +1463,6 @@ class DroneSwarm3D(ParallelEnv):
                 dummy_positions = np.array(dummy_positions, dtype=np.float32)
                 self.spawn_positions = np.vstack([self.spawn_positions, dummy_positions])
 
-            print("drones_in_swarm", self.drones_in_swarm)
-            print("spawn_positions", self.spawn_positions)
-
             # if underlying VelocityAviary client is disconnected, rebuild it
             if not self._pybullet_client_alive():
                 self._rebuild_aviary()
