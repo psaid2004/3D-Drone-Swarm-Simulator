@@ -175,7 +175,7 @@ class DroneSwarm3D(ParallelEnv):
             self.spawn_positions = np.vstack([self.spawn_positions, dummy_positions])
 
         self._create_aviary()
-
+        self._targets = self._make_targets()
 
     def _init_spaces(self) -> None:
         """ Create action and observation spaces. """
@@ -897,8 +897,10 @@ class DroneSwarm3D(ParallelEnv):
         obs_dict: Dict[str, np.ndarray] = {}
 
         # if drone does not yet have target, create one
-        if self._targets is None:
-            self._targets = self._make_targets()
+        # if self._targets is None:
+        #     print("drone did not have a target")
+        #     exit()
+        #     self._targets = self._make_targets()
 
         # compute drone positions and swarm centre
         positions = self.active_drone_positions()
@@ -1461,6 +1463,9 @@ class DroneSwarm3D(ParallelEnv):
                 dummy_positions = np.array(dummy_positions, dtype=np.float32)
                 self.spawn_positions = np.vstack([self.spawn_positions, dummy_positions])
 
+            print("drones_in_swarm", self.drones_in_swarm)
+            print("spawn_positions", self.spawn_positions)
+
             # if underlying VelocityAviary client is disconnected, rebuild it
             if not self._pybullet_client_alive():
                 self._rebuild_aviary()
@@ -1469,7 +1474,23 @@ class DroneSwarm3D(ParallelEnv):
 
             self._init_pybullet_handles()
             self._refresh_drone_ids_from_pybullet()
+
             self.restore_drone_visuals_and_collisions()
+
+            # Move drones to their new spawn position
+            for i, pos in enumerate(self.spawn_positions):
+                self._p.resetBasePositionAndOrientation(
+                    self._drone_ids[i],
+                    pos,  # new spawn position
+                    [0, 0, 0, 1]  # neutral orientation (quaternion)
+                )
+                self._p.resetBaseVelocity(
+                    self._drone_ids[i],
+                    linearVelocity=[0, 0, 0],
+                    angularVelocity=[0, 0, 0]
+                )
+
+
 
             # reset episode bookkeeping
             self._dead[:] = False
@@ -1487,10 +1508,11 @@ class DroneSwarm3D(ParallelEnv):
             self._drone_collision_once[:] = False
 
             # refresh episode content
-            self._targets = self._make_targets()
             self._rebuild_query_world_from_current_scene()
             self._spawn_obstacles()
             self._spawn_walls()
+            self._targets = self._make_targets()
+
 
             obs0 = self._build_obs_dict()
 
