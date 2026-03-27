@@ -37,7 +37,7 @@ class Curriculum:
             #(4, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
             #(5, 1, 0, 0, 700_000, 800, False),  # Stage 0: one drone, empty world
 
-            (2, 1, 0, 0, 10, 900, True),   # Stage 0: one drone, empty world
+            (2, 1, 0, 0, 50, 900, True),   # Stage 0: one drone, empty world
             (2, 2, 0, 0, 650_000, 900, True),  # Stage 0: one drone, empty world
             (2, 2, 2, 0, 650_000, 900, True),  # Stage 0: one drone, empty world
             (2, 2, 2, 2, 650_000, 900, True),  # Stage 0: one drone, empty world

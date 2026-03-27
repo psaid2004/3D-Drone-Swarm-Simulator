@@ -105,7 +105,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
 
         # --------------- 4. Alignment reward ---------------
 
-        vel = env._env._getDroneStateVector(i)[10:13]
+        vel = np.array(env._env._getDroneStateVector(i)[10:13], dtype=np.float32)
         speed = float(np.linalg.norm(vel))
 
         # +0.5 if moving directly toward target, else - 0.5
@@ -120,9 +120,6 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             r_final = 0.0
 
         # --------------- 6. Tangential velocity penalty near goal ---------------
-
-        vel = np.array(env._env._getDroneStateVector(i)[10:13], dtype=np.float32)
-        speed = float(np.linalg.norm(vel))
 
         if to_target_norm > 1e-6 and speed > 1e-6:
             target_dir = to_target_vec / to_target_norm
@@ -198,11 +195,8 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         if speed < 0.1:
             r -= ZERO_SPEED_PEN
 
-
-
         # print(r_info)
         # print(r)
-
 
         reward_dict[agent] = float(r)
         reward_info[agent] = r_info

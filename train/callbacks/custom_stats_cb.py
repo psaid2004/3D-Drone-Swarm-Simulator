@@ -192,8 +192,13 @@ class StepStatsCallback(BaseCallback):
 
         for flat_idx, info in enumerate(infos):
 
-            env_i = flat_idx // self.num_drones
-            drone_i = flat_idx % self.num_drones
+            env_i = flat_idx % self.num_envs
+            drone_i = int(info.get("drone_idx", -1))
+
+            if not (0 <= env_i < self.num_envs):
+                continue
+            if not (0 <= drone_i < self.num_drones):
+                continue
 
             active = bool(info.get("active", True))
             reached = bool(info.get("reached", False))

@@ -3,7 +3,6 @@ from __future__ import annotations
 import os, time
 from pathlib import Path
 import numpy as np
-import gc
 
 import torch
 import warnings
@@ -71,36 +70,39 @@ class ExpertBlendPolicy(SACPolicy):
     def __init__(self, *args, expert_policy=None, blend_ratio=0.8, **kwargs):
         super().__init__(*args, **kwargs)
         self.expert = expert_policy
-        self._blend_ratio = float(blend_ratio)
-        self._vec_normalise: VecNormalize | None = None
+        self._blend_ratio = float(np.clip(blend_ratio, 0.0, 1.0))
+        self._vec_normalise = None
 
 
     @property
     def blend_ratio(self) -> float:
         return self._blend_ratio
 
-
     @blend_ratio.setter
     def blend_ratio(self, v: float):
         self._blend_ratio = float(np.clip(v, 0.0, 1.0))
 
-
-    def set_vec_normalize(self, vn: VecNormalize | None) -> None:
+    def set_vec_normalise(self, vn) -> None:
         self._vec_normalise = vn
 
-
-    def denormalise_obs(self, obs_np: np.ndarray) -> np.ndarray:
+    def denormalise_observation(self, obs_np: np.ndarray) -> np.ndarray:
         """
-        Undo VecNormalise's observation normalisation:
-            raw ≈ normalised * sqrt(var + ε) + mean
+        Convert VecNormalize-normalized observations back to raw observations.
         """
         vn = self._vec_normalise
-        if vn is None or not vn.norm_obs:
+        if vn is None or not getattr(vn, "norm_obs", False):
             return obs_np
 
+        # Use VecNormalize's own helper if available
+        if hasattr(vn, "unnormalize_obs"):
+            try:
+                return vn.unnormalize_obs(obs_np.copy())
+            except Exception:
+                pass
+
+        # fallback to manual inverse using mean and std
         rms = vn.obs_rms
         return obs_np * np.sqrt(rms.var + vn.epsilon) + rms.mean
-
 
     def _predict(self, obs: torch.Tensor, deterministic: bool = False) -> torch.Tensor:
         # RL action from SAC actor
@@ -112,7 +114,7 @@ class ExpertBlendPolicy(SACPolicy):
 
         # expert action for each item in batch
         obs_np = obs.detach().cpu().numpy()
-        raw_obs_np = self._denormalize_obs(obs_np)
+        raw_obs_np = self.denormalise_observation(obs_np)
 
         expert_np = np.array(
             [self.expert.action(o) for o in raw_obs_np],
@@ -124,7 +126,7 @@ class ExpertBlendPolicy(SACPolicy):
         return torch.clamp(blended, -1.0, 1.0)
 
 
-# ---- CREATE ENV ---- updated
+# ---- CREATE ENV ----
 def create_env(
     world_scale,
     num_drones,
@@ -144,6 +146,7 @@ def create_env(
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
         render_mode=render_mode,
+        max_drones_per_swarm=MAX_DRONES_PER_SWARM
     )
 
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
@@ -152,6 +155,7 @@ def create_env(
     vec = SB3VecResetTupleFix(vec)
     vec = VecMonitor(vec)
 
+    # IMPORTANT:
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
@@ -163,14 +167,6 @@ def create_env(
     return vec
 
 
-def force_set_env(model: SAC, new_env) -> None:
-    """
-    Replace the model's env without the num_envs equality check that model.set_env() enforces.
-    """
-    model.env = new_env
-    model.n_envs = new_env.num_envs
-
-
 def unwrap_vec_normalize(env):
     while env is not None:
         if isinstance(env, VecNormalize):
@@ -179,28 +175,19 @@ def unwrap_vec_normalize(env):
     return None
 
 
-def snapshot_vec_normalize(env):
+def copy_vec_normalize_stats(src_env, dst_env) -> None:
     """
-    Extract (obs_rms, ret_rms) from a VecNormalize into plain objects
-    so we can close the env before creating the next one.
-    Returns (None, None) if no VecNormalize found.
+    Copy VecNormalize running statistics from src_env to dst_env.
+    Safe no-op if either side is missing VecNormalize.
     """
-    vn = unwrap_vec_normalize(env)
-    if vn is None:
-        return None, None
-    import copy
-    return copy.deepcopy(vn.obs_rms), copy.deepcopy(vn.ret_rms)
+    src_vn = unwrap_vec_normalize(src_env)
+    dst_vn = unwrap_vec_normalize(dst_env)
 
+    if src_vn is None or dst_vn is None:
+        return
 
-def apply_vec_normalize_snapshot(env, obs_rms, ret_rms) -> None:
-    """Apply previously snapshotted RMS stats to a freshly created env."""
-    if obs_rms is None:
-        return
-    vn = unwrap_vec_normalize(env)
-    if vn is None:
-        return
-    vn.obs_rms = obs_rms
-    vn.ret_rms = ret_rms
+    dst_vn.obs_rms = src_vn.obs_rms
+    dst_vn.ret_rms = src_vn.ret_rms
 
 
 def safe_close(env) -> None:
@@ -210,21 +197,6 @@ def safe_close(env) -> None:
         env.close()
     except Exception:
         pass
-
-
-def close_and_cleanup(*envs) -> None:
-    """
-    Fully tear down one or more envs and guarantee their PyBullet physics
-    servers are disconnected before this function returns.
-
-    """
-    for env in envs:
-        safe_close(env)
-    del envs          # drop the tuple's own references
-    gc.collect()      # first pass: break cycles
-    gc.collect()      # second pass: collect anything freed by first pass
-    time.sleep(0.5)   # let macOS release OS-level handles
-
 
 
 # ---- CALLBACK HELPER ----
@@ -273,7 +245,7 @@ def make_stage_callbacks(
     progress_cb = ProgressBarCallback()
 
     stats_cb = StepStatsCallback(
-        num_drones=int(num_drones),
+        num_drones=int(MAX_DRONES_PER_SWARM),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
         # print_every=5000,
@@ -287,11 +259,11 @@ def make_stage_callbacks(
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
 
-    # stop_no_improve_cb = StopTrainingOnNoModelImprovement(
-    #     max_no_improvement_evals=8,
-    #     min_evals=3,
-    #     verbose=1,
-    # )
+    stop_no_improve_cb = StopTrainingOnNoModelImprovement(
+        max_no_improvement_evals=8,
+        min_evals=3,
+        verbose=1,
+    )
 
     # evaluate current policy on clean evaluate environment
     eval_cb = EvalCallback(
@@ -302,7 +274,7 @@ def make_stage_callbacks(
         n_eval_episodes=5,
         deterministic=True,
         render=False,
-        # callback_after_eval=stop_no_improve_cb,
+        callback_after_eval=stop_no_improve_cb,
         verbose=1,
     )
 
@@ -319,30 +291,48 @@ def train(device: str = "auto"):
     """ Train the SAC model while looping through all curriculum stages."""
     os.makedirs(MODELS_DIR, exist_ok=True)
 
-    device_ = ("cuda" if torch.cuda.is_available() else "cpu") if device == "auto" else device
+    if device == "auto":
+        device_ = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        device_ = device
     print(f"Device: {device_}")
+    print(torch.cuda.is_available())
 
     curr = Curriculum().stages
-    total_planned_timesteps = int(sum(int(s[4]) for s in curr))
+    total_planned_timesteps = int(sum(int(s[4]) for s in curr)) #sum of all curriculum stage timesteps
+
+    # --- build stage-0 env ---
 
     ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0 = curr[0]
-    print(f"\n=== Stage 0 | world={ws0} drones={nd0} static={ns0} dynamic={ndyn0} steps={steps0} ===")
+    print(
+        f"\n=== Stage 0 | world={ws0} active drones={nd0} "
+        f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
+    )
 
+    # --- SAC model with expert-blend policy ---
     expert = ExpertPolicy(world_scale=ws0, use_lidar=lidar0)
 
     train_env = create_env(
-        world_scale=ws0, num_drones=nd0,
-        num_static_obstacles=ns0, num_dynamic_obstacles=ndyn0,
-        max_episode_steps=steps_per_episode, lidar_enabled=lidar0,
-        render_mode=None,  # never render during training
-    )
-    eval_env = create_env(
-        world_scale=ws0, num_drones=nd0,
-        num_static_obstacles=ns0, num_dynamic_obstacles=ndyn0,
-        max_episode_steps=steps_per_episode, lidar_enabled=lidar0,
+        world_scale=ws0,
+        num_drones=nd0,
+        num_static_obstacles=ns0,
+        num_dynamic_obstacles=ndyn0,
+        max_episode_steps=steps_per_episode,
+        lidar_enabled=lidar0,
         render_mode=None,
     )
 
+    eval_env = create_env(
+        world_scale=ws0,
+        num_drones=nd0,
+        num_static_obstacles=ns0,
+        num_dynamic_obstacles=ndyn0,
+        max_episode_steps=steps_per_episode,
+        lidar_enabled=lidar0,
+        render_mode=None,
+    )
+
+    # --- create SAC model ---
     model = SAC(
         ExpertBlendPolicy,
         train_env,
@@ -362,97 +352,168 @@ def train(device: str = "auto"):
             expert_policy=expert,
             blend_ratio=INITIAL_BLEND,
         ),
-    )
-    model.policy.set_vec_normalize(unwrap_vec_normalize(train_env))
+    )# TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
 
-    # --- stage 0 ---
+    vn = unwrap_vec_normalize(train_env)
+    if vn is not None:
+        model.policy.set_vec_normalise(vn)
+
+    # --- train stage 0 first ---
+
     callbacks = make_stage_callbacks(
-        stage_idx=0, world_scale=ws0, num_drones=nd0,
-        num_static_obs=ns0, num_dynamic_obs=ndyn0,
-        stage_steps=steps0, episode_horizon=steps_per_episode,
+        stage_idx=0,
+        world_scale=ws0,
+        num_drones=nd0,
+        num_static_obs=ns0,
+        num_dynamic_obs=ndyn0,
+        stage_steps=steps0,
+        episode_horizon = steps_per_episode,
         total_planned_timesteps=total_planned_timesteps,
-        model_num_timesteps=model.num_timesteps, eval_env=eval_env,
+        model_num_timesteps=model.num_timesteps,
+        eval_env=eval_env,
     )
-    model.learn(total_timesteps=steps0, reset_num_timesteps=False, callback=callbacks)
 
-    path = get_next_model_path(num_drones=nd0, num_static_obs=ns0, num_dynamic_obs=ndyn0)
+    model.learn(
+        total_timesteps=steps0,
+        reset_num_timesteps=False,
+        callback=callbacks,
+    )
+
+    path = get_next_model_path(
+        num_drones=nd0,
+        num_static_obs=ns0,
+        num_dynamic_obs=ndyn0,
+    )
     model.save(path)
     print(f"[SAVED] {path}")
+
     vn = unwrap_vec_normalize(model.get_env())
     if vn is not None:
-        vn.save(path.replace(".zip", "_vec_normalize.pkl"))
+        norm_path = path.replace(".zip", "_vec_normalize.pkl")
+        vn.save(norm_path)
+        print(f"[SAVED VECNORMALIZE] {norm_path}")
 
     # --- curriculum stages ---
     for idx, (
-            world_scale, num_drones, num_static_obs,
-            num_dynamic_obs, stage_steps, steps_per_episode, lidar_enabled,
+            world_scale,
+            num_drones,
+            num_static_obs,
+            num_dynamic_obs,
+            stage_steps,
+            steps_per_episode,
+            lidar_enabled,
     ) in enumerate(curr[1:], start=1):
-
         stage_steps = int(stage_steps)
-        print(f"\n=== Stage {idx} | world={world_scale} drones={num_drones} "
-              f"static={num_static_obs} dynamic={num_dynamic_obs} steps={stage_steps} ===")
 
-        # 1. Snapshot VecNormalize stats before touching any env.
-        obs_rms, ret_rms = snapshot_vec_normalize(model.get_env())
+        print(
+            f"\n=== Stage {idx} | world={world_scale} "
+            f"drones={num_drones} static={num_static_obs} "
+            f"dynamic={num_dynamic_obs} steps={stage_steps} ==="
+        )
 
-        # 2. Grab references, then null them out everywhere so no Python
-        #    object keeps the old envs alive through the GC cycle.
+        # swap envs
         old_train_env = model.get_env()
         old_eval_env = eval_env
-        eval_env = None
-        model.env = None  # drop model's reference before closing
 
-        # 3. Close + full GC + sleep — guarantees p.disconnect() has run and
-        #    macOS has released handles before new PyBullet servers start.
-        close_and_cleanup(old_eval_env, old_train_env)
-        del old_train_env, old_eval_env  # remove last local references
-
-        # 4. Now safe to create fresh PyBullet servers.
         new_train_env = create_env(
-            world_scale=world_scale, num_drones=num_drones,
-            num_static_obstacles=num_static_obs, num_dynamic_obstacles=num_dynamic_obs,
-            max_episode_steps=steps_per_episode, lidar_enabled=lidar_enabled,
+            world_scale=world_scale,
+            num_drones=num_drones,
+            num_static_obstacles=num_static_obs,
+            num_dynamic_obstacles=num_dynamic_obs,
+            max_episode_steps=steps_per_episode,
+            lidar_enabled=lidar_enabled,
         )
+
         new_eval_env = create_env(
-            world_scale=world_scale, num_drones=num_drones,
-            num_static_obstacles=num_static_obs, num_dynamic_obstacles=num_dynamic_obs,
-            max_episode_steps=steps_per_episode, lidar_enabled=lidar_enabled,
+            world_scale=world_scale,
+            num_drones=num_drones,
+            num_static_obstacles=num_static_obs,
+            num_dynamic_obstacles=num_dynamic_obs,
+            max_episode_steps=steps_per_episode,
+            lidar_enabled=lidar_enabled,
         )
 
-        # 4. Restore the snapshotted normalisation stats into the new envs.
-        apply_vec_normalize_snapshot(new_train_env, obs_rms, ret_rms)
-        apply_vec_normalize_snapshot(new_eval_env, obs_rms, ret_rms)
+        # Carry normalization stats forward.
+        copy_vec_normalize_stats(old_train_env, new_train_env)
+        copy_vec_normalize_stats(old_train_env, new_eval_env)
 
-        # 5. Wire everything into the model.
-        force_set_env(model, new_train_env)
+        if model.observation_space != new_train_env.observation_space:
+            raise ValueError(
+                f"Observation space changed across stages.\n"
+                f"model.observation_space={model.observation_space}\n"
+                f"new_train_env.observation_space={new_train_env.observation_space}"
+            )
+
+        if model.action_space != new_train_env.action_space:
+            raise ValueError(
+                f"Action space changed across stages.\n"
+                f"model.action_space={model.action_space}\n"
+                f"new_train_env.action_space={new_train_env.action_space}"
+            )
+
+        model.set_env(new_train_env)
         eval_env = new_eval_env
-        model.policy.set_vec_normalize(unwrap_vec_normalize(new_train_env))
+
+        vn = unwrap_vec_normalize(new_train_env)
+        if vn is not None:
+            model.policy.set_vec_normalise(vn)
+
+        if hasattr(model.policy, "expert") and model.policy.expert is not None:
+            model.policy.expert.world_scale = float(world_scale)
+            model.policy.expert.use_lidar = bool(lidar_enabled)
+
 
         callbacks = make_stage_callbacks(
-            stage_idx=idx, world_scale=world_scale, num_drones=num_drones,
-            num_static_obs=num_static_obs, num_dynamic_obs=num_dynamic_obs,
-            stage_steps=stage_steps, episode_horizon=steps_per_episode,
+            stage_idx=idx,
+            world_scale=world_scale,
+            num_drones=num_drones,
+            num_static_obs=num_static_obs,
+            num_dynamic_obs=num_dynamic_obs,
+            stage_steps=stage_steps,
+            episode_horizon = steps_per_episode,
             total_planned_timesteps=total_planned_timesteps,
-            model_num_timesteps=model.num_timesteps, eval_env=eval_env,
+            model_num_timesteps=model.num_timesteps,
+            eval_env=eval_env,
         )
-        model.learn(total_timesteps=stage_steps, reset_num_timesteps=False, callback=callbacks)
 
-        path = get_next_model_path(
-            num_drones=num_drones, num_static_obs=num_static_obs, num_dynamic_obs=num_dynamic_obs,
+        model.learn(
+            total_timesteps=stage_steps,
+            reset_num_timesteps=False,
+            callback=callbacks,
         )
+
+        # save the model up until now
+        path = get_next_model_path(
+            num_drones = num_drones,
+            num_static_obs = num_static_obs,
+            num_dynamic_obs = num_dynamic_obs
+        )
+
         model.save(path)
         print(f"[SAVED MODEL] {path}")
+
+        # save the normalised observation to use during evaluation
         vn = unwrap_vec_normalize(model.get_env())
         if vn is not None:
-            vn.save(path.replace(".zip", "_vec_normalize.pkl"))
+            norm_path = path.replace(".zip", "_vec_normalize.pkl")
+            vn.save(norm_path)
+            print(f"[SAVED VECNORMALIZE] {norm_path}")
 
+        safe_close(old_eval_env)
+        safe_close(old_train_env)
+
+        train_env = new_train_env
+
+    # save the final normalised values
     final_vn = unwrap_vec_normalize(model.get_env())
     if final_vn is not None:
-        final_vn.save(f"{MODELS_DIR}/final_vec_normalize.pkl")
-        print(f"[SAVED FINAL VEC_NORMALIZE]")
+        final_norm_path = f"{MODELS_DIR}/final_vec_normalize.pkl"
+        final_vn.save(final_norm_path)
+        print(f"[SAVED FINAL VEC_NORMALIZE] {final_norm_path}")
 
     safe_close(eval_env)
-    safe_close(model.get_env())
+    safe_close(train_env)
+
     print("Training complete.")
 
 
