@@ -70,22 +70,22 @@ def run_episode(env, n_steps):
 
 def main():
 
-    n_drones = 2
+    n_drones = 1
     n_steps = 1000
 
     pz_env = DroneSwarm3D(
-        world_scale=4.0,
+        world_scale=2.0,
         num_drones_per_swarm=n_drones,
-        num_static_obstacles=2,
-        num_dynamic_obstacles=2,
+        num_static_obstacles=4,
+        num_dynamic_obstacles=0,
         max_steps=n_steps,
-        num_swarms=2,
+        num_swarms=1,
         lidar=False,
         render_mode="human",
     )
 
     # Run multiple episodes to test reset
-    n_episodes = 2
+    n_episodes = 5
 
     for ep in range(n_episodes):
         print(f"\n==============================")

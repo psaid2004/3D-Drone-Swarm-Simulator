@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import csv
 from typing import Dict, Optional, Tuple, List
-from pathlib import Path
 
 import numpy as np
 from gymnasium import spaces
@@ -22,7 +20,6 @@ from wrappers.step_logic import (
 from wrappers.rewards import compute_rewards
 from wrappers.stats_trackers import EpisodeStatsTracker
 
-from config.defaults import *
 from config.defaults import *
 
 
@@ -60,7 +57,7 @@ class DroneSwarm3D(ParallelEnv):
         self._init_agents()
         self._init_episode_state()
         self._init_simulator()
-        # self._init_query_world()
+        self._init_query_world()
         self._init_spaces()
         self._init_logging()
 
@@ -139,6 +136,8 @@ class DroneSwarm3D(ParallelEnv):
     def _init_simulator(self) -> None:
         """ Create drone simulator and PyBullet handles. """
         # list of drone's initial position
+        self.spawn_positions = np.empty((0, 3), dtype=np.float32)
+        self.drones_in_swarm = {}
 
         for i in range(self.num_swarms):
             edge, center, drones = self.generate_drone_swarm_spawn()
@@ -146,30 +145,9 @@ class DroneSwarm3D(ParallelEnv):
 
             self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
-        # --- Pybullet env ---
-        self._env = VelocityAviary(
-            drone_model=DroneModel.CF2X,
-            num_drones=self.total_num_drones,
-            initial_xyzs=self.spawn_positions,
-            physics=Physics.PYB,
-            gui=(self.render_mode == "human"),
-            record=False,
-            user_debug_gui=False,
-        )
+        self.spawn_positions = self.spawn_positions.astype(np.float32)
 
-        self._env.SPEED_LIMIT = 5.0 # m/s
-
-        self._p = None
-        self._client_id = None
-        self._drone_ids: List[int] = []
-        self._obstacles = []
-        self._wall_ids: List[int] = []
-
-        # GUI-only debug visuals
-        self._lidar_line_ids: Dict[int, List[int]] = {}
-
-        self._init_pybullet_handles()
-        self._refresh_drone_ids_from_pybullet()
+        self._create_aviary()
 
 
     def _init_spaces(self) -> None:
@@ -199,8 +177,9 @@ class DroneSwarm3D(ParallelEnv):
             dtype=np.float32,
         )
 
-        if self.lidar:
-            self._lidar_dirs_body = self._precompute_lidar_dirs_body()
+        # Precompute LiDAR ray directions once, regardless of whether lidar is enabled
+        # in this stage. This keeps shapes and helper logic consistent.
+        self._lidar_dirs_body = self._precompute_lidar_dirs_body()
 
 
     def _init_logging(self) -> None:
@@ -210,6 +189,9 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def _init_pybullet_handles(self) -> None:
+        self._gui_client_id = None
+        if self.render_mode == "human":
+            self._gui_client_id = self._client_id
         try:
             import pybullet as p
 
@@ -299,21 +281,16 @@ class DroneSwarm3D(ParallelEnv):
 
         return fn(*args, **kwargs)
 
-
     def _call_gui(self, fn, *args, **kwargs):
-        """ Find gui client, add label and call function. """
         if self._p is None:
             return None
-
-        # retrieve id of gui simulation
-        pcid = self._pcid_for_gui_draw()
+        pcid = self._gui_client_id  # use stored ID, not max()
         try:
             if pcid is not None and "physicsClientId" not in kwargs:
                 return fn(*args, **kwargs, physicsClientId=pcid)
             return fn(*args, **kwargs)
         except Exception:
             return None
-
 
     def _refresh_drone_ids_from_pybullet(self) -> None:
         """ Check PyBullet simulation itself to find the drones - useful if env does not give it. """
@@ -373,6 +350,11 @@ class DroneSwarm3D(ParallelEnv):
         except Exception:
             pass
 
+        self._create_aviary()
+
+
+    def _create_aviary(self):
+        """Create VelocityAviary from scratch."""
         self._env = VelocityAviary(
             drone_model=DroneModel.CF2X,
             num_drones=self.total_num_drones,
@@ -382,10 +364,14 @@ class DroneSwarm3D(ParallelEnv):
             record=False,
             user_debug_gui=False,
         )
-        self._env.SPEED_LIMIT = 5.0
+        self._env.SPEED_LIMIT = 3.0
 
+        self._p = None
+        self._client_id = None
+        self._drone_ids = []
         self._obstacles = []
         self._lidar_line_ids = {}
+        self._wall_ids = []
 
         self._init_pybullet_handles()
         self._refresh_drone_ids_from_pybullet()
@@ -501,13 +487,7 @@ class DroneSwarm3D(ParallelEnv):
         or other drones.
         """
         for _ in range(max_attempts):
-            #t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
-
-            #TODO: UNCOMMENT ABOVE AND REMOVE IF ELSE (JUST FOR TESTING NO REACH ISSUE IN STAGE 0)
-            if self.num_static_obstacles == 0 and self.num_dynamic_obstacles == 0 and self.total_num_drones == 1:
-                t = self.generate_xyz()
-            else:
-                t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
+            t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
 
             drone_positions = self.spawn_positions
             possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
@@ -708,41 +688,39 @@ class DroneSwarm3D(ParallelEnv):
     
     def _rebuild_query_world_from_current_scene(self):
         self._qworld.clear()
-        print("IM RESETING")
-        print(len(self._obstacles))
+        #print("IM RESETING")
+        #print(len(self._obstacles))
 
         for obs in self._obstacles:
             if isinstance(obs, Dynamic):
                 self._qworld.add_dynamic_object(id(obs), obs)
             else:
                 self._qworld.add_static_object(obs)
-                
+
     def candidate_collides_over_time(self, candidate, horizon_steps, dt=1.0/60.0, margin=0.0):
         temp_body = self._qworld.add_temp_object(candidate)
-        
+
         try:
             for step in range(horizon_steps + 1):
                 t = step * dt
                 cand_pos, cand_quat = candidate.pose_at_time(t)
                 self._qworld.set_body_pose(temp_body, cand_pos, cand_quat)
-                
+
                 for obs in self._obstacles:
                     if isinstance(obs, Dynamic):
                         body_id = self._qworld.dynamic_bodies[id(obs)]
                         pos, quat = obs.pose_at_time(t)
                         self._qworld.set_body_pose(body_id, pos, quat)
-                
+
                 for obs in self._obstacles:
                     if isinstance(obs, Dynamic):
                         body_id = self._qworld.dynamic_bodies[id(obs)]
                         if self._qworld.bodies_collide(temp_body, body_id, margin=margin):
                             return True
-            return False    
+            return False
         finally:
             self._qworld.remove_body(temp_body)
-        
-        
-    # UNTESTED
+
 
     def drone_out_of_bounds(self, pos:np.ndarray) -> bool:
         """ Helper function to see if drones are going out of bounds (considered as a collision)."""
@@ -753,7 +731,7 @@ class DroneSwarm3D(ParallelEnv):
             or x >= self.world_scale
             or y <= -self.world_scale
             or y >= self.world_scale
-            or z <= 0.0
+            or z <= 0.1 # TODO 0 OR 0.1?
             or z >= self.world_scale
         )
 
@@ -920,7 +898,30 @@ class DroneSwarm3D(ParallelEnv):
             # get raw state vector from simulator, and extract position and velocity
             state = self._env._getDroneStateVector(i)
             pos = np.array(state[POS_SLICE], dtype=np.float32)
-            vel = np.array(state[10:13], dtype=np.float32) # TODO IS VEL 10:13?
+
+            #if self._p is not None and i < len(self._drone_ids) and self._step_count % 100 == 0:
+            #    try:
+            #        lin_vel_pb, ang_vel_pb = self._call_physics(
+            #            self._p.getBaseVelocity,
+            #            self._drone_ids[i]
+            #        )
+
+            #        lin_vel_pb = np.array(lin_vel_pb, dtype=np.float32)
+            #        ang_vel_pb = np.array(ang_vel_pb, dtype=np.float32)
+
+            #        print(f"\n[VEL SEARCH] drone {i} step {self._step_count}")
+            #        for start in range(len(state) - 2):
+            #            chunk = np.array(state[start:start + 3], dtype=np.float32)
+            #            lin_err = np.linalg.norm(chunk - lin_vel_pb)
+            #            ang_err = np.linalg.norm(chunk - ang_vel_pb)
+            #            print(
+            #                f"slice[{start}:{start + 3}] = {chunk} | "
+            #                f"lin_err={lin_err:.6f} | ang_err={ang_err:.6f}"
+            #            )
+            #    except Exception as e:
+            #        print("[VEL SEARCH ERROR]", e)
+
+            vel = np.array(state[10:13], dtype=np.float32)
 
             # compute distance to assigned target
             target = self._targets[i].start_pos
@@ -938,9 +939,11 @@ class DroneSwarm3D(ParallelEnv):
             # add lidar observation to base vector
             if self.lidar:
                 scan = self._lidar_scan(i, pos)
-                obs_dict[a] = np.concatenate([base, scan], axis=0).astype(np.float32)
             else:
-                obs_dict[a] = base
+                # Neutral LiDAR values: 1.0 means "no hit within range" for all rays
+                scan = np.ones((self._lidar_dim,), dtype=np.float32)
+
+            obs_dict[a] = np.concatenate([base, scan], axis=0).astype(np.float32)
 
         return obs_dict
 
@@ -1241,7 +1244,7 @@ class DroneSwarm3D(ParallelEnv):
     def _lidar_scan(self, drone_idx: int, pos_unused: np.ndarray) -> np.ndarray:
 
         if (not self.lidar) or (self._p is None) or (self._lidar_dim <= 0):
-            return np.zeros((0,), dtype=np.float32)
+            return np.ones((self._lidar_dim,), dtype=np.float32)
 
         p = self._p
 
@@ -1299,7 +1302,14 @@ class DroneSwarm3D(ParallelEnv):
                 1.0,
             )
 
-        if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
+        #if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
+
+        show_rays = False
+        if self.render_mode == "human":
+            show_rays = LIDAR_SHOW_RAYS_TRAIN
+            # or use TEST flag for non-training scripts if you want separate behavior
+
+        if show_rays and self._step_count % 50 == 0:
             old = self._lidar_line_ids.get(drone_idx, [])
             for lid in old:
                 self._call_gui(p.removeUserDebugItem, lid)
@@ -1321,6 +1331,7 @@ class DroneSwarm3D(ParallelEnv):
             self._lidar_line_ids[drone_idx] = new_ids
 
         return hit_frac.astype(np.float32)
+
 
 
     # ----------------------------- STEP FUNCTION -----------------------------
@@ -1376,7 +1387,13 @@ class DroneSwarm3D(ParallelEnv):
         # despawn newly reached drones
         self.despawn_newly_reached_drones(step_state.reached_now)
 
-        self.agents = self.possible_agents[:]
+        #self.agents = self.possible_agents[:]
+        self.agents = [
+            a for i, a in enumerate(self.possible_agents)
+            if i < self.total_num_drones
+               and not (self._dead[i] or self._reached_once[i] or self._despawned[i])
+        ]
+
         self.stats.record_step(
             reward_dict,
             self.possible_agents,
@@ -1407,59 +1424,81 @@ class DroneSwarm3D(ParallelEnv):
         self._step_count = 0
         self.agents = self.possible_agents[:]
 
-        # if underlying VelocityAviary client is disconnected, rebuild it
-        if not self._pybullet_client_alive():
-            self._rebuild_aviary()
+        self._set_rendering_enabled(False)
 
-        # remove episode-specific GUI/custom bodies from previous episode
-        self.clear_episode_artifacts()
+        try:
+            # remove episode-specific GUI/custom bodies from previous episode
+            self.clear_episode_artifacts()
 
-        self._env.reset()
+            # fresh episode spawn positions
+            self.spawn_positions = np.empty((0, 3), dtype=np.float32)
+            self.drones_in_swarm = {}
 
-        self._init_pybullet_handles()
-        self._refresh_drone_ids_from_pybullet()
-        self.restore_drone_visuals_and_collisions()
+            self.drones_in_swarm = {}
+            for i in range(self.num_swarms):
+                edge, center, drones = self.generate_drone_swarm_spawn()
+                self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
+                self.spawn_positions = np.vstack([self.spawn_positions, drones])
 
-        self.drones_in_swarm = {}
-        for i in range(self.num_swarms):
-            edge, center, drones = self.generate_drone_swarm_spawn()
-            self.drones_in_swarm[i] = {"edge": edge, "center": center, "drones": drones}
+            self.spawn_positions = self.spawn_positions.astype(np.float32)
 
-            self.spawn_positions = np.vstack([self.spawn_positions, drones])
+            # if underlying VelocityAviary client is disconnected, rebuild it
+            if not self._pybullet_client_alive():
+                self._rebuild_aviary()
 
-        self.set_drone_spawn_positions_in_aviary(self.spawn_positions)
+            self._env.reset()
 
-        # reset episode bookkeeping
-        self._dead[:] = False
-        self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
-        self._despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)
+            self._init_pybullet_handles()
+            self._refresh_drone_ids_from_pybullet()
+            self.restore_drone_visuals_and_collisions()
 
-        self.stats.reset_episode()
+            # reset episode bookkeeping
+            self._dead[:] = False
+            self._reached_once = np.zeros((self.total_num_drones,), dtype=np.bool_)
+            self._despawned = np.zeros((self.total_num_drones,), dtype=np.bool_)
 
-        self._prev_dists = np.zeros((self.total_num_drones,), dtype=np.float32)
-        self._last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
-        self._status = np.zeros(self.total_num_drones, dtype=np.int32)
+            self.stats.reset_episode()
 
-        self._wall_collision_once[:] = False
-        self._obstacle_collision_once[:] = False
-        self._drone_collision_once[:] = False
+            self._prev_dists = np.zeros((self.total_num_drones,), dtype=np.float32)
+            self._last_reward = np.zeros(self.total_num_drones, dtype=np.float32)
+            self._status = np.zeros(self.total_num_drones, dtype=np.int32)
 
-        # refresh episode content
-        self._targets = self._make_targets()
-        # self._rebuild_query_world_from_current_scene()
-        self._spawn_obstacles()
-        self._spawn_walls()
+            self._wall_collision_once[:] = False
+            self._obstacle_collision_once[:] = False
+            self._drone_collision_once[:] = False
 
-        obs0 = self._build_obs_dict()
+            # refresh episode content
+            self._targets = self._make_targets()
+            self._rebuild_query_world_from_current_scene()
+            self._spawn_obstacles()
+            self._spawn_walls()
 
-        for i in range(self.total_num_drones):
-            pos = obs0[self.possible_agents[i]][POS_SLICE]
-            tgt = self._targets[i]
-            self._prev_dists[i] = float(np.linalg.norm(tgt.start_pos - pos))
+            obs0 = self._build_obs_dict()
 
-        info_dict = {a: {} for a in self.agents}
+            for i in range(self.total_num_drones):
+                pos = obs0[self.possible_agents[i]][POS_SLICE]
+                tgt = self._targets[i]
+                self._prev_dists[i] = float(np.linalg.norm(tgt.start_pos - pos))
+
+            info_dict = {a: {} for a in self.agents}
+        finally:
+            self._set_rendering_enabled(True)
 
         return obs0, info_dict
+
+
+    def _set_rendering_enabled(self, enabled: bool) -> None:
+        """ Helper to temporarily enable/disable rendering """
+        if self._p is None or self.render_mode != "human":
+            return
+        try:
+            self._call_gui(
+                self._p.configureDebugVisualizer,
+                self._p.COV_ENABLE_RENDERING,
+                1 if enabled else 0,
+            )
+        except Exception:
+            pass
 
 
     def clear_episode_artifacts(self) -> None:
@@ -1470,39 +1509,6 @@ class DroneSwarm3D(ParallelEnv):
         self.remove_walls()
         # reset spawn positions
         self.spawn_positions = np.empty((0, 3))
-
-
-    def set_drone_spawn_positions_in_aviary(self, spawn_positions: np.ndarray) -> None:
-        """ Send the drone swarm to their new spawn position per episode."""
-        if self._p is None:
-            return
-
-        p = self._p
-        default_orientation = [0.0, 0.0, 0.0, 1.0]
-
-        for i, body_id in enumerate(self._drone_ids[:len(spawn_positions)]):
-
-            pos = spawn_positions[i].tolist()
-
-            try:
-                self._call_physics(
-                    p.resetBasePositionAndOrientation,
-                    body_id,
-                    pos,
-                    default_orientation,
-                )
-            except Exception:
-                pass
-
-            try:
-                self._call_physics(
-                    p.resetBaseVelocity,
-                    body_id,
-                    [0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0],
-                )
-            except Exception:
-                pass
 
 
     def remove_all_obstacles(self) -> None:
@@ -1623,32 +1629,4 @@ class DroneSwarm3D(ParallelEnv):
             self._env.close()
         except Exception:
             pass
-
-
-    # TODO REMOVE AFTER DEBUGGING
-    def _debug_print_step(self, obs_dict, reward_dict, info_dict, term_dict, trunc_dict):
-        print(f"\n--- env step {self._step_count} ---")
-        for agent in self.possible_agents:
-            obs = obs_dict.get(agent)
-            info = info_dict.get(agent, {})
-            rew = reward_dict.get(agent, 0.0)
-            term = term_dict.get(agent, False)
-            trunc = trunc_dict.get(agent, False)
-
-            pos = obs[:3] if obs is not None and len(obs) >= 3 else [0.0, 0.0, 0.0]
-
-            print(
-                f"{agent:8s} | "
-                f"pos=({pos[0]:6.2f},{pos[1]:6.2f},{pos[2]:6.2f}) | "
-                f"reward={float(rew):7.3f} | "
-                f"dist={float(info.get('dist_to_target', 0.0)):6.2f} | "
-                f"active={bool(info.get('active', False))} | "
-                f"reached={bool(info.get('reached', False))} | "
-                f"just_reached={bool(info.get('just_reached', False))} | "
-                f"collided={bool(info.get('collided', False))} | "
-                f"wall_now={bool(info.get('wall_collision_now', False))} | "
-                f"obs_now={bool(info.get('obstacle_collision_now', False))} | "
-                f"drone_now={bool(info.get('drone_collision_now', False))} | "
-                f"term={bool(term)} | trunc={bool(trunc)}"
-            )
 

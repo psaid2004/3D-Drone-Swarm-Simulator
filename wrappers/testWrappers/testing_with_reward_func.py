@@ -1,10 +1,3 @@
-"""
-GUI test for DroneSwarm3D with reward function.
-
-Run:
-    python -m train.test_env_gui
-"""
-
 from __future__ import annotations
 
 import time
@@ -49,10 +42,12 @@ class EnvGUITester:
             f"max_steps={max_steps}"
         )
 
-    # ------------------------------------------------------------------
-    # Action policy: move toward target, weighted by centroid cohesion
-    # ------------------------------------------------------------------
     def _get_action(self, obs: np.ndarray) -> np.ndarray:
+        """
+        Returns actions given observations.
+
+        Action policy: move toward target, weighted by centroid cohesion
+        """
         to_target = obs[6:9]
         to_centroid = obs[12:15]
 
@@ -62,10 +57,9 @@ class EnvGUITester:
 
         return np.array([dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32)
 
-    # ------------------------------------------------------------------
-    # Single episode
-    # ------------------------------------------------------------------
+
     def _run_episode(self, ep: int) -> dict:
+        """Runs one episode of DroneSwarm3D instance."""
         obs_dict, _ = self.env.reset()
 
         print(f"\n{'='*50}")
@@ -82,7 +76,6 @@ class EnvGUITester:
             for d, r in reward_dict.items():
                 episode_rewards[d] += r
 
-            # Print diagnostics every 50 steps
             # if step % 50 == 0:
             self._print_step(step, obs_dict, reward_dict, info_dict)
 
@@ -94,18 +87,17 @@ class EnvGUITester:
                 self._print_step(step, obs_dict, reward_dict, info_dict)
                 break
 
-
-
             self.env.render()
             time.sleep(1 / 60)
 
         return {"steps": step_count, "total_rewards": episode_rewards}
 
-    # ------------------------------------------------------------------
-    # Per-step console output
-    # ------------------------------------------------------------------
+
     def _print_step(self, step, obs_dict, reward_dict, info_dict):
+        """ Prints per-step to console."""
+
         print(f"\n  --- step {step} ---")
+
         for d in obs_dict:
             pos = obs_dict[d][:3]
             info = info_dict[d]
@@ -120,10 +112,9 @@ class EnvGUITester:
                 f"drone={info.get('drone_collision', False)}"
             )
 
-    # ------------------------------------------------------------------
-    # Run all episodes
-    # ------------------------------------------------------------------
+
     def run(self):
+        """ Run all the episodes"""
         try:
             for ep in range(self.n_episodes):
                 stats = self._run_episode(ep)
@@ -140,9 +131,6 @@ class EnvGUITester:
             self.env.close()
 
 
-# ------------------------------------------------------------------
-# Entry point
-# ------------------------------------------------------------------
 if __name__ == "__main__":
     tester = EnvGUITester(
         world_scale=4.0,
