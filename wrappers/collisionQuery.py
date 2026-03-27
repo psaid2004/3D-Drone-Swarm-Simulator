@@ -37,6 +37,13 @@ class CollisionQueryWorld:
         self.dynamic_bodies[key] = body_id
         return body_id
 
+    def add_static_object(self, obj):
+        pos = obj.start_pos
+        body_id = self._create_body_from_spec(obj.collision_shape_spec(), pos, obj.baseQuat)
+        self.static_bodies.append(body_id)
+        return body_id
+
+    
     def add_temp_object(self, obj):
         pos = obj.start_pos
         body_id = self._create_body_from_spec(obj.collision_shape_spec, pos, obj.baseQuat)
