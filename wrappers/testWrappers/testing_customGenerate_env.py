@@ -83,7 +83,7 @@ def get_ml_test_scenarios() -> dict[str, callable]:
 
 def main():
     # --- create environment ----
-    n_drones = 1
+    n_drones = 4
     n_steps = 8000
 
     pz_env = DroneSwarm3D(

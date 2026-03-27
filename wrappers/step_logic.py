@@ -22,6 +22,7 @@ def freeze_inactive_actions(env, actions: Dict[str, np.ndarray]) -> None:
 
     for i, a in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
+            actions[a] = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
             continue
 
         if (env._dead[i] or env._reached_once[i] or env._despawned[i]) and a in actions:
@@ -39,7 +40,7 @@ def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.nda
         dir_* is a unit direction vector
         speed_scale is in [0, 1]
     """
-    act = np.zeros((env.total_num_drones, 4), dtype=np.float32)
+    act = np.zeros((env.max_total_num_drones, 4), dtype=np.float32)
 
     for i, a in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
@@ -53,16 +54,6 @@ def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.nda
             u = np.array(actions[a], dtype=np.float32).reshape(-1)
             u = np.clip(u[:4], -1.0, 1.0)
 
-            #v = u[:3].astype(np.float32)
-            #n = np.linalg.norm(v)
-
-            #if n > 1e-6:
-            #    dir_vec = v / n
-            #    speed_scale = float((u[3] + 1.0) * 0.5)  # map [-1,1] -> [0,1]
-            #else:
-            #    dir_vec = np.zeros(3, dtype=np.float32)
-            #    speed_scale = 0.0
-
             v = u[:3].astype(np.float32)
             dir_vec = np.clip(v, -1.0, 1.0)
             speed_scale = float((u[3] + 1.0) * 0.5)  # map [-1,1] -> [0,1]
@@ -73,39 +64,50 @@ def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.nda
     return act
 
 
-def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepState:
+def compute_step_state(env, obs_dict) -> StepState:
     """ Retrieve status of step (only considers active drones). """
 
     time_limit = bool(env._step_count >= env.max_steps)
 
     collisions, wall_collisions, obstacle_collisions, drone_collisions = env.check_collisions_per_drone()
+
     if isinstance(collisions, bool):
         collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
         wall_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
         obstacle_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
         drone_collisions = np.zeros(env.total_num_drones, dtype=np.bool_)
 
-    env._wall_collision_once = np.logical_or(env._wall_collision_once, wall_collisions)
-    env._obstacle_collision_once = np.logical_or(env._obstacle_collision_once, obstacle_collisions)
-    env._drone_collision_once = np.logical_or(env._drone_collision_once, drone_collisions)
+    # Expand active-only arrays to fixed-capacity arrays
+    collisions_full = np.zeros(env.max_total_num_drones, dtype=np.bool_)
+    wall_collisions_full = np.zeros(env.max_total_num_drones, dtype=np.bool_)
+    obstacle_collisions_full = np.zeros(env.max_total_num_drones, dtype=np.bool_)
+    drone_collisions_full = np.zeros(env.max_total_num_drones, dtype=np.bool_)
+
+    collisions_full[:env.total_num_drones] = collisions
+    wall_collisions_full[:env.total_num_drones] = wall_collisions
+    obstacle_collisions_full[:env.total_num_drones] = obstacle_collisions
+    drone_collisions_full[:env.total_num_drones] = drone_collisions
+
+    env._wall_collision_once = np.logical_or(env._wall_collision_once, wall_collisions_full)
+    env._obstacle_collision_once = np.logical_or(env._obstacle_collision_once, obstacle_collisions_full)
+    env._drone_collision_once = np.logical_or(env._drone_collision_once, drone_collisions_full)
 
     # mark drones that are dead
-    env._dead = np.logical_or(env._dead, collisions)
+    env._dead = np.logical_or(env._dead, collisions_full)
 
     # despawn newly collided drones
-    env.despawn_newly_collided_drones(collisions)
+    env.despawn_newly_collided_drones(collisions_full)
 
     # detect newly-reached goals for one-time bonuses in reward
-    was_reached = env._reached_once.copy()
-    reached_now = np.zeros((env.total_num_drones,), dtype=np.bool_)
+    reached_now = np.zeros((env.max_total_num_drones,), dtype=np.bool_)
 
     for i, a in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
             continue
 
         # skip drones if they are already dead/despawned before goal check
-        if env._dead[i] and env._despawned[i]:
-            continue
+        if env._dead[i] or env._despawned[i]:
+            continue # TODO THIS WAS AND PREVIOUSLY BUT I THINK IT SHOULD BE OR?
 
         pos = obs_dict[a][POS_SLICE]
         target = (
@@ -138,19 +140,17 @@ def compute_step_state(env, obs_dict, actions: Dict[str, np.ndarray]) -> StepSta
 
     no_active_drones_left = len(active_idx) == 0
 
-    # episode ends if all collided or no more active drones present (episode is truncated below if time limit is reached)
-    #episode_done = bool(all_collided or all_reached)
     # episode ends if all collided, all reached, or there are no active drones left
     episode_done = bool(all_collided or all_reached or no_active_drones_left)
 
     return StepState(
         time_limit=time_limit,
-        collisions=collisions,
-        wall_collisions=wall_collisions,
-        obstacle_collisions=obstacle_collisions,
-        drone_collisions=drone_collisions,
+        collisions=collisions_full,
+        wall_collisions=wall_collisions_full,
+        obstacle_collisions=obstacle_collisions_full,
+        drone_collisions=drone_collisions_full,
         all_collided=all_collided,
-        all_reached =all_reached,
+        all_reached=all_reached,
         positions=positions,
         max_sep=float(max_sep),
         min_sep=float(min_sep),
@@ -171,8 +171,8 @@ def compute_terminations(env, step_state) -> Tuple[dict, dict]:
 
     for i, agent in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
-            term_dict[agent] = bool(step_state.episode_done)
-            trunc_dict[agent] = bool(step_state.time_limit)
+            term_dict[agent] = False
+            trunc_dict[agent] = False
             continue
 
         term_dict[agent] = bool(

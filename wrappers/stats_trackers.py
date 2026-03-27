@@ -24,8 +24,8 @@ class EpisodeStatsTracker:
                     "episode",
                     "steps",
                     "total_collision_counts",
-                    "reached_total"
-                    "wall_collisions"
+                    "reached_total",
+                    "wall_collisions",
                     "drone_collisions",
                     "obstacle_collisions",
                     "mean_reward",
