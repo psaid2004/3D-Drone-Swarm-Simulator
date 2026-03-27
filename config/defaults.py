@@ -1,6 +1,9 @@
 """
 This file defines DEFAULTS (constants). Training / evaluation scripts import these values.
 """
+
+MAX_DRONES_PER_SWARM = 10
+
 # =============================================================================
 # DEFAULT OBSERVATION SLICES
 # =============================================================================

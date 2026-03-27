@@ -190,6 +190,7 @@ def build_info_dict(env, step_state) -> dict:
     for i, agent in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
             info_dict[agent] = {
+                "drone_idx": int(i),
                 "step": int(env._step_count),
                 "active": False,
                 "collided": False,
@@ -221,6 +222,7 @@ def build_info_dict(env, step_state) -> dict:
         is_active = bool(not (env._dead[i] or env._reached_once[i] or env._despawned[i]))
 
         info_dict[agent] = {
+            "drone_idx": int(i),
             "step": int(env._step_count),
             "active": is_active,
             "collided": bool(env._dead[i]),

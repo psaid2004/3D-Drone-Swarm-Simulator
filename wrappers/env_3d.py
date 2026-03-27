@@ -1346,7 +1346,6 @@ class DroneSwarm3D(ParallelEnv):
         return hit_frac.astype(np.float32)
 
 
-
     # ----------------------------- STEP FUNCTION -----------------------------
     def step(self, actions: Dict[str, np.ndarray]):
         """

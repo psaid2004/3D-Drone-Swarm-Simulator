@@ -10,9 +10,7 @@ import warnings
 import supersuit as ss
 from stable_baselines3 import SAC
 
-#UPDATED CALLBACKS
 from stable_baselines3.common.callbacks import (
-    BaseCallback,
     CallbackList,
     CheckpointCallback,
     EvalCallback,
@@ -72,19 +70,40 @@ class ExpertBlendPolicy(SACPolicy):
     def __init__(self, *args, expert_policy=None, blend_ratio=0.8, **kwargs):
         super().__init__(*args, **kwargs)
         self.expert = expert_policy
-        self._blend_ratio = float(blend_ratio)
+        self._blend_ratio = float(np.clip(blend_ratio, 0.0, 1.0))
+        self._vec_normalise = None
 
 
     @property
     def blend_ratio(self) -> float:
         return self._blend_ratio
 
-
     @blend_ratio.setter
     def blend_ratio(self, v: float):
         self._blend_ratio = float(np.clip(v, 0.0, 1.0))
 
-    #CHANGED
+    def set_vec_normalise(self, vn) -> None:
+        self._vec_normalise = vn
+
+    def denormalise_observation(self, obs_np: np.ndarray) -> np.ndarray:
+        """
+        Convert VecNormalize-normalized observations back to raw observations.
+        """
+        vn = self._vec_normalise
+        if vn is None or not getattr(vn, "norm_obs", False):
+            return obs_np
+
+        # Use VecNormalize's own helper if available
+        if hasattr(vn, "unnormalize_obs"):
+            try:
+                return vn.unnormalize_obs(obs_np.copy())
+            except Exception:
+                pass
+
+        # fallback to manual inverse using mean and std
+        rms = vn.obs_rms
+        return obs_np * np.sqrt(rms.var + vn.epsilon) + rms.mean
+
     def _predict(self, obs: torch.Tensor, deterministic: bool = False) -> torch.Tensor:
         # RL action from SAC actor
         rl_action = self.actor(obs, deterministic=deterministic)
@@ -95,8 +114,10 @@ class ExpertBlendPolicy(SACPolicy):
 
         # expert action for each item in batch
         obs_np = obs.detach().cpu().numpy()
+        raw_obs_np = self.denormalise_observation(obs_np)
+
         expert_np = np.array(
-            [self.expert.action(o) for o in obs_np],
+            [self.expert.action(o) for o in raw_obs_np],
             dtype=np.float32,
         )
         expert_t = torch.as_tensor(expert_np, device=obs.device)
@@ -104,48 +125,8 @@ class ExpertBlendPolicy(SACPolicy):
         blended = self._blend_ratio * expert_t + (1.0 - self._blend_ratio) * rl_action
         return torch.clamp(blended, -1.0, 1.0)
 
-#ADDED CLASS
-class BlendScheduleCallback(BaseCallback):
-    """
-    Linearly decay expert blending from INITIAL_BLEND to FINAL_BLEND
-    over BLEND_DECAY_FRAC of the total planned curriculum timesteps.
-    """
 
-    def __init__(
-        self,
-        total_planned_timesteps: int,
-        initial_blend: float = INITIAL_BLEND,
-        final_blend: float = FINAL_BLEND,
-        decay_frac: float = BLEND_DECAY_FRAC,
-        verbose: int = 0,
-    ):
-        super().__init__(verbose)
-        self.total_planned_timesteps = int(total_planned_timesteps)
-        self.initial_blend = float(initial_blend)
-        self.final_blend = float(final_blend)
-        self.decay_frac = float(decay_frac)
-
-    def _current_blend(self) -> float:
-        decay_steps = max(1, int(self.total_planned_timesteps * self.decay_frac))
-        t = min(int(self.model.num_timesteps), decay_steps)
-        alpha = t / decay_steps
-        blend = self.initial_blend + alpha * (self.final_blend - self.initial_blend)
-        return float(np.clip(blend, 0.0, 1.0))
-
-    def _set_blend(self) -> None:
-        if hasattr(self.model, "policy") and hasattr(self.model.policy, "blend_ratio"):
-            blend = self._current_blend()
-            self.model.policy.blend_ratio = blend
-            self.logger.record("expert_blend/blend_ratio", blend)
-
-    def _on_training_start(self) -> None:
-        self._set_blend()
-
-    def _on_step(self) -> bool:
-        self._set_blend()
-        return True
-
-# ---- CREATE ENV ---- updated
+# ---- CREATE ENV ----
 def create_env(
     world_scale,
     num_drones,
@@ -165,6 +146,7 @@ def create_env(
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
         render_mode=render_mode,
+        max_drones_per_swarm=MAX_DRONES_PER_SWARM
     )
 
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
@@ -174,12 +156,11 @@ def create_env(
     vec = VecMonitor(vec)
 
     # IMPORTANT:
-    # ExpertPolicy expects raw semantic observations, so norm_obs must stay False.
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
         norm_reward=False,
-        norm_obs=False,
+        norm_obs=True,
         clip_obs=5.0,
     )
 
@@ -264,7 +245,7 @@ def make_stage_callbacks(
     progress_cb = ProgressBarCallback()
 
     stats_cb = StepStatsCallback(
-        num_drones=int(num_drones),
+        num_drones=int(MAX_DRONES_PER_SWARM),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
         # print_every=5000,
@@ -277,15 +258,6 @@ def make_stage_callbacks(
     )
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
-
-    #ADDED
-    blend_cb = BlendScheduleCallback(
-        total_planned_timesteps=total_planned_timesteps,
-        initial_blend=INITIAL_BLEND,
-        final_blend=FINAL_BLEND,
-        decay_frac=BLEND_DECAY_FRAC,
-        verbose=0,
-    )
 
     stop_no_improve_cb = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=8,
@@ -306,13 +278,11 @@ def make_stage_callbacks(
         verbose=1,
     )
 
-    #UPDATED
     return CallbackList([
-        blend_cb,
         progress_cb,
         stats_cb,
         ckpt_cb,
-        # eval_cb,
+        eval_cb,
     ])
 
 
@@ -333,19 +303,13 @@ def train(device: str = "auto"):
 
     # --- build stage-0 env ---
 
-    #UPDATED
     ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0 = curr[0]
     print(
-        f"\n=== Stage 0 | world={ws0} drones={nd0} "
+        f"\n=== Stage 0 | world={ws0} active drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
     )
 
     # --- SAC model with expert-blend policy ---
-    # TODO ADD THIS BELOW
-    # TODO GET LIDAR FROM CURRICULUM
-    # TODO THERE IS SOME ISSUE FOR THE NORM_OBS = TRUE CASE
-
-    #CHANGED
     expert = ExpertPolicy(world_scale=ws0, use_lidar=lidar0)
 
     train_env = create_env(
@@ -381,7 +345,7 @@ def train(device: str = "auto"):
         gamma=GAMMA,
         ent_coef=ENTROPY_COEF,
         tensorboard_log=f"{MODELS_DIR}/tb_logs",
-        verbose=0,                          #enable long table prints during train
+        verbose=0,
         device=device_,
         policy_kwargs=dict(
             net_arch=NET_ARCH,
@@ -389,6 +353,10 @@ def train(device: str = "auto"):
             blend_ratio=INITIAL_BLEND,
         ),
     )# TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
+
+    vn = unwrap_vec_normalize(train_env)
+    if vn is not None:
+        model.policy.set_vec_normalise(vn)
 
     # --- train stage 0 first ---
 
@@ -447,7 +415,6 @@ def train(device: str = "auto"):
         old_train_env = model.get_env()
         old_eval_env = eval_env
 
-        #CHANGE
         new_train_env = create_env(
             world_scale=world_scale,
             num_drones=num_drones,
@@ -470,14 +437,31 @@ def train(device: str = "auto"):
         copy_vec_normalize_stats(old_train_env, new_train_env)
         copy_vec_normalize_stats(old_train_env, new_eval_env)
 
+        if model.observation_space != new_train_env.observation_space:
+            raise ValueError(
+                f"Observation space changed across stages.\n"
+                f"model.observation_space={model.observation_space}\n"
+                f"new_train_env.observation_space={new_train_env.observation_space}"
+            )
+
+        if model.action_space != new_train_env.action_space:
+            raise ValueError(
+                f"Action space changed across stages.\n"
+                f"model.action_space={model.action_space}\n"
+                f"new_train_env.action_space={new_train_env.action_space}"
+            )
+
         model.set_env(new_train_env)
         eval_env = new_eval_env
 
-        #CHANGE
-        # update expert to match the current curriculum stage
+        vn = unwrap_vec_normalize(new_train_env)
+        if vn is not None:
+            model.policy.set_vec_normalise(vn)
+
         if hasattr(model.policy, "expert") and model.policy.expert is not None:
             model.policy.expert.world_scale = float(world_scale)
             model.policy.expert.use_lidar = bool(lidar_enabled)
+
 
         callbacks = make_stage_callbacks(
             stage_idx=idx,
