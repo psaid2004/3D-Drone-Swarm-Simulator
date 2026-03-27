@@ -1388,11 +1388,7 @@ class DroneSwarm3D(ParallelEnv):
         self.despawn_newly_reached_drones(step_state.reached_now)
 
         #self.agents = self.possible_agents[:]
-        self.agents = [
-            a for i, a in enumerate(self.possible_agents)
-            if i < self.total_num_drones
-               and not (self._dead[i] or self._reached_once[i] or self._despawned[i])
-        ]
+        self.agents = self.possible_agents[:self.total_num_drones]
 
         self.stats.record_step(
             reward_dict,

@@ -73,30 +73,41 @@ class ExpertBlendPolicy(SACPolicy):
         super().__init__(*args, **kwargs)
         self.expert = expert_policy
         self._blend_ratio = float(blend_ratio)
+        self.vec_normalize = None
 
 
     @property
     def blend_ratio(self) -> float:
         return self._blend_ratio
 
-
     @blend_ratio.setter
     def blend_ratio(self, v: float):
         self._blend_ratio = float(np.clip(v, 0.0, 1.0))
 
+    def set_vec_normalize(self, vec_normalize):
+        self.vec_normalize = vec_normalize
+
     #CHANGED
     def _predict(self, obs: torch.Tensor, deterministic: bool = False) -> torch.Tensor:
-        # RL action from SAC actor
+        # RL action from SAC actor on normalized obs
         rl_action = self.actor(obs, deterministic=deterministic)
 
         # no expert / no blending -> pure RL
         if self.expert is None or self._blend_ratio <= 0.0:
             return rl_action
 
-        # expert action for each item in batch
+        # convert normalized obs back to raw obs for expert
         obs_np = obs.detach().cpu().numpy()
+        expert_obs_np = obs_np
+
+        if self.vec_normalize is not None:
+            try:
+                expert_obs_np = self.vec_normalize.unnormalize_obs(obs_np.copy())
+            except Exception:
+                expert_obs_np = obs_np
+
         expert_np = np.array(
-            [self.expert.action(o) for o in obs_np],
+            [self.expert.action(o) for o in expert_obs_np],
             dtype=np.float32,
         )
         expert_t = torch.as_tensor(expert_np, device=obs.device)
@@ -167,19 +178,19 @@ def create_env(
         render_mode=render_mode,
     )
 
+    env = ss.black_death_v3(env)
+
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
     vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
 
     vec = SB3VecResetTupleFix(vec)
     vec = VecMonitor(vec)
 
-    # IMPORTANT:
-    # ExpertPolicy expects raw semantic observations, so norm_obs must stay False.
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
         norm_reward=False,
-        norm_obs=False,
+        norm_obs=True,
         clip_obs=5.0,
     )
 
@@ -195,18 +206,23 @@ def unwrap_vec_normalize(env):
 
 
 def copy_vec_normalize_stats(src_env, dst_env) -> None:
-    """
-    Copy VecNormalize running statistics from src_env to dst_env.
-    Safe no-op if either side is missing VecNormalize.
-    """
     src_vn = unwrap_vec_normalize(src_env)
     dst_vn = unwrap_vec_normalize(dst_env)
 
     if src_vn is None or dst_vn is None:
         return
 
-    dst_vn.obs_rms = src_vn.obs_rms
-    dst_vn.ret_rms = src_vn.ret_rms
+    if hasattr(src_vn, "obs_rms") and hasattr(dst_vn, "obs_rms"):
+        if src_vn.obs_rms is not None and dst_vn.obs_rms is not None:
+            dst_vn.obs_rms.mean = src_vn.obs_rms.mean.copy()
+            dst_vn.obs_rms.var = src_vn.obs_rms.var.copy()
+            dst_vn.obs_rms.count = src_vn.obs_rms.count
+
+    if hasattr(src_vn, "ret_rms") and hasattr(dst_vn, "ret_rms"):
+        if src_vn.ret_rms is not None and dst_vn.ret_rms is not None:
+            dst_vn.ret_rms.mean = src_vn.ret_rms.mean.copy()
+            dst_vn.ret_rms.var = src_vn.ret_rms.var.copy()
+            dst_vn.ret_rms.count = src_vn.ret_rms.count
 
 
 def safe_close(env) -> None:
@@ -390,6 +406,10 @@ def train(device: str = "auto"):
         ),
     )# TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
 
+    vn = unwrap_vec_normalize(train_env)
+    if vn is not None and hasattr(model.policy, "set_vec_normalize"):
+        model.policy.set_vec_normalize(vn)
+
     # --- train stage 0 first ---
 
     callbacks = make_stage_callbacks(
@@ -470,8 +490,30 @@ def train(device: str = "auto"):
         copy_vec_normalize_stats(old_train_env, new_train_env)
         copy_vec_normalize_stats(old_train_env, new_eval_env)
 
-        model.set_env(new_train_env)
+        old_num_envs = model.n_envs
+        new_num_envs = new_train_env.num_envs
+
+        if new_num_envs == old_num_envs:
+            model.set_env(new_train_env)
+        else:
+            tmp_swap_path = os.path.join(MODELS_DIR, "_tmp_stage_swap_model.zip")
+            model.save(tmp_swap_path)
+
+            model = SAC.load(
+                tmp_swap_path,
+                env=new_train_env,
+                device=device_,
+            )
+
         eval_env = new_eval_env
+
+        if hasattr(model.policy, "expert") and model.policy.expert is not None:
+            model.policy.expert.world_scale = float(world_scale)
+            model.policy.expert.use_lidar = bool(lidar_enabled)
+
+        vn = unwrap_vec_normalize(new_train_env)
+        if vn is not None and hasattr(model.policy, "set_vec_normalize"):
+            model.policy.set_vec_normalize(vn)
 
         #CHANGE
         # update expert to match the current curriculum stage
