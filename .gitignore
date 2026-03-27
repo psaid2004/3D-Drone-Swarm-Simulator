@@ -12,3 +12,4 @@ old_files/
 interface/__pycache__/
 .vscode/
 envs/realWorldGeneration.py
+test_code.py
