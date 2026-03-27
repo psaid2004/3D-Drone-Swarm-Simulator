@@ -83,11 +83,11 @@ def get_ml_test_scenarios() -> dict[str, callable]:
 
 def main():
     # --- create environment ----
-    n_drones = 4
+    n_drones = 2
     n_steps = 8000
 
     pz_env = DroneSwarm3D(
-        world_scale = 4.0,
+        world_scale = 2.0,
         num_drones_per_swarm=n_drones,
         num_static_obstacles = 0,
         num_dynamic_obstacles = 0,
@@ -115,7 +115,9 @@ def main():
 
     # print(n_steps)
     for step in range(n_steps):
-        print("step:", step)
+        # print("step:", step)
+        for drone, obs in obs_dict.items():
+            print(drone, obs[:6])  # pos + vel
         action_dict = {}
         for drone, obs in obs_dict.items():
             # Move roughly toward target + centroid

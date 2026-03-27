@@ -320,9 +320,9 @@ class ExpertPolicy:
 
 
 def main():
-    n_drones = 10
-    n_static_obstacles = 30
-    n_dynamic_obstacles = 5
+    n_drones = 2
+    n_static_obstacles = 0
+    n_dynamic_obstacles = 0
     n_steps = 8000
     use_lidar = True
     num_swarms = 1
