@@ -217,22 +217,28 @@ class DroneSwarm3D(ParallelEnv):
 
     def _init_pybullet_handles(self) -> None:
         self._gui_client_id = None
-        if self.render_mode == "human":
-            self._gui_client_id = self._client_id
+        # if self.render_mode == "human":
+        #     self._gui_client_id = self._client_id
         try:
             import pybullet as p
 
             self._p = p
+            self._client_id = None
 
             for attr in ("_CLIENT", "CLIENT", "client", "_client"):
                 if hasattr(self._env, attr):
                     self._client_id = getattr(self._env, attr)
                     break
 
+            if self.render_mode == "human":
+                self._gui_client_id = self._client_id
+
             try:
                 self._call_physics(p.setGravity, 0, 0, -9.8)
             except Exception:
                 pass
+
+            self._drone_ids = []
 
             for attr in ("DRONE_IDS", "drone_ids", "_drone_ids"):
                 if hasattr(self._env, attr):
@@ -268,38 +274,41 @@ class DroneSwarm3D(ParallelEnv):
 
 
     def _pcid_for_physics(self) -> Optional[int]:
-        """ Pick correct client to run physics in """
         if self._p is None:
             return None
-        p = self._p
 
-        if self._client_id is not None:
-            try:
-                if p.isConnected(self._client_id):
-                    return int(self._client_id)
-            except Exception:
-                pass
+        for attr in ("_CLIENT", "CLIENT", "client", "_client"):
+            if hasattr(self._env, attr):
+                cid = getattr(self._env, attr)
+                try:
+                    if cid is not None and self._p.isConnected(cid):
+                        return int(cid)
+                except Exception:
+                    pass
 
-        ids = self._connected_ids()
-
-        return ids[0] if ids else None
-
+        return None
 
     def _call_physics(self, fn, *args, **kwargs):
-        """ Find physics client, add label and call function. """
         if self._p is None:
             raise RuntimeError("PyBullet not available")
 
-        # retrieve id of physics simulation
         pcid = self._pcid_for_physics()
+        if pcid is None:
+            raise RuntimeError("No active PyBullet physics client found")
 
-        if pcid is not None and "physicsClientId" not in kwargs:
-            try:
-                return fn(*args, **kwargs, physicsClientId=pcid)
-            except Exception:
-                pass
-
-        return fn(*args, **kwargs)
+        try:
+            return fn(*args, **kwargs, physicsClientId=pcid)
+        except Exception as e:
+            print(
+                f"[PHYSICS ERROR] fn={fn.__name__} pcid={pcid} "
+                f"args={args} kwargs={kwargs} error={repr(e)}"
+            )
+            raise
+        # TODO IF TOO MANY OF THE ABOVE EXCEPTIONS ARE THROWN, TAKE TRY STATEMENT ABOVE OUT AND UNCOMMENT BELOW
+        # if "physicsClientId" in kwargs:
+        #     return fn(*args, **kwargs)
+        #
+        # return fn(*args, **kwargs, physicsClientId=pcid)
 
 
     def _call_gui(self, fn, *args, **kwargs):
