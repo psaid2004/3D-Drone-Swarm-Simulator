@@ -1487,8 +1487,6 @@ class DroneSwarm3D(ParallelEnv):
                     angularVelocity=[0, 0, 0]
                 )
 
-
-
             # reset episode bookkeeping
             self._dead[:] = False
             self._reached_once[:] = False
@@ -1504,12 +1502,10 @@ class DroneSwarm3D(ParallelEnv):
             self._obstacle_collision_once[:] = False
             self._drone_collision_once[:] = False
 
-            # refresh episode content
             self._rebuild_query_world_from_current_scene()
+            self._targets = self._make_targets()
             self._spawn_obstacles()
             self._spawn_walls()
-            self._targets = self._make_targets()
-
 
             obs0 = self._build_obs_dict()
 
