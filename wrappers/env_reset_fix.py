@@ -38,7 +38,6 @@ class SB3VecResetTupleFix(VecEnvWrapper):
     def step_async(self, actions) -> None:
         self.venv.step_async(actions)
 
-
     def step_wait(self):
         out = self.venv.step_wait()
 
@@ -61,6 +60,20 @@ class SB3VecResetTupleFix(VecEnvWrapper):
                         infos[i]["terminated"] = bool(terminations[i])
                         infos[i]["truncated"] = bool(truncations[i])
 
+            # Auto-reset handling # TODO CHANGE THIS SO IT WAITS FOR OTHER DRONES TO REACH OR FOR THEM TO DIE/TIMEOUT
+            if dones.any():
+                for i in range(len(dones)):
+                    if dones[i] and isinstance(infos[i], dict):
+                        infos[i]["terminal_observation"] = obs[i].copy()
+
+                new_obs = self.venv.reset()
+                if isinstance(new_obs, tuple):
+                    new_obs, _ = new_obs
+
+                for i in range(len(dones)):
+                    if dones[i]:
+                        obs[i] = new_obs[i]
+
             return obs, rewards, dones, infos
 
         if isinstance(out, tuple) and len(out) == 4:
@@ -77,7 +90,6 @@ class SB3VecResetTupleFix(VecEnvWrapper):
             if infos is not None:
                 for i in range(min(len(infos), len(dones))):
                     if isinstance(infos[i], dict):
-                        # Preserve existing values if present
                         infos[i]["terminated"] = bool(infos[i].get("terminated", False))
 
                         if "truncated" in infos[i]:
@@ -86,6 +98,20 @@ class SB3VecResetTupleFix(VecEnvWrapper):
                             infos[i]["truncated"] = bool(infos[i]["TimeLimit.truncated"])
                         else:
                             infos[i]["truncated"] = False
+
+            # Auto-reset handling  # TODO CHANGE THIS SO IT WAITS FOR OTHER DRONES TO REACH OR FOR THEM TO DIE/TIMEOUT
+            if dones.any():
+                for i in range(len(dones)):
+                    if dones[i] and isinstance(infos[i], dict):
+                        infos[i]["terminal_observation"] = obs[i].copy()
+
+                new_obs = self.venv.reset()
+                if isinstance(new_obs, tuple):
+                    new_obs, _ = new_obs
+
+                for i in range(len(dones)):
+                    if dones[i]:
+                        obs[i] = new_obs[i]
 
             assert dones.dtype == np.bool_, f"dones dtype is {dones.dtype}"
             assert dones.shape == (self.num_envs,), f"dones shape is {dones.shape}, expected {(self.num_envs,)}"

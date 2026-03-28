@@ -4,8 +4,7 @@ import os, time
 from pathlib import Path
 import numpy as np
 
-import wandb
-from wandb.integration.sb3 import WandbCallback
+
 
 import torch
 import warnings
@@ -277,18 +276,10 @@ def make_stage_callbacks(
         verbose=1,
     )
 
-    wandb_cb = WandbCallback(
-        model_save_path=str(Path(MODELS_DIR) / "wandb_models" / f"stage_{stage_idx}"),
-        model_save_freq=max(1, 10_000 // max(1, N_ENVS)),
-        gradient_save_freq=0,  # start with 0; turn on later if you want
-        verbose=1,
-    )
-
     return CallbackList([
         stats_cb,
         ckpt_cb,
         eval_cb,
-        wandb_cb,
     ])
 
 
@@ -315,34 +306,6 @@ def train(device: str = "auto"):
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
     )
 
-    wandb.init(
-        project="drone-swarm-sac",
-        name=f"sac_stage0_ws{ws0}_d{nd0}",
-        config={
-            "algorithm": "SAC",
-            "world_scale": ws0,
-            "initial_active_drones": nd0,
-            "max_drones_per_swarm": MAX_DRONES_PER_SWARM,
-            "num_static_obstacles": ns0,
-            "num_dynamic_obstacles": ndyn0,
-            "steps_stage0": steps0,
-            "episode_horizon": steps_per_episode,
-            "lidar": lidar0,
-            "n_envs": N_ENVS,
-            "learning_rate": LEARNING_RATE,
-            "buffer_size": BUFFER_SIZE,
-            "learning_starts": LEARNING_STARTS,
-            "batch_size": BATCH_SIZE,
-            "train_freq": str(TRAIN_FREQ),
-            "gradient_steps": GRADIENT_STEPS,
-            "gamma": GAMMA,
-            "entropy_coef": ENTROPY_COEF,
-            "net_arch": NET_ARCH,
-            "initial_blend": INITIAL_BLEND,
-        },
-        sync_tensorboard=True,
-        save_code=True,
-    )
 
     # --- SAC model with expert-blend policy ---
     expert = ExpertPolicy(world_scale=ws0, use_lidar=lidar0)
@@ -447,15 +410,7 @@ def train(device: str = "auto"):
             f"dynamic={num_dynamic_obs} steps={stage_steps} ==="
         )
 
-        wandb.log({
-            "curriculum/current_stage": idx,
-            "curriculum/world_scale": world_scale,
-            "curriculum/active_drones": num_drones,
-            "curriculum/static_obstacles": num_static_obs,
-            "curriculum/dynamic_obstacles": num_dynamic_obs,
-            "curriculum/episode_horizon": steps_per_episode,
-            "curriculum/lidar_enabled": int(lidar_enabled),
-        }, step=model.num_timesteps)
+
 
         # swap envs
         old_train_env = model.get_env()
@@ -561,7 +516,6 @@ def train(device: str = "auto"):
     safe_close(eval_env)
     safe_close(train_env)
 
-    wandb.finish()
 
     print("Training complete.")
 
