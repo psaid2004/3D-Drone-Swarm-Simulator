@@ -61,9 +61,9 @@ class EnvObject:
             "cylinder": {
                 "geom": p.GEOM_CYLINDER,
                 "collision_kwargs": lambda s: {"radius": 0.1 * s, "height": 0.5 * s},
-                "visual_kwargs":    lambda s: {"radius": 0.1 * s},
+                "visual_kwargs":    lambda s: {"radius": 0.1 * s, "length": 0.5 * s}, 
                 "use_orientation": True,
-                "radius" : 0.25 * size
+                "radius": 0.1 * size 
             },
             "x_pos_wall": {
                 "geom": p.GEOM_BOX,
@@ -155,7 +155,6 @@ class EnvObject:
         # Check if too close to drones
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
             return False
-
         targets_pos = []
         for target in targets:
             try:

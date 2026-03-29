@@ -588,7 +588,6 @@ class DroneSwarm3D(ParallelEnv):
             shape = self.rng.choice(SUPPORTED_SHAPES)
             self._spawn_dynamic_obstacles(max_attempts, shape, axis)
             self._rebuild_query_world_from_current_scene()
-
         for _ in range(self.num_static_obstacles):
             shape = self.rng.choice(SUPPORTED_SHAPES)
             swarm_list = self._spawn_static_obstacles(max_attempts, shape, swarm_list)
@@ -615,7 +614,7 @@ class DroneSwarm3D(ParallelEnv):
             body = obj.create(shape, physics_call=self._call_physics)
 
             # Check if the obstacle is overlapping with any other obstacle or too close to drones or target
-            if self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE):
+            if self.obstacle_overlap(obj) or not obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE):
                 self._call_physics(self._p.removeBody, body)
                 continue
 
@@ -662,7 +661,7 @@ class DroneSwarm3D(ParallelEnv):
             body = obj.create(shape, physics_call= self._call_physics)
 
             # Check if the obstacle is overlapping with any other obstacle and is far enough from targets and drones
-            if (self.obstacle_overlap(obj) and obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE)):
+            if (self.obstacle_overlap(obj) or not obj.isValidPosition(self.spawn_positions, self._targets, MIN_SPAWN_DIST_FROM_DRONE)):
                 self._call_physics(self._p.removeBody, body)
                 continue
             self._obstacles.append(obj)
