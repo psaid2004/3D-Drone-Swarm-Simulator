@@ -25,7 +25,7 @@ from config.defaults import *
 
 class DroneSwarm3D(ParallelEnv):
 
-    metadata = {"name": "drone_swarms_3d", "render_mode": "human"}
+    metadata = {"name": "drone_swarms_3d"}
 
     # ----------------------------- Initialise Custom 3D Environment -----------------------------
 
@@ -79,6 +79,8 @@ class DroneSwarm3D(ParallelEnv):
         """ Store environment configuration. """
         self.world_scale = float(world_scale)
         self.num_swarms = int(num_swarms)
+
+        self._p = None
 
         # active drones for the current curriculum stage
         self.num_drones_per_swarm = int(num_drones_per_swarm)
@@ -257,7 +259,7 @@ class DroneSwarm3D(ParallelEnv):
 
     def _connected_ids(self) -> List[int]:
         """ Scan and return a list of all active PyBullet Client IDs (simulation connections) """
-        if self._p is None:
+        if not hasattr(self, "_p") or self._p is None:
             return []
         p = self._p
 
