@@ -350,7 +350,7 @@ def make_stage_callbacks(
     )
 
     stats_cb = StepStatsCallback(
-        num_drones=int(MAX_DRONES_PER_SWARM),
+        num_drones=int(num_drones),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
         # print_every=5000,
@@ -359,7 +359,7 @@ def make_stage_callbacks(
         max_collision_rate=0.05,
         patience=10,
         min_stage_timesteps=10000,
-        verbose=0,
+        verbose=1,
     )
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)

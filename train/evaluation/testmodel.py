@@ -80,10 +80,10 @@ class SingleEpisodeRunner:
 
 if __name__ == "__main__":
     runner = SingleEpisodeRunner(
-        model_num=2,
-        n_drones=1,
-        n_static_obstacles=0,
-        n_dynamic_obstacles=0,
+        model_num=0,
+        n_drones=8,
+        n_static_obstacles=8,
+        n_dynamic_obstacles=2,
         lidar=True,
         render_mode="human",
     )

@@ -172,11 +172,10 @@ class StepStatsCallback(BaseCallback):
     def _on_rollout_start(self) -> None:
         self._rollout_reset()
 
-
     def _on_step(self) -> bool:
         if self._should_stop:
             if self.verbose >= 1:
-                print(f"[StepStatsCallback] stopping training at timestep={self.num_timesteps}")
+                print(f"[StepStatsCallback] stopping training at timestep={self.num_timesteps}", flush=True)
             return False
 
         infos = self.locals.get("infos", None)
@@ -227,20 +226,111 @@ class StepStatsCallback(BaseCallback):
             self.episode_done_collision = bool(info.get("episode_done_collision", False))
             self.episode_done_all_reached = bool(info.get("episode_done_all_reached", False))
 
+            # -------------------------------------------------
+            # Handle episode-summary info FIRST, before skipping
+            # inactive drones, because VecMonitor may attach the
+            # episode info to a non-active slot.
+            # -------------------------------------------------
+            episode_info = info.get("episode", None)
+            if episode_info is not None:
+                episode_summary = {
+                    "env": env_i,
+                    "drone": drone_i,
+                    "flat_idx": flat_idx,
+                    "ep_rew": float(episode_info.get("r", 0.0)),
+                    "ep_len": int(info.get("step", episode_info.get("l", 0))),
+                    "reached": bool(info.get("reached", False) or info.get("just_reached", False)),
+                    "collision": bool(info.get("collided", False) or info.get("collision_now", False)),
+                    "wall_collision": bool(info.get("wall_collision", False) or info.get("wall_collision_now", False)),
+                    "obstacle_collision": bool(
+                        info.get("obstacle_collision", False) or info.get("obstacle_collision_now", False)
+                    ),
+                    "drone_collision": bool(
+                        info.get("drone_collision", False) or info.get("drone_collision_now", False)
+                    ),
+                    "truncated": bool(info.get("truncated", False)),
+                }
+
+                self._episode_batch[env_i] = episode_summary
+
+                if len(self._episode_batch) == self.num_envs:
+                    self._episode_batch_counter += 1
+
+                    print(
+                        f"\n[EpisodeBatch {self._episode_batch_counter}] all {self.num_envs} envs concluded once:",
+                        flush=True,
+                    )
+                    for env_id in sorted(self._episode_batch.keys()):
+                        ep = self._episode_batch[env_id]
+
+                        outcome = "ongoing"
+                        if ep["reached"]:
+                            outcome = "reached_target"
+                        elif ep["wall_collision"]:
+                            outcome = "wall_collision"
+                        elif ep["obstacle_collision"]:
+                            outcome = "obstacle_collision"
+                        elif ep["drone_collision"]:
+                            outcome = "drone_collision"
+                        elif ep["collision"]:
+                            outcome = "collision"
+                        elif ep["truncated"]:
+                            outcome = "time_limit"
+                        elif self.stage_info is not None and ep["ep_len"] >= self.stage_info.episode_horizon:
+                            outcome = "time_limit"
+
+                        print(
+                            f"  env={ep['env']} "
+                            f"drone={ep['drone']} "
+                            f"reward={ep['ep_rew']:.3f} "
+                            f"ep_len={ep['ep_len']} "
+                            f"outcome={outcome}",
+                            flush=True,
+                        )
+
+                    batch_rewards = [ep["ep_rew"] for ep in self._episode_batch.values()]
+                    batch_lengths = [ep["ep_len"] for ep in self._episode_batch.values()]
+                    batch_wall_collisions = sum(int(ep["wall_collision"]) for ep in self._episode_batch.values())
+                    batch_reached = sum(int(ep["reached"]) for ep in self._episode_batch.values())
+
+                    self.logger.record("episode_batch/mean_reward", float(np.mean(batch_rewards)))
+                    self.logger.record("episode_batch/mean_length", float(np.mean(batch_lengths)))
+                    self.logger.record("episode_batch/reached_frac", float(batch_reached) / float(self.num_envs))
+                    self.logger.record(
+                        "episode_batch/wall_collision_frac",
+                        float(batch_wall_collisions) / float(self.num_envs),
+                    )
+
+                    print(
+                        f"[EpisodeBatchSummary] "
+                        f"mean_reward={np.mean(batch_rewards):.3f} "
+                        f"mean_len={np.mean(batch_lengths):.1f} "
+                        f"reached={batch_reached}/{self.num_envs} "
+                        f"wall_collisions={batch_wall_collisions}/{self.num_envs}\n",
+                        flush=True,
+                    )
+
+                    self._flush_episode_batch_stats()
+                    self._episode_batch = {}
+
+            # -------------------------------------------------
+            # Skip inactive drones for speed/distance/reach stats
+            # -------------------------------------------------
+            if not active:
+                continue
+
+            active_this_step[env_i, drone_i] = True
+
             self._agent_steps += 1
+            self._print_agent_steps += 1
 
             self._dist_to_target_sum += dist_to_target
             self._cmd_speed_sum += cmd_speed
             self._actual_speed_sum += actual_speed
 
-            self._print_agent_steps += 1
-
             self._print_dist_to_target_sum += dist_to_target
             self._print_cmd_speed_sum += cmd_speed
             self._print_actual_speed_sum += actual_speed
-
-            if active:
-                active_this_step[env_i, drone_i] = True
 
             if reached:
                 self._reached_ever.add(flat_idx)
@@ -286,79 +376,6 @@ class StepStatsCallback(BaseCallback):
             if swarm_too_far:
                 self._swarm_too_far_steps += 1
 
-            episode_info = info.get("episode", None)
-            if episode_info is not None:
-                episode_summary = {
-                    "env": env_i,
-                    "drone": drone_i,
-                    "flat_idx": flat_idx,
-                    "ep_rew": float(episode_info.get("r", 0.0)),
-                    "ep_len": int(episode_info.get("l", 0)),
-                    "reached": bool(info.get("reached", False) or info.get("just_reached", False)),
-                    "collision": bool(info.get("collided", False) or info.get("collision_now", False)),
-                    "wall_collision": bool(info.get("wall_collision", False) or info.get("wall_collision_now", False)),
-                    "obstacle_collision": bool(
-                        info.get("obstacle_collision", False) or info.get("obstacle_collision_now", False)),
-                    "drone_collision": bool(
-                        info.get("drone_collision", False) or info.get("drone_collision_now", False)),
-                    "truncated": bool(info.get("truncated", False)),
-                }
-
-                self._episode_batch[env_i] = episode_summary
-
-                if len(self._episode_batch) == self.num_envs:
-                    self._episode_batch_counter += 1
-
-
-
-                    print(f"\n[EpisodeBatch {self._episode_batch_counter}] all {self.num_envs} envs concluded once:")
-                    for env_id in sorted(self._episode_batch.keys()):
-                        ep = self._episode_batch[env_id]
-
-                        outcome = "ongoing"
-                        if ep["reached"]:
-                            outcome = "reached_target"
-                        elif ep["wall_collision"]:
-                            outcome = "wall_collision"
-                        elif ep["obstacle_collision"]:
-                            outcome = "obstacle_collision"
-                        elif ep["drone_collision"]:
-                            outcome = "drone_collision"
-                        elif ep["collision"]:
-                            outcome = "collision"
-                        elif ep["truncated"]:
-                            outcome = "time_limit"
-                        elif self.stage_info is not None and ep["ep_len"] >= self.stage_info.episode_horizon:
-                            outcome = "time_limit"
-
-                        print(
-                            f"  env={ep['env']} "
-                            f"drone={ep['drone']} "
-                            f"reward={ep['ep_rew']:.3f} "
-                            f"ep_len={ep['ep_len']} "
-                            f"outcome={outcome}"
-                        )
-
-                    batch_rewards = [ep["ep_rew"] for ep in self._episode_batch.values()]
-                    batch_lengths = [ep["ep_len"] for ep in self._episode_batch.values()]
-                    batch_wall_collisions = sum(int(ep["wall_collision"]) for ep in self._episode_batch.values())
-                    batch_reached = sum(int(ep["reached"]) for ep in self._episode_batch.values())
-                    self.logger.record("episode_batch/mean_reward", float(np.mean(batch_rewards)))
-                    self.logger.record("episode_batch/mean_length", float(np.mean(batch_lengths)))
-                    self.logger.record("episode_batch/reached_frac", float(batch_reached) / float(self.num_envs))
-                    self.logger.record("episode_batch/wall_collision_frac",
-                                       float(batch_wall_collisions) / float(self.num_envs))
-
-                    print(
-                        f"[EpisodeBatchSummary] "
-                        f"mean_reward={np.mean(batch_rewards):.3f} "
-                        f"mean_len={np.mean(batch_lengths):.1f} "
-                        f"reached={batch_reached}/{self.num_envs} "
-                        f"wall_collisions={batch_wall_collisions}/{self.num_envs}\n"
-                    )
-
-                    self._flush_episode_batch_stats()
-                    self._episode_batch = {}
         return True
 
     def _flush_episode_batch_stats(self) -> None:
@@ -470,7 +487,8 @@ class StepStatsCallback(BaseCallback):
                 + f"total_wall_collisions={print_total_wall_collisions:.0f} "
                 + f"total_collisions={print_total_collisions:.0f} "
                 + f"episode_done_all_collided={print_episode_done_collision} "
-                + f"episode_done_all_reached={print_episode_done_all_reached} "
+                + f"episode_done_all_reached={print_episode_done_all_reached} ",
+                flush=True,
             )
 
         #self.logger.dump(self.num_timesteps)
@@ -567,7 +585,8 @@ class StepStatsCallback(BaseCallback):
             print(
                 f"[StageEarlyStop] reach={reach_rate:.3f} "
                 f"collision_rate={collision_step_rate:.4f} "
-                f"streak={self._consecutive_good}/{self.patience}"
+                f"streak={self._consecutive_good}/{self.patience}",
+                flush=True,
             )
 
         if self._consecutive_good >= self.patience:
@@ -575,7 +594,8 @@ class StepStatsCallback(BaseCallback):
             if self.verbose >= 1:
                 print(
                     f"[StageEarlyStop] triggered at num_timesteps={self.num_timesteps} "
-                    f"(stage_steps={steps_in_stage})"
+                    f"(stage_steps={steps_in_stage})",
+                    flush=True,
                 )
             # self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
             # self.model.env.reset()  # optional: clean reset
