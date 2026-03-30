@@ -360,7 +360,7 @@ def make_stage_callbacks(
         max_collision_rate=0.05,
         patience=10,
         min_stage_timesteps=10000,
-        verbose=0,
+        verbose=1,
     )
 
     stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
@@ -368,7 +368,7 @@ def make_stage_callbacks(
     stop_no_improve_cb = StopTrainingOnNoModelImprovement(
         max_no_improvement_evals=8,
         min_evals=3,
-        verbose=1,
+        verbose=0,
     )
 
     # evaluate current policy on clean evaluate environment
@@ -381,7 +381,7 @@ def make_stage_callbacks(
         deterministic=True,
         render=False,
         callback_after_eval=stop_no_improve_cb,
-        verbose=1,
+        verbose=0,
     )
     #
     # wandb_cb = WandbCallback(
@@ -400,7 +400,7 @@ def make_stage_callbacks(
     return CallbackList([
         stats_cb,
         ckpt_cb,
-        eval_cb,
+        #eval_cb,       #TODO: does not work just saves 'best model' we dont need
         # wandb_cb,
         blend_cb,
     ])
@@ -468,7 +468,7 @@ def train(device: str = "auto"):
         num_dynamic_obstacles=ndyn0,
         max_episode_steps=steps_per_episode,
         lidar_enabled=lidar0,
-        render_mode="human",
+        render_mode=None, #"human",
 
     )
 
@@ -495,7 +495,7 @@ def train(device: str = "auto"):
         gamma=GAMMA,
         ent_coef=ENTROPY_COEF,
         tensorboard_log=f"{MODELS_DIR}/tb_logs",
-        verbose=0,
+        verbose=1,
         device=device_,
         replay_buffer_class=ActiveSlotReplayBuffer,
         policy_kwargs=dict(

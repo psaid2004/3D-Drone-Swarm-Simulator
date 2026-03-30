@@ -31,6 +31,24 @@ class Curriculum:
 
         self.stages: List[Tuple[float, int, int, int, int, int, bool]] = [
 
+
+            (3, 3, 0, 0, 300_000, 1500, True),
+            (3, 5, 0, 0, 350_000, 1700, True),
+
+            (3, 5, 2, 0, 400_000, 1700, True),
+            (4, 5, 3, 0, 450_000, 2000, True),
+
+            (4, 5, 4, 1, 450_000, 2200, True),
+            (5, 5, 5, 1, 500_000, 2500, True),
+
+            (5, 8, 5, 1, 500_000, 2700, True),
+            (6, 8, 6, 2, 550_000, 3000, True),
+
+            (7, 8, 8, 2, 550_000, 3300, True),
+            (8, 10, 8, 3, 600_000, 3600, True),
+
+            (9, 10, 10, 4, 700_000, 3900, True),
+
             # ---- SINGLE DRONE ----
             #(2, 1, 0, 0, 700_000, 700, True),   # Stage 0: one drone, empty world
             #(3, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
@@ -41,17 +59,17 @@ class Curriculum:
             # (2, 2, 0, 0, 10000, 900, True),  # Stage 0: one drone, empty world
             # (2, 2, 2, 0, 10000, 2000, True),  # Stage 0: one drone, empty world
             # (2, 2, 2, 2, 10000, 2000, True),  # Stage 0: one drone, empty world
-            (3, 1, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            (3, 3, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            (3, 3, 3, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            (3, 3, 3, 3, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            (4, 1, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            (4, 4, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            (4, 4, 4, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            (4, 4, 4, 4, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            (5, 1, 0, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
-            (5, 5, 5, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
-            (5, 5, 5, 5, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            #(3, 1, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            #(3, 3, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            #(3, 3, 3, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            #(3, 3, 3, 3, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            #(4, 1, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            #(4, 4, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            #(4, 4, 4, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            #(4, 4, 4, 4, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            #(5, 1, 0, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            #(5, 5, 5, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            #(5, 5, 5, 5, 700_000, 1100, True),  # Stage 0: one drone, empty world
 
             #TODO: LOOK AT TIMES IT TAKES DRONE TO REACH TARGET AND REDUCE TIME PER EPISODE
             #TODO: DOUBLE CHECK LIDAR=TRUE REWARD

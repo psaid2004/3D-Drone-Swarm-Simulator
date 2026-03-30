@@ -387,6 +387,15 @@ class DroneSwarm3D(ParallelEnv):
 
         self._create_aviary()
 
+    def _ensure_live_aviary(self) -> None:
+        """
+        Make sure the underlying VelocityAviary still has a live PyBullet connection.
+        Rebuild it if needed, then refresh handles.
+        """
+        if getattr(self, "_env", None) is None or not self._pybullet_client_alive():
+            self._rebuild_aviary()
+            self._init_pybullet_handles()
+            self._refresh_drone_ids_from_pybullet()
 
     def _create_aviary(self):
         """Create VelocityAviary from scratch."""
@@ -1397,8 +1406,30 @@ class DroneSwarm3D(ParallelEnv):
         sim_actions = convert_actions_for_simulator(self, actions)
 
         self._last_sim_actions = sim_actions.copy()
-        # 4. Step the simulator using the action
-        self._env.step(sim_actions)
+
+        # 4. Ensure the simulator connection is alive before stepping
+        self._ensure_live_aviary()
+
+        try:
+            self._env.step(sim_actions)
+        except Exception as e:
+            # If PyBullet died mid-episode, rebuild once and hard-reset this env
+            msg = str(e)
+            if "Not connected to physics server" in msg:
+                self._rebuild_aviary()
+                obs_dict, info_dict = self.reset()
+
+                reward_dict = {agent: 0.0 for agent in self.agents}
+                term_dict = {agent: False for agent in self.agents}
+                trunc_dict = {agent: True for agent in self.agents}
+
+                for agent in self.agents:
+                    if agent in info_dict and isinstance(info_dict[agent], dict):
+                        info_dict[agent]["physics_server_recovered"] = True
+
+                return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+
+            raise
 
         # 5. Build the observation dictionary
         obs_dict = self._build_obs_dict()
@@ -1664,14 +1695,20 @@ class DroneSwarm3D(ParallelEnv):
     def render(self):
         return None
 
-
     def close(self):
         try:
             self._clear_debug_visuals()
         except Exception:
             pass
+
         try:
-            self._env.close()
+            if getattr(self, "_env", None) is not None:
+                self._env.close()
         except Exception:
             pass
-
+        finally:
+            self._env = None
+            self._p = None
+            self._client_id = None
+            self._gui_client_id = None
+            self._drone_ids = []
