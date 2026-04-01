@@ -2,28 +2,7 @@ import pybullet as p
 import pybullet_data
 import time
 import numpy as np
-    
 
-class Swarm:
-    def __init__(self, max_drones) :
-        self.max_dr = max_drones
-        self.drones = []
-        
-    def add_drone(self, drone) :
-        if len(self.drones) < self.max_dr :
-            self.drones.append(drone)
-            return True
-        
-        return False
-    
-class Drone:
-    def __init__(self, start_pos, euler_angles):
-        self.start_pos = start_pos
-        self.rotation = p.getQuaternionFromEuler(euler_angles)
-
-
-
-    
     
 class EnvObject:
     def __init__(self, start_pos, size, orientation):
@@ -129,7 +108,7 @@ class EnvObject:
         body = physics_call(p.createMultiBody, **body_kwargs)
         self.body_id = body  # store ID in object
         return self.body_id
-
+ # and targets?
     def isOverlapping(self, obstacle):
         pts = self.physics_call(
             p.getClosestPoints,

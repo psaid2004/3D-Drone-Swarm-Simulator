@@ -45,6 +45,9 @@ def convert_actions_for_simulator(env, actions: Dict[str, np.ndarray]) -> np.nda
     for i, a in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
             continue
+        #Skip despawned drones
+        if env._despawned[i]:
+            continue
 
         # default: no movement
         dir_vec = np.zeros(3, dtype=np.float32)
