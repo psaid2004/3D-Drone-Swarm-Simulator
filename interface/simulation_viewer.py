@@ -263,12 +263,6 @@ class SimulationViewer(QWidget):
                 "y": 0.0,
                 "z": 0.5,
                 "size": 0.5,
-                "yaw": 0.0,
-                "axis": 0,
-                "min": -2.0,
-                "max": 2.0,
-                "speed": 0.2,
-                "direction": 1
             },
             {
                 "name": "Dynamic Sphere",
@@ -510,12 +504,15 @@ class SimulationViewer(QWidget):
         self._rebuild_object_controls()
 
     def _save_log(self):
-        configs_dir = Path(__file__).resolve().parent / "logs"
-        configs_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        file_path = configs_dir / f"obj_{timestamp}.json"
-        with file_path.open("w", encoding="utf-8") as f:
-            json.dump(self.console.app_terminal.redirect.store, f, indent=4)
+        try:
+            configs_dir = Path(__file__).resolve().parent / "logs"
+            configs_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            file_path = configs_dir / f"obj_{timestamp}.json"
+            with file_path.open("w", encoding="utf-8") as f:
+                json.dump(self.console.app_terminal.redirect.store, f, indent=4)
+        except:
+            print("Log not saved (Open terminal to save log)")
 
     def _save_config(self):
         self._object_configs = self._get_object_configs_snapshot()
@@ -598,21 +595,35 @@ class SimulationViewer(QWidget):
         
     def _ensure_config_fields(self, config):
         """Ensure config has all required fields with defaults"""
-        defaults = {
-            "name": "Object",
-            "kind": "static",
-            "shape": "box",
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0,
-            "size": 0.5,
-            "yaw": 0.0,
-            "axis": 0,
-            "min": -1.0,
-            "max": 1.0,
-            "speed": 0.2,
-            "direction": 1
-        }
+        if "kind" not in config.keys():
+            config["kind"] = "static"
+        
+        if config["kind"] == "static":
+            defaults = {
+                "name": "Object",
+                "kind": "static",
+                "shape": "box",
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "size": 0.5
+            }
+        else:
+            defaults = {
+                "name": "Object",
+                "kind": "dynamic",
+                "shape": "box",
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "size": 0.5,
+                "yaw": 0.0,
+                "axis": 0,
+                "min": -1.0,
+                "max": 1.0,
+                "speed": 0.2,
+                "direction": 1
+            }
         
         for key, default_value in defaults.items():
             if key not in config:
@@ -627,7 +638,7 @@ class SimulationViewer(QWidget):
             for i in range(current_count, count):
                 new_config = {
                     "name": f"Object {i + 1}",
-                    "kind": "static",
+                    "kind": "dynamic",
                     "shape": "box",
                     "x": 0.0,
                     "y": 0.0,
@@ -676,9 +687,22 @@ class SimulationViewer(QWidget):
 
             if key == "shape" and value not in SHAPES:
                 value = old
-            if key == "kind" and value not in KINDS:
-                value = old
-
+            if key == "kind":
+                if value not in KINDS:
+                    value = old
+                else:
+                    is_dynamic = value == "dynamic"
+                    if hasattr(self, '_dynamic_widgets') and index in self._dynamic_widgets:
+                        checkbox = self._dynamic_widgets[index]['checkbox']
+                        checkbox.blockSignals(True)
+                        checkbox.setChecked(is_dynamic)
+                        checkbox.blockSignals(False)
+                        self._dynamic_widgets[index]['checkbox'].setVisible(is_dynamic)
+                        self._dynamic_widgets[index]['container'].setVisible(is_dynamic)
+                        
+                    if not is_dynamic:
+                        self._object_configs[index]["speed"] = 0
+                    
             if key == "axis":
                 if isinstance(value, str):
                     value = AXIS_LABEL_TO_INT.get(value, old)
@@ -757,9 +781,13 @@ class SimulationViewer(QWidget):
             self.scroll_layout.addStretch(1)
             return
 
+        if not hasattr(self, '_dynamic_widgets'):
+            self._dynamic_widgets = {}
+
         for i, raw_cfg in enumerate(configs):
             # Ensure config has all required fields
             cfg = self._ensure_config_fields(raw_cfg)
+            is_dynamic = cfg.get("kind", "static") == "dynamic"
             
             card = QGroupBox(f"Object {i + 1}")
             card_layout = QVBoxLayout(card)
@@ -803,41 +831,76 @@ class SimulationViewer(QWidget):
                 card, "Size", cfg["size"], 
                 partial(self._set_object_field, i, "size")
             ))
-            card_layout.addWidget(self._add_labeled_entry(
+            
+
+            dynamic_checkbox = QCheckBox("Dynamic Object")
+            dynamic_checkbox.setChecked(is_dynamic)
+            dynamic_checkbox.toggled.connect(
+                partial(self._toggle_dynamic_fields, i, card_layout)
+            )
+            card_layout.addWidget(dynamic_checkbox)
+            
+            dynamic_container = QWidget()
+            dynamic_layout = QVBoxLayout(dynamic_container)
+            dynamic_layout.setContentsMargins(0, 0, 0, 0)
+        
+            dynamic_layout.addWidget(self._add_labeled_entry(
                 card, "Yaw", cfg["yaw"], 
                 partial(self._set_object_field, i, "yaw")
             ))
 
             # Dynamic motion fields
             axis_label = AXIS_INT_TO_LABEL.get(int(cfg["axis"]), "x")
-            card_layout.addWidget(self._add_option_menu(
+            dynamic_layout.addWidget(self._add_option_menu(
                 card, "Axis", axis_label, ("x", "y", "z"), 
                 partial(self._set_object_field, i, "axis")
             ))
             
-            card_layout.addWidget(self._add_labeled_entry(
+            dynamic_layout.addWidget(self._add_labeled_entry(
                 card, "Min", cfg["min"], 
                 partial(self._set_object_field, i, "min")
             ))
             
-            card_layout.addWidget(self._add_labeled_entry(
+            dynamic_layout.addWidget(self._add_labeled_entry(
                 card, "Max", cfg["max"], 
                 partial(self._set_object_field, i, "max")
             ))
             
-            card_layout.addWidget(self._add_labeled_entry(
+            dynamic_layout.addWidget(self._add_labeled_entry(
                 card, "Speed", cfg["speed"], 
                 partial(self._set_object_field, i, "speed")
             ))
             
-            card_layout.addWidget(self._add_labeled_entry(
+            dynamic_layout.addWidget(self._add_labeled_entry(
                 card, "Dir", cfg["direction"], 
                 partial(self._set_object_field, i, "direction")
             ))
-
+            card_layout.addWidget(dynamic_container)
+            dynamic_container.setVisible(is_dynamic)
             self.scroll_layout.addWidget(card)
 
+            self._dynamic_widgets[i] = {
+                'checkbox': dynamic_checkbox,
+                'container': dynamic_container
+            }
+        
+            # Store dynamic container reference for toggling
+            if not hasattr(self, '_dynamic_containers'):
+                self._dynamic_containers = {}
+            self._dynamic_containers[i] = dynamic_container
+
+
         self.scroll_layout.addStretch(1)
+
+    def _toggle_dynamic_fields(self, index, card_layout, checked):
+        """Toggle visibility of dynamic fields and update config"""
+        with self._config_lock:
+            if index < len(self._object_configs):
+                self._object_configs[index]["kind"] = "dynamic"
+        
+        # Show/hide the dynamic container
+        if hasattr(self, '_dynamic_containers') and index in self._dynamic_containers:
+            self._dynamic_containers[index].setVisible(checked)
 
     def _start(self):
         if self._running:
