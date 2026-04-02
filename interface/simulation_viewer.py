@@ -4,8 +4,6 @@ import json
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-
-
 from interface.environment_viewer import EnvironmentViewer
 from interface.qt_terminal import DualTerminal
 
@@ -39,7 +37,16 @@ KINDS = ("static", "dynamic")
 AXIS_LABEL_TO_INT = {"x": 0, "y": 1, "z": 2}
 AXIS_INT_TO_LABEL = {0: "x", 1: "y", 2: "z"}
 SIDEBAR_MODES = ("object_spawns", "drone_spawns", "target_spawns")
-LEFT_SIDEBAR_WIDTH = 700
+LEFT_SIDEBAR_WIDTH = 550
+SWARM_COLOR_PRESETS = {
+    "Green": [0.0, 1.0, 0.0, 0.9],
+    "Blue": [0.0, 0.0, 1.0, 0.9],
+    "Yellow": [1.0, 1.0, 0.0, 0.9],
+    "Magenta": [1.0, 0.0, 1.0, 0.9],
+    "Cyan": [0.0, 1.0, 1.0, 0.9],
+    "Orange": [1.0, 0.5, 0.0, 0.9],
+    "Purple": [0.5, 0.0, 1.0, 0.9],
+}
 
 
 class SimulationViewer(QWidget):
@@ -50,10 +57,17 @@ class SimulationViewer(QWidget):
         self._console_visible = False
 
         # Initialize all attributes
+        
+        # Spawn attributes
         self._object_configs = []
         self._drone_spawn_configs = []
+        self._swarm_configs = []
+        self._expanded_swarms = set()
         self._target_spawn_configs = []
         self._sidebar_mode = "object_spawns"
+        self._num_swarms = max(1, int(self.config.get("num_swarms", 1)))
+        self._drones_per_swarm = max(1, int(self.config.get("num_drones", 3)))
+        
         self._config_lock = threading.Lock()
         self._running = False
         self._episode = 0
@@ -102,17 +116,16 @@ class SimulationViewer(QWidget):
             }
         ]
         # Use config if provided, otherwise use defaults
-        if config and config.get('num_obstacles', 0) > 0:
-            for i in range(config.get('num_obstacles', 2)):
+        if config and config.get('num_obstacles', 0) >= 0:
+            for i in range(config.get('num_obstacles', 0)):
                 obj = default_objects[i % len(default_objects)].copy()
                 obj["name"] = f"Object {i + 1}"
                 self._object_configs.append(obj)
         else:
             self._object_configs = default_objects.copy()
 
-        total_drones = int(self.config.get("num_drones", 3)) * int(self.config.get("num_swarms", 1))
-        self._drone_spawn_configs = [self._default_drone_spawn_config(i) for i in range(max(1, total_drones))]
-        self._target_spawn_configs = [self._default_target_spawn_config(i) for i in range(max(1, int(self.config.get("num_swarms", 1))))]
+        self._init_swarm_spawn_configs()
+        self._target_spawn_configs = [self._default_target_spawn_config(i) for i in range(max(1, self._num_swarms))]
         
         # Start a timer to consume state updates
         self._update_timer = QTimer()
@@ -132,13 +145,13 @@ class SimulationViewer(QWidget):
             on_state=self._enqueue_state,
             on_stopped=self._enqueue_stopped,
             on_error=self._enqueue_error,
-            num_drones=int(self.config.get("num_drones", 8)),
+            num_drones=self._drones_per_swarm,
             max_steps=int(self.config.get("max_steps", 5000)),
             lidar=bool(self.config.get("lidar", False)),
             render_mode=str(self.config.get("render_mode", "human")),
             model_path=str(self.config.get("model_path", "")),
                 world_scale=float(self.config.get("world_scale", 5)),
-                num_swarms=int(self.config.get("num_swarms", 1)),
+                num_swarms=self._num_swarms,
                 seed=self.config.get("seed", None),
         )
     ####### UI Building Methods #######
@@ -168,29 +181,34 @@ class SimulationViewer(QWidget):
         self.status_lbl = QLabel("Stopped")
 
         self.start_btn = QPushButton("Start")
-        self.start_btn.setFixedWidth(90)
+        self.start_btn.setFixedWidth(100)
         self.start_btn.clicked.connect(self._start)
 
         self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setFixedWidth(90)
+        self.stop_btn.setFixedWidth(100)
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self._stop)
 
         self.console_btn = QPushButton("Open console")
-        self.console_btn.setFixedWidth(120)
+        self.console_btn.setFixedWidth(100)
         self.console_btn.clicked.connect(self._toggle_console)
 
         self.change_model_btn = QPushButton("Change model")
-        self.change_model_btn.setFixedWidth(120)
+        self.change_model_btn.setFixedWidth(100)
         self.change_model_btn.clicked.connect(self._change_model)
 
         self.save_config_btn = QPushButton("Save config")
-        self.save_config_btn.setFixedWidth(120)
+        self.save_config_btn.setFixedWidth(100)
         self.save_config_btn.clicked.connect(self._save_config)
 
         self.load_config_btn = QPushButton("Load config")
-        self.load_config_btn.setFixedWidth(120)
+        self.load_config_btn.setFixedWidth(100)
         self.load_config_btn.clicked.connect(self._load_config)
+
+        self.back_btn = QPushButton("Back to config")
+        self.back_btn.setFixedWidth(100)
+        self.back_btn.clicked.connect(self.go_back)
+
 
         timeline_frame = QFrame()
         timeline_frame.setFrameShape(QFrame.Shape.Box)
@@ -247,6 +265,7 @@ class SimulationViewer(QWidget):
         top_layout.addWidget(self.start_btn)
         top_layout.addWidget(self.save_config_btn)
         top_layout.addWidget(self.load_config_btn)
+        top_layout.addWidget(self.back_btn)
         body = QWidget()
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
@@ -395,22 +414,85 @@ class SimulationViewer(QWidget):
             self.scroll_layout.addStretch(1)
             return
 
-        if self._sidebar_mode in ("drone_spawns", "target_spawns"):
-            title = "Drone" if self._sidebar_mode == "drone_spawns" else "Target"
+        if self._sidebar_mode == "drone_spawns":
+            with self._config_lock:
+                swarms = [dict(cfg) for cfg in self._swarm_configs]
+                drones = [dict(cfg) for cfg in self._drone_spawn_configs]
+
+            for swarm_idx, swarm_cfg in enumerate(swarms):
+                card = QGroupBox(f"Swarm {swarm_idx + 1}")
+                card_layout = QVBoxLayout(card)
+                card_layout.setContentsMargins(8, 8, 8, 8)
+                card_layout.setSpacing(6)
+
+                toggle_btn = QPushButton(
+                    "Collapse drones" if swarm_idx in self._expanded_swarms else "Expand drones"
+                )
+                toggle_btn.clicked.connect(partial(self._toggle_swarm_expand, swarm_idx))
+                card_layout.addWidget(toggle_btn)
+
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Name", swarm_cfg.get("name", f"Swarm {swarm_idx + 1}"),
+                    partial(self._set_swarm_field, swarm_idx, "name")
+                ))
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Center X", swarm_cfg.get("x", 0.0),
+                    partial(self._set_swarm_field, swarm_idx, "x")
+                ))
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Center Y", swarm_cfg.get("y", 0.0),
+                    partial(self._set_swarm_field, swarm_idx, "y")
+                ))
+                card_layout.addWidget(self._add_labeled_entry(
+                    card, "Center Z", swarm_cfg.get("z", 0.8),
+                    partial(self._set_swarm_field, swarm_idx, "z")
+                ))
+                card_layout.addWidget(self._add_option_menu(
+                    card,
+                    "Color",
+                    str(swarm_cfg.get("color_name", "Green")),
+                    tuple(SWARM_COLOR_PRESETS.keys()),
+                    partial(self._set_swarm_field, swarm_idx, "color_name"),
+                ))
+
+                if swarm_idx in self._expanded_swarms:
+                    for drone_local_idx in range(self._drones_per_swarm):
+                        drone_index = swarm_idx * self._drones_per_swarm + drone_local_idx
+                        if not (0 <= drone_index < len(drones)):
+                            continue
+                        drone_cfg = drones[drone_index]
+
+                        drone_card = QGroupBox(f"Drone {drone_local_idx + 1}")
+                        drone_layout = QVBoxLayout(drone_card)
+                        drone_layout.setContentsMargins(8, 8, 8, 8)
+                        drone_layout.setSpacing(4)
+
+                        drone_layout.addWidget(self._add_labeled_entry(
+                            drone_card, "Offset X", drone_cfg.get("local_x", 0.0),
+                            partial(self._set_drone_offset_field, drone_index, "local_x")
+                        ))
+                        drone_layout.addWidget(self._add_labeled_entry(
+                            drone_card, "Offset Y", drone_cfg.get("local_y", 0.0),
+                            partial(self._set_drone_offset_field, drone_index, "local_y")
+                        ))
+                        drone_layout.addWidget(self._add_labeled_entry(
+                            drone_card, "Offset Z", drone_cfg.get("local_z", 0.0),
+                            partial(self._set_drone_offset_field, drone_index, "local_z")
+                        ))
+                        card_layout.addWidget(drone_card)
+
+                self.scroll_layout.addWidget(card)
+
+            self.scroll_layout.addStretch(1)
+            return
+
+        if self._sidebar_mode == "target_spawns":
             for i, raw_cfg in enumerate(configs):
-                cfg = self._ensure_spawn_fields(raw_cfg, title)
-                card = QGroupBox(f"{title} {i + 1}")
+                cfg = self._ensure_spawn_fields(raw_cfg, "Target")
+                card = QGroupBox(f"Target {i + 1}")
                 card_layout = QVBoxLayout(card)
                 card_layout.setContentsMargins(8, 8, 8, 8)
                 card_layout.setSpacing(4)
-
-                header_row = QWidget(card)
-                header_layout = QHBoxLayout(header_row)
-                header_layout.setContentsMargins(0, 0, 0, 0)
-                header_layout.setSpacing(0)
-                header_layout.addStretch(1)
-                header_layout.addWidget(self._remove_object_button(i), 0, Qt.AlignmentFlag.AlignRight)
-                card_layout.addWidget(header_row)
 
                 card_layout.addWidget(self._add_labeled_entry(
                     card, "Name", cfg["name"],
@@ -492,6 +574,10 @@ class SimulationViewer(QWidget):
                 partial(self._set_object_field, i, "yaw")
             ))
 
+            if cfg["kind"] != "dynamic":
+                self.scroll_layout.addWidget(card)
+                continue
+
             # Dynamic motion fields
             axis_label = AXIS_INT_TO_LABEL.get(int(cfg["axis"]), "x")
             card_layout.addWidget(self._add_option_menu(
@@ -530,16 +616,20 @@ class SimulationViewer(QWidget):
             self.side_title.setText("Objects")
             self.count_label.setText("Object count")
             count = len(self._object_configs)
+            spin_enabled = True
         elif mode == "drone_spawns":
-            self.side_title.setText("Drones")
-            self.count_label.setText("Drone count")
-            count = len(self._drone_spawn_configs)
+            self.side_title.setText("Swarms")
+            self.count_label.setText("Swarm count")
+            count = len(self._swarm_configs)
+            spin_enabled = True
         else:
             self.side_title.setText("Targets")
             self.count_label.setText("Target count")
             count = len(self._target_spawn_configs)
+            spin_enabled = True
 
         self.object_spinbox.blockSignals(True)
+        self.object_spinbox.setEnabled(spin_enabled)
         self.object_spinbox.setValue(count)
         self.object_spinbox.blockSignals(False)
         self._rebuild_object_controls()
@@ -582,7 +672,7 @@ class SimulationViewer(QWidget):
 
 ######################################################################################################################################################################################################################
 ######################################################################################################################################################################################################################
-################################################################################# Methodds ##################################################################################################################################### 
+################################################################################# Methodds ###########################################################################################################################
 ##################################################################################################################################################################################################################### 
 ###################################################################################################################################################################################################################### 
 
@@ -832,9 +922,172 @@ class SimulationViewer(QWidget):
 
     def _on_object_spinbox(self, value: int):
         """Handle spin box value changes"""
-        self._sync_object_config_count(int(value))
+        if self._sidebar_mode == "object_spawns":
+            self._sync_object_config_count(int(value))
+        else:
+            self._set_swarm_target_count(int(value))
         self._rebuild_object_controls()
         self._request_restart(f"Restarting with updated count: {value}")
+
+    def _set_swarm_target_count(self, count: int):
+        count = max(1, int(count))
+        with self._config_lock:
+            self._num_swarms = count
+            self.config["num_swarms"] = count
+
+            current_swarm_count = len(self._swarm_configs)
+            if count > current_swarm_count:
+                for i in range(current_swarm_count, count):
+                    self._swarm_configs.append(self._default_swarm_config(i))
+            elif count < current_swarm_count:
+                self._swarm_configs = self._swarm_configs[:count]
+                self._expanded_swarms = {i for i in self._expanded_swarms if i < count}
+
+            current_target_count = len(self._target_spawn_configs)
+            if count > current_target_count:
+                for i in range(current_target_count, count):
+                    self._target_spawn_configs.append(self._default_target_spawn_config(i))
+            elif count < current_target_count:
+                self._target_spawn_configs = self._target_spawn_configs[:count]
+
+            for i, target_cfg in enumerate(self._target_spawn_configs):
+                if "name" not in target_cfg:
+                    target_cfg["name"] = f"Target Spawn {i + 1}"
+                target_cfg["color"] = list(self._swarm_configs[i].get("color", SWARM_COLOR_PRESETS["Green"]))
+
+            self._rebuild_drone_spawn_configs_locked()
+
+        self._env_viewer.set_num_swarms(count)
+
+    def _default_swarm_color_name(self, index: int) -> str:
+        names = list(SWARM_COLOR_PRESETS.keys())
+        return names[index % len(names)]
+
+    def _default_swarm_config(self, index: int):
+        color_name = self._default_swarm_color_name(index)
+        return {
+            "name": f"Swarm {index + 1}",
+            "x": round((index % 2) * 2.0 - 1.0, 2),
+            "y": round((index // 2) * 2.0 - 1.0, 2),
+            "z": 0.8,
+            "color_name": color_name,
+            "color": list(SWARM_COLOR_PRESETS[color_name]),
+        }
+
+    def _default_drone_offset(self, index: int):
+        row = index // 3
+        col = index % 3
+        return {
+            "local_x": round((col - 1) * 0.35, 2),
+            "local_y": round((row - 1) * 0.35, 2),
+            "local_z": 0.0,
+        }
+
+    def _init_swarm_spawn_configs(self):
+        with self._config_lock:
+            self._swarm_configs = [
+                self._default_swarm_config(i) for i in range(self._num_swarms)
+            ]
+            self._expanded_swarms = set()
+            self._drone_spawn_configs = []
+
+            for swarm_idx in range(self._num_swarms):
+                for drone_local_idx in range(self._drones_per_swarm):
+                    offset_cfg = self._default_drone_offset(drone_local_idx)
+                    self._drone_spawn_configs.append(
+                        {
+                            "name": f"Swarm {swarm_idx + 1} Drone {drone_local_idx + 1}",
+                            "swarm_index": swarm_idx,
+                            **offset_cfg,
+                        }
+                    )
+
+            self._rebuild_drone_spawn_configs_locked()
+
+    def _rebuild_drone_spawn_configs_locked(self):
+        expected = self._num_swarms * self._drones_per_swarm
+
+        if len(self._drone_spawn_configs) > expected:
+            self._drone_spawn_configs = self._drone_spawn_configs[:expected]
+        elif len(self._drone_spawn_configs) < expected:
+            for idx in range(len(self._drone_spawn_configs), expected):
+                swarm_idx = idx // self._drones_per_swarm
+                drone_local_idx = idx % self._drones_per_swarm
+                offset_cfg = self._default_drone_offset(drone_local_idx)
+                self._drone_spawn_configs.append(
+                    {
+                        "name": f"Swarm {swarm_idx + 1} Drone {drone_local_idx + 1}",
+                        "swarm_index": swarm_idx,
+                        **offset_cfg,
+                    }
+                )
+
+        for idx, cfg in enumerate(self._drone_spawn_configs):
+            swarm_idx = int(cfg.get("swarm_index", idx // self._drones_per_swarm))
+            swarm_idx = max(0, min(self._num_swarms - 1, swarm_idx))
+            drone_local_idx = idx % self._drones_per_swarm
+            swarm_cfg = self._swarm_configs[swarm_idx]
+
+            local_x = float(cfg.get("local_x", 0.0))
+            local_y = float(cfg.get("local_y", 0.0))
+            local_z = float(cfg.get("local_z", 0.0))
+
+            cfg["swarm_index"] = swarm_idx
+            cfg["local_x"] = local_x
+            cfg["local_y"] = local_y
+            cfg["local_z"] = local_z
+            cfg["name"] = f"Swarm {swarm_idx + 1} Drone {drone_local_idx + 1}"
+            cfg["x"] = float(swarm_cfg.get("x", 0.0)) + local_x
+            cfg["y"] = float(swarm_cfg.get("y", 0.0)) + local_y
+            cfg["z"] = float(swarm_cfg.get("z", 0.8)) + local_z
+            cfg["color"] = list(swarm_cfg.get("color", SWARM_COLOR_PRESETS["Green"]))
+
+    def _toggle_swarm_expand(self, swarm_idx: int):
+        if swarm_idx in self._expanded_swarms:
+            self._expanded_swarms.remove(swarm_idx)
+        else:
+            self._expanded_swarms.add(swarm_idx)
+        self._rebuild_object_controls()
+
+    def _set_swarm_field(self, swarm_idx: int, key: str, raw_value):
+        with self._config_lock:
+            if not (0 <= swarm_idx < len(self._swarm_configs)):
+                return
+            swarm_cfg = self._swarm_configs[swarm_idx]
+
+            if key in ("x", "y", "z"):
+                value = self._coerce_float(raw_value, float(swarm_cfg.get(key, 0.0)))
+                swarm_cfg[key] = value
+            elif key == "color_name":
+                color_name = str(raw_value).strip()
+                if color_name not in SWARM_COLOR_PRESETS:
+                    color_name = self._default_swarm_color_name(swarm_idx)
+                swarm_cfg["color_name"] = color_name
+                swarm_cfg["color"] = list(SWARM_COLOR_PRESETS[color_name])
+            else:
+                value = str(raw_value).strip()
+                if value:
+                    swarm_cfg[key] = value
+
+            if 0 <= swarm_idx < len(self._target_spawn_configs):
+                self._target_spawn_configs[swarm_idx]["color"] = list(
+                    swarm_cfg.get("color", SWARM_COLOR_PRESETS["Green"])
+                )
+
+            self._rebuild_drone_spawn_configs_locked()
+
+        self._request_restart(f"Restarting after updating Swarm {swarm_idx + 1}...")
+
+    def _set_drone_offset_field(self, drone_index: int, key: str, raw_value):
+        with self._config_lock:
+            if not (0 <= drone_index < len(self._drone_spawn_configs)):
+                return
+
+            current = float(self._drone_spawn_configs[drone_index].get(key, 0.0))
+            self._drone_spawn_configs[drone_index][key] = self._coerce_float(raw_value, current)
+            self._rebuild_drone_spawn_configs_locked()
+
+        self._request_restart(f"Restarting after updating Drone {drone_index + 1}...")
         
     def _ensure_config_fields(self, config):
         """Ensure config has all required fields with defaults"""
@@ -868,14 +1121,7 @@ class SimulationViewer(QWidget):
                     self._object_configs.append(self._default_object_config(i))
             elif count < current_count:
                 self._object_configs = self._object_configs[:count]
-        elif self._sidebar_mode == "drone_spawns":
-            current_count = len(self._drone_spawn_configs)
-            if count > current_count:
-                for i in range(current_count, count):
-                    self._drone_spawn_configs.append(self._default_drone_spawn_config(i))
-            elif count < current_count:
-                self._drone_spawn_configs = self._drone_spawn_configs[:count]
-        else:
+        elif self._sidebar_mode == "target_spawns":
             current_count = len(self._target_spawn_configs)
             if count > current_count:
                 for i in range(current_count, count):
@@ -940,11 +1186,18 @@ class SimulationViewer(QWidget):
 
     def _get_drone_spawn_configs_snapshot(self):
         with self._config_lock:
+            self._rebuild_drone_spawn_configs_locked()
             return [dict(cfg) for cfg in self._drone_spawn_configs]
 
     def _get_target_spawn_configs_snapshot(self):
         with self._config_lock:
-            return [dict(cfg) for cfg in self._target_spawn_configs]
+            targets = [dict(cfg) for cfg in self._target_spawn_configs]
+            for i, cfg in enumerate(targets):
+                if "color" in cfg:
+                    continue
+                if 0 <= i < len(self._swarm_configs):
+                    cfg["color"] = list(self._swarm_configs[i].get("color", SWARM_COLOR_PRESETS["Green"]))
+            return targets
 
     def _save_config(self):
         self._object_configs = self._get_object_configs_snapshot()

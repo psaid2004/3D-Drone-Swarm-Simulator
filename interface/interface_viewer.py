@@ -16,16 +16,14 @@ def _preload_torch_before_qt():
     
 torch_error = _preload_torch_before_qt()
 
+# !!! MUST KEEP AFTER TORCH PRELOAD OTHERWISE BBE OCCURS (BIG BAD ERROR) !!!
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
     QStackedWidget,
 )
-
-from davids_drones.interface.configs_viewer import LandingPage
-from davids_drones.interface.simulation_viewer import SimulationViewer
-
-#TODO: Save terminal logs
+from interface.configs_viewer import LandingPage
+from interface.simulation_viewer import SimulationViewer
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -59,6 +57,7 @@ class MainWindow(QMainWindow):
         if self.simulation_viewer:
             self.stacked_widget.removeWidget(self.simulation_viewer)
             self.simulation_viewer = None
+
 
 def main():
     if torch_error:
