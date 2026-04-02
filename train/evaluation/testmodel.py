@@ -2,6 +2,8 @@ import os
 from stable_baselines3 import SAC
 import numpy as np
 from wrappers.env_3d import DroneSwarm3D
+from pathlib import Path
+from envs.createObjects import EnvObject, Dynamic
 
 class SingleEpisodeRunner:
     def __init__(
