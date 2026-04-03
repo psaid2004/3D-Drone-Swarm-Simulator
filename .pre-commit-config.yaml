@@ -1,0 +1,44 @@
+exclude: ^(dev/|data/|playground/)
+
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+    -   id: check-ast
+    -   id: fix-encoding-pragma
+    -   id: mixed-line-ending
+
+-   repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      -   id: black
+
+-   repo: https://github.com/codespell-project/codespell
+    rev: v2.2.6
+    hooks:
+     -   id: codespell
+
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        args:
+         - --install-types
+         - --non-interactive
+         - --check-untyped-defs
+         - --disallow-incomplete-defs
+         - --disallow-untyped-defs
+         - --ignore-missing-imports
+         - --warn-redundant-casts
+         - --warn-unreachable
+         - --explicit-package-bases
+
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.8.0
+  hooks:
+    - id: ruff
+      args: [--fix]
+    - id: ruff-format
