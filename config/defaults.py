@@ -26,7 +26,6 @@ SWARM_MIN_SEPARATION = 0.15  # Min distance between drones in the swarm
 # Goal
 # =============================================================================
 GOAL_RADIUS = 0.5  # actual radius of the goal
-# TODO USE THIS FOR SPAWNING TARGETS
 GOAL_EDGE_MARGIN = 0.6  # Minimum distance between the wall and the goal
 GOAL_REACH_DISTANCE = (
     0.6  # 0.4 # How close drone needs to be around goal to be a successful reach
@@ -45,7 +44,7 @@ COLORS = [
 # Swarm cohesion / separation
 # =============================================================================
 DEFAULT_SWARM_MAX_SEP = 5.0
-DEFAULT_SWARM_MIN_SEP = 0.25  # TODO PEDRO THERE IS A SWARM_MIN_SEPARATION ABOVE BUT IT IS DEFINING THE SAME THING HERE?
+DEFAULT_SWARM_MIN_SEP = 0.25
 
 # =============================================================================
 # Obstacles
@@ -82,7 +81,7 @@ CNTRL_PEN = (
 NEAR_OBS_PEN = 0.0  # penalty for being too close to an obstacle
 NEAR_FRONT_OBS_PEN = 0.0  # penalty for being too close to an obstacle in front of drone
 NEAR_SIDE_OBS_PEN = 0.0  # penalty for being too close to an obstacle on side of drone
-DIST_PEN = 0.03  # 0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
+DIST_PEN = 0.03  # 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 ZERO_SPEED_PEN = 0.0  # penalty for drone not moving
 ALIGN_COEF = 0.1
 
@@ -116,11 +115,3 @@ eps = 1e-8
 # Paths
 # =============================================================================
 MODELS_DIR = "models"
-
-
-# OLD VARIABLE STORAGE
-# TAKEOFF_STEPS = 30 # first 30 steps of episode is purely drone takeoff
-# TAKEOFF_VZ = 1.0 # takeoff velocity of drone during first takeoff steps
-# HOVER_BIAS_VZ = 0.0 # add constant upward bias to counter gravity drift
-# DEFAULT_TERMINATE_ON_COHESION_BREAK = False
-# DEFAULT_TERMINATE_ON_SEPARATION = False

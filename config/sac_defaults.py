@@ -21,4 +21,4 @@ N_ENVS = 1
 # ---- EXPERT CONFIG ----
 INITIAL_BLEND = 0.8  # expert weight at start
 FINAL_BLEND = 0.0  # pure RL at end
-BLEND_DECAY_FRAC = 0.20  # fraction of total timesteps to decay over # TODO I MADE THIS LESS BUT DEPENDS ON CURRICULUM SO ONCE THAT IS SET, I CAN FIGURE OUT WHAT THIS WILL BE
+BLEND_DECAY_FRAC = 0.20  # fraction of total timesteps to decay over

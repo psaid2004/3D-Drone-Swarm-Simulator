@@ -218,8 +218,6 @@ class DroneSwarm3D(ParallelEnv):
 
     def _init_pybullet_handles(self) -> None:
         self._gui_client_id = None
-        # if self.render_mode == "human":
-        #     self._gui_client_id = self._client_id
         try:
             import pybullet as p
 
@@ -302,11 +300,6 @@ class DroneSwarm3D(ParallelEnv):
                 f"args={args} kwargs={kwargs} error={repr(e)}"
             )
             raise
-        # TODO IF TOO MANY OF THE ABOVE EXCEPTIONS ARE THROWN, TAKE TRY STATEMENT ABOVE OUT AND UNCOMMENT BELOW
-        # if "physicsClientId" in kwargs:
-        #     return fn(*args, **kwargs)
-        #
-        # return fn(*args, **kwargs, physicsClientId=pcid)
 
     def _call_gui(self, fn, *args, **kwargs):
         if self._p is None:
@@ -485,12 +478,12 @@ class DroneSwarm3D(ParallelEnv):
 
         return np.array(pos, dtype=np.float32)
 
-    # Generates the swarm center
     def generate_swarm_center_xyz(self, edge, margin):
+        """ Generates the swarm center """
         return self.generate_edge_xyz(edge, margin)
 
-    # Generate the spawn position of target, opposite to the swarms center
     def generate_target_xyz(self, edge, margin):
+        """ Generate the spawn position of target, opposite to the swarms center. """
         opposite_edge = {0: 1, 1: 0, 2: 3, 3: 2}[edge]
         return self.generate_edge_xyz(opposite_edge, margin)
 
@@ -575,7 +568,7 @@ class DroneSwarm3D(ParallelEnv):
             return targets
 
     def _spawn_obstacles(self):
-        """Spawn the obstacles."""
+        """Spawn all the obstacles."""
 
         self._obstacles = []
 
@@ -599,7 +592,7 @@ class DroneSwarm3D(ParallelEnv):
             swarm_list = self._spawn_static_obstacles(max_attempts, shape, swarm_list)
 
     def _spawn_static_obstacles(self, max_attempts, shape, swarm_list) -> None:
-        """Spawn the obstacles."""
+        """Spawn the static obstacles."""
         chosen_swarm = None
         blocking_obstacles_chance = self.rng.uniform(0.0, 1.0)
 
@@ -668,9 +661,6 @@ class DroneSwarm3D(ParallelEnv):
                 axis, min_pos, max_pos, speed, direction, candidate, size, ori
             )
             obj.set_shape_spec(shape)
-            # BRING THIS BACK LATER TODO
-            # if self.candidate_collides_over_time(obj,horizon_steps=self.max_steps, dt=1.0/60.0):
-            #     continue
 
             body = obj.create(shape, physics_call=self._call_physics)
 
@@ -744,7 +734,7 @@ class DroneSwarm3D(ParallelEnv):
             else:
                 self._qworld.add_static_object(
                     obs
-                )  # TODO CARIM THIS METHOD DOES NOT EXIST IN YOUR CLASS?
+                )
 
     def candidate_collides_over_time(
         self, candidate, horizon_steps, dt=1.0 / 60.0, margin=0.0
@@ -783,7 +773,7 @@ class DroneSwarm3D(ParallelEnv):
             or x >= self.world_scale
             or y <= -self.world_scale
             or y >= self.world_scale
-            or z <= 0.1  # TODO 0 OR 0.1?
+            or z <= 0.1
             or z >= self.world_scale
         )
 
@@ -921,12 +911,6 @@ class DroneSwarm3D(ParallelEnv):
 
         obs_dict: Dict[str, np.ndarray] = {}
 
-        # if drone does not yet have target, create one
-        # if self._targets is None:
-        #     print("drone did not have a target")
-        #     exit()
-        #     self._targets = self._make_targets()
-
         # compute drone positions and swarm centre
         positions = self.active_drone_positions()
         centroid = self._swarm_centroid(positions)
@@ -949,28 +933,6 @@ class DroneSwarm3D(ParallelEnv):
             # get raw state vector from simulator, and extract position and velocity
             state = self._env._getDroneStateVector(i)
             pos = np.array(state[POS_SLICE], dtype=np.float32)
-
-            # if self._p is not None and i < len(self._drone_ids) and self._step_count % 100 == 0:
-            #    try:
-            #        lin_vel_pb, ang_vel_pb = self._call_physics(
-            #            self._p.getBaseVelocity,
-            #            self._drone_ids[i]
-            #        )
-
-            #        lin_vel_pb = np.array(lin_vel_pb, dtype=np.float32)
-            #        ang_vel_pb = np.array(ang_vel_pb, dtype=np.float32)
-
-            #        print(f"\n[VEL SEARCH] drone {i} step {self._step_count}")
-            #        for start in range(len(state) - 2):
-            #            chunk = np.array(state[start:start + 3], dtype=np.float32)
-            #            lin_err = np.linalg.norm(chunk - lin_vel_pb)
-            #            ang_err = np.linalg.norm(chunk - ang_vel_pb)
-            #            print(
-            #                f"slice[{start}:{start + 3}] = {chunk} | "
-            #                f"lin_err={lin_err:.6f} | ang_err={ang_err:.6f}"
-            #            )
-            #    except Exception as e:
-            #        print("[VEL SEARCH ERROR]", e)
 
             vel = np.array(state[10:13], dtype=np.float32)
 
@@ -1358,8 +1320,6 @@ class DroneSwarm3D(ParallelEnv):
                 0.0,
                 1.0,
             )
-
-        # if self.render_mode == "human" and LIDAR_SHOW_RAYS_TEST and self._step_count % 50 == 0:
 
         show_rays = False
         if self.render_mode == "human":
