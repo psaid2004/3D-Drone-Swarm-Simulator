@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 from typing import Optional
 
@@ -13,21 +14,19 @@ from wrappers.env_3d import DroneSwarm3D
 
 
 class EvaluateTraining:
-
     def __init__(
-            self,
-            n_drones: int,
-            n_static_obstacles: int,
-            n_dynamic_obstacles: int,
-            lidar: bool,
-            model_num: int,
-            render_mode: Optional[str] = None,
-            world_scale: float = 5.0,
-            max_steps: int = 4000,
-            num_episodes: int = 30,
-            compute_path_optimality: bool = False, # set True if your env emits 'optimal_path_length'
+        self,
+        n_drones: int,
+        n_static_obstacles: int,
+        n_dynamic_obstacles: int,
+        lidar: bool,
+        model_num: int,
+        render_mode: Optional[str] = None,
+        world_scale: float = 5.0,
+        max_steps: int = 4000,
+        num_episodes: int = 30,
+        compute_path_optimality: bool = False,  # set True if your env emits 'optimal_path_length'
     ):
-
         self.n_drones = n_drones
         self.n_static_obstacles = n_static_obstacles
         self.n_dynamic_obstacles = n_dynamic_obstacles
@@ -42,7 +41,9 @@ class EvaluateTraining:
         self.MODEL_PREFIX = "sac"
         self.seed = None
 
-        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        PROJECT_ROOT = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
 
         self.MODEL_NAME = f"{self.MODEL_PREFIX}_{self.MODEL_N}_{self.n_drones}_{self.n_static_obstacles}_{self.n_dynamic_obstacles}"
         self.MODEL_PATH = os.path.join(PROJECT_ROOT, MODELS_DIR, f"{self.MODEL_NAME}")
@@ -108,7 +109,7 @@ class EvaluateTraining:
 
         try:
             for _ in trange(self.num_episodes, desc="Evaluating episodes"):
-                self.seed = int(rng.integers(0, 2 ** 31))
+                self.seed = int(rng.integers(0, 2**31))
 
                 obs_dict, _ = self.env.reset(seed=self.seed)
                 ep_len = 0
@@ -169,11 +170,19 @@ class EvaluateTraining:
         results_path = f"{self.OUTPUT_DIR}/results_{self.MODEL_NAME}.txt"
         with open(results_path, "w") as f:
             f.write(f"Results for the model: {self.MODEL_PATH}\n\n")
-            f.write(f"Collision-free Rate     : {np.mean(self.collision_free) * 100:6.2f}%\n")
-            f.write(f"Success Rate            : {np.mean(self.goal_reached) * 100:6.2f}%\n")
-            f.write(f"Collision Episode Rate  : {np.mean(self.avg_collision) * 100:6.2f}%\n")
+            f.write(
+                f"Collision-free Rate     : {np.mean(self.collision_free) * 100:6.2f}%\n"
+            )
+            f.write(
+                f"Success Rate            : {np.mean(self.goal_reached) * 100:6.2f}%\n"
+            )
+            f.write(
+                f"Collision Episode Rate  : {np.mean(self.avg_collision) * 100:6.2f}%\n"
+            )
             f.write(f"Avg Episode Length      : {np.mean(self.episode_lengths):6.2f}\n")
-            f.write(f"Wall-hit Episode Rate   : {np.mean(self.wall_hits_count) * 100:6.2f}%\n")
+            f.write(
+                f"Wall-hit Episode Rate   : {np.mean(self.wall_hits_count) * 100:6.2f}%\n"
+            )
 
         if self.compute_path_optimality and self.path_opt_ratios:
             print(f"Avg Path Optimality     : {np.mean(self.path_opt_ratios):6.4f}")
@@ -182,7 +191,9 @@ class EvaluateTraining:
         if seed is not None:
             self.seed = seed
         if self.seed is None:
-            raise ValueError("No seed set. Pass seed=... or run evaluate_model() first.")
+            raise ValueError(
+                "No seed set. Pass seed=... or run evaluate_model() first."
+            )
 
         model = self._load_model()
 
@@ -222,7 +233,9 @@ class EvaluateTraining:
                         ["Goals Reached", goals],
                         ["Wall Hits", wall_hits],
                     ]
-                    print(tabulate(table_data, headers="firstrow", tablefmt="fancy_grid"))
+                    print(
+                        tabulate(table_data, headers="firstrow", tablefmt="fancy_grid")
+                    )
                     break
         finally:
             env.close()

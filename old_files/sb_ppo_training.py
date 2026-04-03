@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # train/sb_ppo_training.py
 """SB3 PPO training entrypoint (3D PyBullet drones).
 
@@ -48,7 +49,7 @@ MODEL_DIR = MODELS_DIR  # keep identical behavior, just sourced from config
 # =============================================================================
 # PPO HYPERPARAMETERS (unchanged)
 # =============================================================================
-N_STEPS = 512           #TODO: TUNE SO DRONES CAN REACH TARGET
+N_STEPS = 512  # TODO: TUNE SO DRONES CAN REACH TARGET
 N_ENVS = 1
 GAMMA = 0.99
 
@@ -108,13 +109,15 @@ def get_next_checkpoint_dir(
 # =============================================================================
 # ENV FACTORY (KEEP PURE: same inputs -> same env)
 # =============================================================================
-def create_env(num_drones: int, active_drones: int, num_obstacles: int, world_scale: float):
+def create_env(
+    num_drones: int, active_drones: int, num_obstacles: int, world_scale: float
+):
     """Build the PettingZoo ParallelEnv and adapt it to SB3 VecEnv."""
 
     # ---------- Base PettingZoo env ----------
     raw = make_env(
-        num_drones=num_drones,          # constant across stages
-        active_drones=active_drones,    # curriculum knob
+        num_drones=num_drones,  # constant across stages
+        active_drones=active_drones,  # curriculum knob
         num_obstacles=num_obstacles,
         max_steps=N_STEPS,
         lidar=LIDAR,
@@ -122,14 +125,12 @@ def create_env(num_drones: int, active_drones: int, num_obstacles: int, world_sc
         world_scale=world_scale,
         obstacle_dynamic=True,
         debug=False,
-
         # swarm + shared target
         shared_target=SHARED_TARGET,
         swarm_max_sep=SWARM_MAX_SEP,
         swarm_min_sep=SWARM_MIN_SEP,
         terminate_on_cohesion_break=TERMINATE_ON_COHESION_BREAK,
         terminate_on_separation=TERMINATE_ON_SEPARATION,
-
         # lidar config
         lidar_num_rays=LIDAR_NUM_RAYS,
         lidar_num_layers=LIDAR_NUM_LAYERS,
@@ -172,6 +173,7 @@ def train(device: str = "auto"):
     if device == "auto":
         try:
             import torch
+
             device_ = "cuda" if torch.cuda.is_available() else "cpu"
         except Exception:
             device_ = "cpu"
@@ -215,7 +217,12 @@ def train(device: str = "auto"):
     )
 
     # ---------- Curriculum stages ----------
-    for stage_idx, (world_scale, active_drones, num_obstacles, stage_steps) in enumerate(curr):
+    for stage_idx, (
+        world_scale,
+        active_drones,
+        num_obstacles,
+        stage_steps,
+    ) in enumerate(curr):
         stage_steps = int(stage_steps)
 
         print(
@@ -227,7 +234,9 @@ def train(device: str = "auto"):
         )
 
         old_env = model.get_env()
-        new_env = create_env(NUM_DRONES_FIXED, active_drones, num_obstacles, world_scale)
+        new_env = create_env(
+            NUM_DRONES_FIXED, active_drones, num_obstacles, world_scale
+        )
 
         # Share normalization stats between stages
         try:
@@ -241,7 +250,9 @@ def train(device: str = "auto"):
         model.set_env(new_env)
 
         # ---------- Callbacks ----------
-        checkpoint_dir = get_next_checkpoint_dir(n_drones=NUM_DRONES_FIXED, n_obs=num_obstacles)
+        checkpoint_dir = get_next_checkpoint_dir(
+            n_drones=NUM_DRONES_FIXED, n_obs=num_obstacles
+        )
         checkpoint_cb = CheckpointCallback(
             save_freq=max(1, 20_000 // max(1, N_ENVS)),
             save_path=f"{MODEL_DIR}/{checkpoint_dir}",
@@ -275,7 +286,9 @@ def train(device: str = "auto"):
         )
 
         # ---------- Save model snapshot ----------
-        model_path = get_next_model_path(drones=NUM_DRONES_FIXED, obstacles=num_obstacles)
+        model_path = get_next_model_path(
+            drones=NUM_DRONES_FIXED, obstacles=num_obstacles
+        )
         model.save(model_path)
         print(f"[SAVED] {model_path}")
 

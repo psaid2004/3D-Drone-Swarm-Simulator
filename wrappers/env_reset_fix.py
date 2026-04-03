@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -21,7 +22,6 @@ class SB3VecResetTupleFix(VecEnvWrapper):
         super().__init__(venv)
         self.last_reset_info: Optional[Any] = None
 
-
     def reset(self, **kwargs):
         out = self.venv.reset(**kwargs)
 
@@ -33,7 +33,6 @@ class SB3VecResetTupleFix(VecEnvWrapper):
         self.last_reset_info = None
 
         return out
-
 
     def step_async(self, actions) -> None:
         self.venv.step_async(actions)
@@ -52,7 +51,9 @@ class SB3VecResetTupleFix(VecEnvWrapper):
             if truncations.ndim == 0:
                 truncations = truncations.reshape(1)
 
-            dones = np.logical_or(terminations, truncations).astype(np.bool_, copy=False)
+            dones = np.logical_or(terminations, truncations).astype(
+                np.bool_, copy=False
+            )
 
             if infos is not None:
                 for i in range(min(len(infos), len(dones))):
@@ -95,7 +96,9 @@ class SB3VecResetTupleFix(VecEnvWrapper):
                         if "truncated" in infos[i]:
                             infos[i]["truncated"] = bool(infos[i]["truncated"])
                         elif "TimeLimit.truncated" in infos[i]:
-                            infos[i]["truncated"] = bool(infos[i]["TimeLimit.truncated"])
+                            infos[i]["truncated"] = bool(
+                                infos[i]["TimeLimit.truncated"]
+                            )
                         else:
                             infos[i]["truncated"] = False
 
@@ -114,6 +117,8 @@ class SB3VecResetTupleFix(VecEnvWrapper):
                         obs[i] = new_obs[i]
 
             assert dones.dtype == np.bool_, f"dones dtype is {dones.dtype}"
-            assert dones.shape == (self.num_envs,), f"dones shape is {dones.shape}, expected {(self.num_envs,)}"
+            assert dones.shape == (
+                self.num_envs,
+            ), f"dones shape is {dones.shape}, expected {(self.num_envs,)}"
 
             return obs, rewards, dones, infos

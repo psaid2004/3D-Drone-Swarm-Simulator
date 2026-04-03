@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import time
@@ -57,7 +58,6 @@ class EnvGUITester:
 
         return np.array([dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32)
 
-
     def _run_episode(self, ep: int) -> dict:
         """Runs one episode of DroneSwarm3D instance."""
         obs_dict, _ = self.env.reset()
@@ -71,7 +71,9 @@ class EnvGUITester:
 
         for step in range(self.max_steps):
             actions = {d: self._get_action(obs) for d, obs in obs_dict.items()}
-            obs_dict, reward_dict, term_dict, trunc_dict, info_dict = self.env.step(actions)
+            obs_dict, reward_dict, term_dict, trunc_dict, info_dict = self.env.step(
+                actions
+            )
 
             for d, r in reward_dict.items():
                 episode_rewards[d] += r
@@ -92,9 +94,8 @@ class EnvGUITester:
 
         return {"steps": step_count, "total_rewards": episode_rewards}
 
-
     def _print_step(self, step, obs_dict, reward_dict, info_dict):
-        """ Prints per-step to console."""
+        """Prints per-step to console."""
 
         print(f"\n  --- step {step} ---")
 
@@ -112,9 +113,8 @@ class EnvGUITester:
                 f"drone={info.get('drone_collision', False)}"
             )
 
-
     def run(self):
-        """ Run all the episodes"""
+        """Run all the episodes"""
         try:
             for ep in range(self.n_episodes):
                 stats = self._run_episode(ep)

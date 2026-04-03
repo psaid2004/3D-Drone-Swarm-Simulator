@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import numpy as np
@@ -152,23 +153,33 @@ class ReplayBufferInspectorCallback(BaseCallback):
                 f"done={bool(dones[flat_idx]) if dones is not None else False} "
                 f"dist={dist_to_target:.3f} cmd_speed={cmd_speed:.3f} actual_speed={actual_speed:.3f}"
             )
-            print(f"    raw_obs[:12]    = {np.array2string(obs_raw[:12], precision=3, suppress_small=True)}")
-            print(f"    policy_obs[:12] = {np.array2string(obs_norm[:12], precision=3, suppress_small=True)}")
+            print(
+                f"    raw_obs[:12]    = {np.array2string(obs_raw[:12], precision=3, suppress_small=True)}"
+            )
+            print(
+                f"    policy_obs[:12] = {np.array2string(obs_norm[:12], precision=3, suppress_small=True)}"
+            )
 
         # ------------------------------------------------------------------
         # 2) Print expert / RL / final action comparison
         # ------------------------------------------------------------------
         try:
-            obs_tensor = torch.as_tensor(policy_obs, device=self.model.device, dtype=torch.float32)
+            obs_tensor = torch.as_tensor(
+                policy_obs, device=self.model.device, dtype=torch.float32
+            )
 
             with torch.no_grad():
                 rl_action_t = self.model.policy.actor(obs_tensor, deterministic=True)
-                final_action_t = self.model.policy._predict(obs_tensor, deterministic=True)
+                final_action_t = self.model.policy._predict(
+                    obs_tensor, deterministic=True
+                )
 
             rl_action = rl_action_t.detach().cpu().numpy()
             final_action = final_action_t.detach().cpu().numpy()
 
-            raw_for_expert = self.model.policy.denormalise_observation(policy_obs.copy())
+            raw_for_expert = self.model.policy.denormalise_observation(
+                policy_obs.copy()
+            )
 
             expert_actions = []
             for flat_idx in range(len(infos)):
@@ -179,7 +190,9 @@ class ReplayBufferInspectorCallback(BaseCallback):
                 expert_actions.append(expert_a)
             expert_actions = np.asarray(expert_actions, dtype=np.float32)
 
-            print(f"\n[Action comparison] blend_ratio={self.model.policy.blend_ratio:.3f}")
+            print(
+                f"\n[Action comparison] blend_ratio={self.model.policy.blend_ratio:.3f}"
+            )
             for flat_idx in range(max_slots_to_show):
                 info = infos[flat_idx]
                 active = bool(info.get("active", False))
@@ -230,7 +243,9 @@ class ReplayBufferInspectorCallback(BaseCallback):
             if hasattr(rb, "active_mask"):
                 active_last = rb.active_mask[last_idx]
                 print(f"active_mask last insert = {active_last.astype(np.int32)}")
-                print(f"active slots in last insert = {int(np.sum(active_last))}/{len(active_last)}")
+                print(
+                    f"active slots in last insert = {int(np.sum(active_last))}/{len(active_last)}"
+                )
 
             zero_obs_count = 0
             frozen_action_count = 0
@@ -240,8 +255,12 @@ class ReplayBufferInspectorCallback(BaseCallback):
                 if np.allclose(acts_last[slot], frozen_action(), atol=1e-6):
                     frozen_action_count += 1
 
-            print(f"zero-observation rows in latest replay insert = {zero_obs_count}/{obs_last.shape[0]}")
-            print(f"frozen-action rows in latest replay insert    = {frozen_action_count}/{acts_last.shape[0]}")
+            print(
+                f"zero-observation rows in latest replay insert = {zero_obs_count}/{obs_last.shape[0]}"
+            )
+            print(
+                f"frozen-action rows in latest replay insert    = {frozen_action_count}/{acts_last.shape[0]}"
+            )
 
             for slot in range(min(obs_last.shape[0], self.max_slots_to_show)):
                 env_i = slot // self.max_drones
@@ -251,10 +270,16 @@ class ReplayBufferInspectorCallback(BaseCallback):
                     f"zero_obs={is_zero_obs(obs_last[slot])} "
                     f"rew={float(rews_last[slot]):.3f} done={bool(dones_last[slot])}"
                 )
-                print(f"    obs[:10] = {np.array2string(obs_last[slot][:10], precision=3, suppress_small=True)}")
+                print(
+                    f"    obs[:10] = {np.array2string(obs_last[slot][:10], precision=3, suppress_small=True)}"
+                )
                 if next_obs_last is not None:
-                    print(f"    next[:10]= {np.array2string(next_obs_last[slot][:10], precision=3, suppress_small=True)}")
-                print(f"    act      = {np.array2string(acts_last[slot], precision=3, suppress_small=True)}")
+                    print(
+                        f"    next[:10]= {np.array2string(next_obs_last[slot][:10], precision=3, suppress_small=True)}"
+                    )
+                print(
+                    f"    act      = {np.array2string(acts_last[slot], precision=3, suppress_small=True)}"
+                )
 
         # ------------------------------------------------------------------
         # 4) Inspect sampled minibatch
@@ -267,7 +292,9 @@ class ReplayBufferInspectorCallback(BaseCallback):
                 rew_sample = batch.rewards.detach().cpu().numpy()
 
                 zero_rows = sum(is_zero_obs(x) for x in obs_sample)
-                frozen_rows = sum(np.allclose(a, frozen_action(), atol=1e-6) for a in act_sample)
+                frozen_rows = sum(
+                    np.allclose(a, frozen_action(), atol=1e-6) for a in act_sample
+                )
 
                 print("\n[Sampled minibatch]")
                 print(f"sample_batch_size={self.sample_batch_size}")
@@ -283,8 +310,12 @@ class ReplayBufferInspectorCallback(BaseCallback):
                         f"[sample {i:02d}] zero_obs={is_zero_obs(obs_sample[i])} "
                         f"rew={float(rew_sample[i]):.3f}"
                     )
-                    print(f"    obs[:10] = {np.array2string(obs_sample[i][:10], precision=3, suppress_small=True)}")
-                    print(f"    act      = {np.array2string(act_sample[i], precision=3, suppress_small=True)}")
+                    print(
+                        f"    obs[:10] = {np.array2string(obs_sample[i][:10], precision=3, suppress_small=True)}"
+                    )
+                    print(
+                        f"    act      = {np.array2string(act_sample[i], precision=3, suppress_small=True)}"
+                    )
             except Exception as e:
                 print(f"[DEBUG] replay buffer sample failed: {e}")
 

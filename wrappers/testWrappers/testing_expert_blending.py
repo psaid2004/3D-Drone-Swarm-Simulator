@@ -1,7 +1,6 @@
+# -*- coding: utf-8 -*-
 import time
-import numpy as np
 from wrappers.env_3d import DroneSwarm3D
-from config.defaults import LIDAR_NUM_RAYS, LIDAR_NUM_LAYERS
 
 from train.expert_blender import ExpertPolicy
 
@@ -38,10 +37,7 @@ def main():
         print(f"  {drone}: pos={obs[:3]}")
 
     for step in range(n_steps):
-        action_dict = {
-            drone: expert.action(obs)
-            for drone, obs in obs_dict.items()
-        }
+        action_dict = {drone: expert.action(obs) for drone, obs in obs_dict.items()}
 
         obs_dict, reward_dict, term_dict, trunc_dict, info_dict = env.step(action_dict)
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 class Dummy:
     def __init__(self, min_val, max_val, speed):
         self.min = min_val

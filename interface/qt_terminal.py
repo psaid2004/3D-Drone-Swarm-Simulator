@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 import importlib
@@ -32,9 +33,8 @@ class CommandTerminal(QFrame):
         self._build_ui()
         self._start_shell()
 
-
     #### UI  ####
-    
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
@@ -74,7 +74,6 @@ class CommandTerminal(QFrame):
         layout.addWidget(title)
         layout.addWidget(self.output, 1)
         layout.addWidget(cmd_row)
-
 
     #### Terminal logic ####
 
@@ -130,7 +129,9 @@ class CommandTerminal(QFrame):
             self._process.kill()
 
     def _on_output_ready(self):
-        chunk = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        chunk = bytes(self._process.readAllStandardOutput()).decode(
+            "utf-8", errors="replace"
+        )
         self._append_line(chunk)
 
     def _on_process_finished(self, exit_code: int, exit_status):
@@ -139,6 +140,7 @@ class CommandTerminal(QFrame):
         self.run_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
         QTimer.singleShot(0, self._start_shell)
+
 
 class StreamRedirect(QObject):
     text_written = pyqtSignal(str)
@@ -149,6 +151,7 @@ class StreamRedirect(QObject):
 
     def flush(self):
         pass
+
 
 class AppTerminal(QFrame):
     def __init__(self, parent=None):
@@ -184,8 +187,9 @@ class AppTerminal(QFrame):
         self.output.insertPlainText(text)
         self.output.moveCursor(self.output.textCursor().MoveOperation.End)
 
+
 class DualTerminal(QWidget):
-    def __init__(self,parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
         layout = QHBoxLayout(self)

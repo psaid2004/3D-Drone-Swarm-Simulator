@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
 import os
 from stable_baselines3 import SAC
 import numpy as np
 from wrappers.env_3d import DroneSwarm3D
 from pathlib import Path
 from envs.createObjects import EnvObject, Dynamic
+
 
 class SingleEpisodeRunner:
     def __init__(
@@ -29,7 +31,9 @@ class SingleEpisodeRunner:
         MODELS_DIR = "models"
         self.MODEL_PREFIX = "sac"
 
-        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        PROJECT_ROOT = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
 
         self.MODEL_NAME = f"{self.MODEL_PREFIX}_{self.model_num}_{self.n_drones}_{self.n_static_obstacles}_{self.n_dynamic_obstacles}"
         self.MODEL_PATH = os.path.join(PROJECT_ROOT, MODELS_DIR, f"{self.MODEL_NAME}")
@@ -55,7 +59,6 @@ class SingleEpisodeRunner:
 
         self.apply_object_config(self.env, object_configs)
 
-
     def _load_model(self):
         model = SAC.load(
             self.MODEL_PATH,
@@ -73,7 +76,6 @@ class SingleEpisodeRunner:
         )
 
         return model
-
 
     def run_episode(self, seed: int = None):
         model = self._load_model()
@@ -98,8 +100,10 @@ class SingleEpisodeRunner:
 
         while True:
             # Get deterministic actions
-            act_dict = {a: model.predict(obs, deterministic=True)[0]
-                        for a, obs in self.obs_dict.items()}
+            act_dict = {
+                a: model.predict(obs, deterministic=True)[0]
+                for a, obs in self.obs_dict.items()
+            }
             obs_dict, _, done, trunc, info = self.env.step(act_dict)
 
             obs_dict, rewards, done, trunc, info = self.env.step(act_dict)
@@ -185,7 +189,7 @@ class SingleEpisodeRunner:
         return Path(__file__).resolve().parents[2] / "interface" / "configs"
 
     # Load object configurations from JSON files
-    def _load_object_config(self,config_name: str) -> list[dict]:
+    def _load_object_config(self, config_name: str) -> list[dict]:
         path = self._configs_dir() / config_name
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -206,7 +210,9 @@ class SingleEpisodeRunner:
     # Load different scenarios
 
     # Apply object configurations to the environment
-    def apply_object_config(self, env: DroneSwarm3D, object_configs: list[dict]) -> None:
+    def apply_object_config(
+        self, env: DroneSwarm3D, object_configs: list[dict]
+    ) -> None:
         """Spawn obstacles from JSON config into the environment."""
         env.remove_all_obstacles()
         env._obstacles = []

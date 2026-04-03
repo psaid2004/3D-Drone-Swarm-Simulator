@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from typing import Optional
@@ -7,6 +8,7 @@ from dataclasses import dataclass
 from stable_baselines3.common.callbacks import BaseCallback
 
 PRINT_EVERY = 200
+
 
 @dataclass
 class CurriculumStageInfo:
@@ -55,14 +57,13 @@ class StepStatsCallback(BaseCallback):
         num_envs: int,
         stage_info: Optional[CurriculumStageInfo] = None,
         print_every: int = PRINT_EVERY,
-
         # early-stop tools
         enable_stage_early_stop: bool = True,
         reach_threshold: float = 0.85,
         max_collision_rate: float = 0.05,
         patience: int = 10,
         min_stage_timesteps: int = 10000,
-        verbose: int = 0, # TODO FIGURE OUT WHETHER THESE ARE THE CORRECT AND OPTIMAL VALUES
+        verbose: int = 0,  # TODO FIGURE OUT WHETHER THESE ARE THE CORRECT AND OPTIMAL VALUES
     ):
         super().__init__(verbose)
 
@@ -75,24 +76,25 @@ class StepStatsCallback(BaseCallback):
         self.enable_stage_early_stop = bool(enable_stage_early_stop)
         self.reach_threshold = float(reach_threshold)
         self.max_collision_rate = float(max_collision_rate)
-        self.patience = int(patience) # consecutive "good enough" rollouts to wait for
+        self.patience = int(patience)  # consecutive "good enough" rollouts to wait for
         self.min_stage_timesteps = int(min_stage_timesteps)
 
-        self._consecutive_good = 0 # how many rollouts in a row have satisfied “good enough” condition
-        self._last_print_ts = 0 #  last timestep when stats printed to console
-        self._stage_start_ts = 0 # global timestep when current curriculum stage started
-        self._should_stop = False # flag to stop training
+        self._consecutive_good = (
+            0  # how many rollouts in a row have satisfied “good enough” condition
+        )
+        self._last_print_ts = 0  #  last timestep when stats printed to console
+        self._stage_start_ts = (
+            0  # global timestep when current curriculum stage started
+        )
+        self._should_stop = False  # flag to stop training
 
         self._episode_batch = {}
         self._episode_batch_counter = 0
 
         self._rollout_reset()
 
-
     def reset_for_new_stage(
-            self,
-            stage_start_ts: int,
-            stage_info: Optional[CurriculumStageInfo] = None
+        self, stage_start_ts: int, stage_info: Optional[CurriculumStageInfo] = None
     ) -> None:
         self._consecutive_good = 0
         self._stage_start_ts = int(stage_start_ts)
@@ -103,13 +105,8 @@ class StepStatsCallback(BaseCallback):
         if stage_info is not None:
             self.stage_info = stage_info
 
-
-    def set_stage_info(
-            self,
-            stage_info: CurriculumStageInfo
-    ) -> None:
+    def set_stage_info(self, stage_info: CurriculumStageInfo) -> None:
         self.stage_info = stage_info
-
 
     def should_stop(self) -> bool:
         return self._should_stop
@@ -153,7 +150,9 @@ class StepStatsCallback(BaseCallback):
         self._reached_now = set()
 
         # did drone every reach target
-        self._env_drone_reached_anytime = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
+        self._env_drone_reached_anytime = np.zeros(
+            (self.num_envs, self.num_drones), dtype=np.bool_
+        )
 
         self._swarm_too_close_steps = 0
         self._swarm_too_far_steps = 0
@@ -168,14 +167,16 @@ class StepStatsCallback(BaseCallback):
         self.episode_done_collision = False
         self.episode_done_all_reached = False
 
-
     def _on_rollout_start(self) -> None:
         self._rollout_reset()
 
     def _on_step(self) -> bool:
         if self._should_stop:
             if self.verbose >= 1:
-                print(f"[StepStatsCallback] stopping training at timestep={self.num_timesteps}", flush=True)
+                print(
+                    f"[StepStatsCallback] stopping training at timestep={self.num_timesteps}",
+                    flush=True,
+                )
             return False
 
         infos = self.locals.get("infos", None)
@@ -190,7 +191,6 @@ class StepStatsCallback(BaseCallback):
         active_this_step = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
 
         for flat_idx, info in enumerate(infos):
-
             env_i = flat_idx % self.num_envs
             drone_i = int(info.get("drone_idx", -1))
 
@@ -223,8 +223,12 @@ class StepStatsCallback(BaseCallback):
             cmd_speed = float(info.get("cmd_speed", 0.0))
             actual_speed = float(info.get("actual_speed", 0.0))
 
-            self.episode_done_collision = bool(info.get("episode_done_collision", False))
-            self.episode_done_all_reached = bool(info.get("episode_done_all_reached", False))
+            self.episode_done_collision = bool(
+                info.get("episode_done_collision", False)
+            )
+            self.episode_done_all_reached = bool(
+                info.get("episode_done_all_reached", False)
+            )
 
             # -------------------------------------------------
             # Handle episode-summary info FIRST, before skipping
@@ -239,14 +243,23 @@ class StepStatsCallback(BaseCallback):
                     "flat_idx": flat_idx,
                     "ep_rew": float(episode_info.get("r", 0.0)),
                     "ep_len": int(info.get("step", episode_info.get("l", 0))),
-                    "reached": bool(info.get("reached", False) or info.get("just_reached", False)),
-                    "collision": bool(info.get("collided", False) or info.get("collision_now", False)),
-                    "wall_collision": bool(info.get("wall_collision", False) or info.get("wall_collision_now", False)),
+                    "reached": bool(
+                        info.get("reached", False) or info.get("just_reached", False)
+                    ),
+                    "collision": bool(
+                        info.get("collided", False) or info.get("collision_now", False)
+                    ),
+                    "wall_collision": bool(
+                        info.get("wall_collision", False)
+                        or info.get("wall_collision_now", False)
+                    ),
                     "obstacle_collision": bool(
-                        info.get("obstacle_collision", False) or info.get("obstacle_collision_now", False)
+                        info.get("obstacle_collision", False)
+                        or info.get("obstacle_collision_now", False)
                     ),
                     "drone_collision": bool(
-                        info.get("drone_collision", False) or info.get("drone_collision_now", False)
+                        info.get("drone_collision", False)
+                        or info.get("drone_collision_now", False)
                     ),
                     "truncated": bool(info.get("truncated", False)),
                 }
@@ -276,7 +289,10 @@ class StepStatsCallback(BaseCallback):
                             outcome = "collision"
                         elif ep["truncated"]:
                             outcome = "time_limit"
-                        elif self.stage_info is not None and ep["ep_len"] >= self.stage_info.episode_horizon:
+                        elif (
+                            self.stage_info is not None
+                            and ep["ep_len"] >= self.stage_info.episode_horizon
+                        ):
                             outcome = "time_limit"
 
                         print(
@@ -288,14 +304,29 @@ class StepStatsCallback(BaseCallback):
                             flush=True,
                         )
 
-                    batch_rewards = [ep["ep_rew"] for ep in self._episode_batch.values()]
-                    batch_lengths = [ep["ep_len"] for ep in self._episode_batch.values()]
-                    batch_wall_collisions = sum(int(ep["wall_collision"]) for ep in self._episode_batch.values())
-                    batch_reached = sum(int(ep["reached"]) for ep in self._episode_batch.values())
+                    batch_rewards = [
+                        ep["ep_rew"] for ep in self._episode_batch.values()
+                    ]
+                    batch_lengths = [
+                        ep["ep_len"] for ep in self._episode_batch.values()
+                    ]
+                    batch_wall_collisions = sum(
+                        int(ep["wall_collision"]) for ep in self._episode_batch.values()
+                    )
+                    batch_reached = sum(
+                        int(ep["reached"]) for ep in self._episode_batch.values()
+                    )
 
-                    self.logger.record("episode_batch/mean_reward", float(np.mean(batch_rewards)))
-                    self.logger.record("episode_batch/mean_length", float(np.mean(batch_lengths)))
-                    self.logger.record("episode_batch/reached_frac", float(batch_reached) / float(self.num_envs))
+                    self.logger.record(
+                        "episode_batch/mean_reward", float(np.mean(batch_rewards))
+                    )
+                    self.logger.record(
+                        "episode_batch/mean_length", float(np.mean(batch_lengths))
+                    )
+                    self.logger.record(
+                        "episode_batch/reached_frac",
+                        float(batch_reached) / float(self.num_envs),
+                    )
                     self.logger.record(
                         "episode_batch/wall_collision_frac",
                         float(batch_wall_collisions) / float(self.num_envs),
@@ -397,15 +428,21 @@ class StepStatsCallback(BaseCallback):
         print_mean_actual_speed = self._print_actual_speed_sum / denom_print_steps
 
         print_collision_step_rate = self._print_collision_now_count / denom_print_steps
-        print_wall_collision_step_rate = self._print_wall_collision_now_count / denom_print_steps
-        print_obstacle_collision_step_rate = self._print_obstacle_collision_now_count / denom_print_steps
-        print_drone_collision_step_rate = self._print_drone_collision_now_count / denom_print_steps
+        print_wall_collision_step_rate = (
+            self._print_wall_collision_now_count / denom_print_steps
+        )
+        print_obstacle_collision_step_rate = (
+            self._print_obstacle_collision_now_count / denom_print_steps
+        )
+        print_drone_collision_step_rate = (
+            self._print_drone_collision_now_count / denom_print_steps
+        )
 
         print_total_wall_collisions = self._print_wall_collision_ever_count
         print_total_collisions = (
-                self._print_wall_collision_ever_count
-                + self._print_obstacle_collision_ever_count
-                + self._print_drone_collision_ever_count
+            self._print_wall_collision_ever_count
+            + self._print_obstacle_collision_ever_count
+            + self._print_drone_collision_ever_count
         )
 
         print_episode_done_collision = self.episode_done_collision
@@ -415,31 +452,67 @@ class StepStatsCallback(BaseCallback):
         self.logger.record("stats/reaches_ever_count", float(reaches_ever))
         self.logger.record("stats/reaches_now_count", float(reaches_now))
         self.logger.record("stats/reaches_denom", float(denom_all_drones_count))
-        self.logger.record("stats/reach_rate", float(reaches_ever) / float(denom_all_drones_count))
+        self.logger.record(
+            "stats/reach_rate", float(reaches_ever) / float(denom_all_drones_count)
+        )
 
         self.logger.record("stats/team_reach_any_count", float(team_any))
         self.logger.record("stats/team_reach_all_count", float(team_all))
 
-        self.logger.record("stats/episode_ended_collisions", float(print_episode_done_collision))
-        self.logger.record("stats/episode_ended_all_reached", float(print_episode_done_all_reached))
+        self.logger.record(
+            "stats/episode_ended_collisions", float(print_episode_done_collision)
+        )
+        self.logger.record(
+            "stats/episode_ended_all_reached", float(print_episode_done_all_reached)
+        )
 
-        self.logger.record("stats/collision_step_rate", float(print_collision_step_rate))
-        self.logger.record("stats/wall_collision_step_rate", float(print_wall_collision_step_rate))
-        self.logger.record("stats/obstacle_collision_step_rate", float(print_obstacle_collision_step_rate))
-        self.logger.record("stats/drone_collision_step_rate", float(print_drone_collision_step_rate))
+        self.logger.record(
+            "stats/collision_step_rate", float(print_collision_step_rate)
+        )
+        self.logger.record(
+            "stats/wall_collision_step_rate", float(print_wall_collision_step_rate)
+        )
+        self.logger.record(
+            "stats/obstacle_collision_step_rate",
+            float(print_obstacle_collision_step_rate),
+        )
+        self.logger.record(
+            "stats/drone_collision_step_rate", float(print_drone_collision_step_rate)
+        )
 
-        self.logger.record("stats/collision_ever_count", float(self._print_collision_ever_count))
-        self.logger.record("stats/wall_collision_ever_count", float(self._print_wall_collision_ever_count))
-        self.logger.record("stats/obstacle_collision_ever_count", float(self._print_obstacle_collision_ever_count))
-        self.logger.record("stats/drone_collision_ever_count", float(self._print_drone_collision_ever_count))
+        self.logger.record(
+            "stats/collision_ever_count", float(self._print_collision_ever_count)
+        )
+        self.logger.record(
+            "stats/wall_collision_ever_count",
+            float(self._print_wall_collision_ever_count),
+        )
+        self.logger.record(
+            "stats/obstacle_collision_ever_count",
+            float(self._print_obstacle_collision_ever_count),
+        )
+        self.logger.record(
+            "stats/drone_collision_ever_count",
+            float(self._print_drone_collision_ever_count),
+        )
 
-        self.logger.record("stats/total_wall_collisions", float(print_total_wall_collisions))
+        self.logger.record(
+            "stats/total_wall_collisions", float(print_total_wall_collisions)
+        )
         self.logger.record("stats/total_collisions", float(print_total_collisions))
 
-        self.logger.record("stats/swarm_too_close_rate", float(self._swarm_too_close_steps) / float(denom_print_steps))
-        self.logger.record("stats/swarm_too_far_rate", float(self._swarm_too_far_steps) / float(denom_print_steps))
+        self.logger.record(
+            "stats/swarm_too_close_rate",
+            float(self._swarm_too_close_steps) / float(denom_print_steps),
+        )
+        self.logger.record(
+            "stats/swarm_too_far_rate",
+            float(self._swarm_too_far_steps) / float(denom_print_steps),
+        )
 
-        self.logger.record("debug/mean_dist_to_target", float(print_mean_dist_to_target))
+        self.logger.record(
+            "debug/mean_dist_to_target", float(print_mean_dist_to_target)
+        )
         self.logger.record("debug/mean_cmd_speed", float(print_mean_cmd_speed))
         self.logger.record("debug/mean_actual_speed", float(print_mean_actual_speed))
 
@@ -453,11 +526,19 @@ class StepStatsCallback(BaseCallback):
             self.logger.record("curriculum/stage_idx", float(si.stage_idx))
             self.logger.record("curriculum/world_scale", float(si.world_scale))
             self.logger.record("curriculum/num_drones", float(si.num_drones))
-            self.logger.record("curriculum/num_static_obstacles", float(si.num_static_obstacles))
-            self.logger.record("curriculum/num_dynamic_obstacles", float(si.num_dynamic_obstacles))
-            self.logger.record("curriculum/num_obstacles", float(si.num_total_obstacles))
+            self.logger.record(
+                "curriculum/num_static_obstacles", float(si.num_static_obstacles)
+            )
+            self.logger.record(
+                "curriculum/num_dynamic_obstacles", float(si.num_dynamic_obstacles)
+            )
+            self.logger.record(
+                "curriculum/num_obstacles", float(si.num_total_obstacles)
+            )
             self.logger.record("curriculum/stage_timesteps", float(si.stage_timesteps))
-            self.logger.record("curriculum/progress_frac", float(self.num_timesteps) / float(total))
+            self.logger.record(
+                "curriculum/progress_frac", float(self.num_timesteps) / float(total)
+            )
 
             prefix = (
                 f"[Curriculum] stage={si.stage_idx} "
@@ -491,7 +572,7 @@ class StepStatsCallback(BaseCallback):
                 flush=True,
             )
 
-        #self.logger.dump(self.num_timesteps)
+        # self.logger.dump(self.num_timesteps)
 
         # ---- reset print-window counters here only ----
         self._print_collision_now_count = 0
@@ -524,7 +605,9 @@ class StepStatsCallback(BaseCallback):
         # out of all drone decisions taken, how many of them resulted in a collision right now
         collision_step_rate = self._collision_now_count / denom_drones_steps
         wall_collision_step_rate = self._wall_collision_now_count / denom_drones_steps
-        obstacle_collision_step_rate = self._obstacle_collision_now_count / denom_drones_steps
+        obstacle_collision_step_rate = (
+            self._obstacle_collision_now_count / denom_drones_steps
+        )
         drone_collision_step_rate = self._drone_collision_now_count / denom_drones_steps
 
         mean_dist_to_target = self._dist_to_target_sum / denom_drones_steps
@@ -541,26 +624,36 @@ class StepStatsCallback(BaseCallback):
 
         print_denom_drones_steps = max(1, self._print_agent_steps)
 
-        print_mean_dist_to_target = self._print_dist_to_target_sum / print_denom_drones_steps
+        print_mean_dist_to_target = (
+            self._print_dist_to_target_sum / print_denom_drones_steps
+        )
         print_mean_cmd_speed = self._print_cmd_speed_sum / print_denom_drones_steps
-        print_mean_actual_speed = self._print_actual_speed_sum / print_denom_drones_steps
+        print_mean_actual_speed = (
+            self._print_actual_speed_sum / print_denom_drones_steps
+        )
 
         print_episode_done_all_collided = self.episode_done_collision
         print_episode_done_all_reached = self.episode_done_all_reached
 
-        print_collision_step_rate = self._print_collision_now_count / print_denom_drones_steps
-        print_wall_collision_step_rate = self._print_wall_collision_now_count / print_denom_drones_steps
-        print_obstacle_collision_step_rate = self._print_obstacle_collision_now_count / print_denom_drones_steps
-        print_drone_collision_step_rate = self._print_drone_collision_now_count / print_denom_drones_steps
+        print_collision_step_rate = (
+            self._print_collision_now_count / print_denom_drones_steps
+        )
+        print_wall_collision_step_rate = (
+            self._print_wall_collision_now_count / print_denom_drones_steps
+        )
+        print_obstacle_collision_step_rate = (
+            self._print_obstacle_collision_now_count / print_denom_drones_steps
+        )
+        print_drone_collision_step_rate = (
+            self._print_drone_collision_now_count / print_denom_drones_steps
+        )
 
         print_total_wall_collisions = self._print_wall_collision_ever_count
         print_total_collisions = (
-                self._print_wall_collision_ever_count
-                + self._print_obstacle_collision_ever_count
-                + self._print_drone_collision_ever_count
+            self._print_wall_collision_ever_count
+            + self._print_obstacle_collision_ever_count
+            + self._print_drone_collision_ever_count
         )
-
-
 
         # ---- Early stop decision ----
         if not self.enable_stage_early_stop:
@@ -579,7 +672,9 @@ class StepStatsCallback(BaseCallback):
         else:
             self._consecutive_good = 0
 
-        self.logger.record("curriculum/good_rollout_streak", float(self._consecutive_good))
+        self.logger.record(
+            "curriculum/good_rollout_streak", float(self._consecutive_good)
+        )
 
         if self.verbose >= 1 and self._consecutive_good > 0:
             print(

@@ -1,16 +1,15 @@
+# -*- coding: utf-8 -*-
 
 import random
 import threading
 import time
-import importlib
 import numpy as np
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from envs.createObjects import Dynamic, EnvObject
 from wrappers.env_3d import DroneSwarm3D as env
-from envs.createWorld import SUPPORTED_SHAPES 
-
+from envs.createWorld import SUPPORTED_SHAPES
 
 
 class EnvironmentViewer:
@@ -164,8 +163,16 @@ class EnvironmentViewer:
                 self._apply_object_configs(current_env, configs)
                 self._apply_spawn_configs(
                     current_env,
-                    self._get_drone_spawn_configs() if callable(self._get_drone_spawn_configs) else [],
-                    self._get_target_spawn_configs() if callable(self._get_target_spawn_configs) else [],
+                    (
+                        self._get_drone_spawn_configs()
+                        if callable(self._get_drone_spawn_configs)
+                        else []
+                    ),
+                    (
+                        self._get_target_spawn_configs()
+                        if callable(self._get_target_spawn_configs)
+                        else []
+                    ),
                 )
                 # print("Env made")
                 self._episode += 1
@@ -176,12 +183,11 @@ class EnvironmentViewer:
                 self._record_frame(current_env)
 
                 while not self._stop_event.is_set():
-
                     if self._restart_event.is_set():
                         restart_requested = True
                         self._restart_event.clear()
                         break
-                    
+
                     act_dict = self._build_action_dict(obs_dict)
                     obs_dict, _, done, trunc, _ = current_env.step(act_dict)
                     self._step += 1
@@ -294,8 +300,12 @@ class EnvironmentViewer:
                 continue
 
         env_instance._obstacles = new_obstacles
-        env_instance.num_static_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "static")
-        env_instance.num_dynamic_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
+        env_instance.num_static_obstacles = sum(
+            1 for cfg in configs if cfg.get("kind") == "static"
+        )
+        env_instance.num_dynamic_obstacles = sum(
+            1 for cfg in configs if cfg.get("kind") == "dynamic"
+        )
 
     def _apply_spawn_configs(self, env_instance, drone_spawns, target_spawns):
         p = getattr(env_instance, "_p", None)
@@ -413,7 +423,9 @@ class EnvironmentViewer:
             except Exception as e:
                 errors.append(f"{name}: {e}")
 
-        return self._on_error("All backends failed:\n" + "\n".join(errors), report_error)
+        return self._on_error(
+            "All backends failed:\n" + "\n".join(errors), report_error
+        )
 
     def _heuristic_action(self, obs: np.ndarray) -> np.ndarray:
         to_target = obs[6:9]
@@ -438,14 +450,15 @@ class EnvironmentViewer:
         except Exception:
             return self._heuristic_action(obs)
 
-    def _build_action_dict(self, obs_dict: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def _build_action_dict(
+        self, obs_dict: Dict[str, np.ndarray]
+    ) -> Dict[str, np.ndarray]:
         act_dict: Dict[str, np.ndarray] = {}
         for agent, obs in obs_dict.items():
             act_dict[agent] = self._predict_action(obs)
         return act_dict
 
     ################ Model Load logic ################
-
 
     ################ Recording and replay logic ################
 
@@ -489,7 +502,7 @@ class EnvironmentViewer:
             "obstacles": obstacle_states,
             "targets": target_states,
         }
-    
+
     def _record_frame(self, env_instance):
         frame = self._capture_frame(env_instance)
         with self._record_lock:
@@ -510,13 +523,19 @@ class EnvironmentViewer:
                 "step": int(frame.get("step", 0)),
             }
 
-    def _capture_body_state(self, env_instance, body_id: int) -> Optional[Dict[str, Any]]:
+    def _capture_body_state(
+        self, env_instance, body_id: int
+    ) -> Optional[Dict[str, Any]]:
         p = getattr(env_instance, "_p", None)
         if p is None:
             return None
         try:
-            position, orientation = env_instance._call_physics(p.getBasePositionAndOrientation, int(body_id))
-            linear_velocity, angular_velocity = env_instance._call_physics(p.getBaseVelocity, int(body_id))
+            position, orientation = env_instance._call_physics(
+                p.getBasePositionAndOrientation, int(body_id)
+            )
+            linear_velocity, angular_velocity = env_instance._call_physics(
+                p.getBaseVelocity, int(body_id)
+            )
             return {
                 "body_id": int(body_id),
                 "position": [float(v) for v in position],

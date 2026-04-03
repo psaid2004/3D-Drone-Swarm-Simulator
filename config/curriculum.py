@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 The following class contains the curriculum by which training is performed.
 """
@@ -28,81 +29,65 @@ class Curriculum:
     """
 
     def __init__(self):
-
         self.stages: List[Tuple[float, int, int, int, int, int, bool]] = [
-
-
             (3, 3, 0, 0, 300_000, 1500, True),
             (3, 5, 0, 0, 350_000, 1700, True),
-
             (3, 5, 2, 0, 400_000, 1700, True),
             (4, 5, 3, 0, 450_000, 2000, True),
-
             (4, 5, 4, 1, 450_000, 2200, True),
             (5, 5, 5, 1, 500_000, 2500, True),
-
             (5, 8, 5, 1, 500_000, 2700, True),
             (6, 8, 6, 2, 550_000, 3000, True),
-
             (7, 8, 8, 2, 550_000, 3300, True),
             (8, 10, 8, 3, 600_000, 3600, True),
-
             (9, 10, 10, 4, 700_000, 3900, True),
-
             # ---- SINGLE DRONE ----
             # (2, 1, 0, 0, 700_000, 700, True),   # Stage 0: one drone, empty world
             # (3, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
             # (4, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world
             # (5, 1, 0, 0, 700_000, 800, False),  # Stage 0: one drone, empty world
-
             # (2, 1, 0, 0, 1000, 900, True),   # Stage 0: one drone, empty world
             # (2, 2, 0, 0, 10000, 900, True),  # Stage 0: one drone, empty world
             # (2, 2, 2, 0, 10000, 2000, True),  # Stage 0: one drone, empty world
             # (2, 2, 2, 2, 10000, 2000, True),  # Stage 0: one drone, empty world
-            #(3, 1, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            #(3, 3, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            #(3, 3, 3, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            #(3, 3, 3, 3, 650_000, 2000, True),  # Stage 0: one drone, empty world
-            #(4, 1, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            #(4, 4, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            #(4, 4, 4, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            #(4, 4, 4, 4, 700_000, 2000, True),  # Stage 0: one drone, empty world
-            #(5, 1, 0, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
-            #(5, 5, 5, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
-            #(5, 5, 5, 5, 700_000, 1100, True),  # Stage 0: one drone, empty world
-
-            #TODO: LOOK AT TIMES IT TAKES DRONE TO REACH TARGET AND REDUCE TIME PER EPISODE
-            #TODO: DOUBLE CHECK LIDAR=TRUE REWARD
-
-            #(5, 1, 1, 0, 650_000, 1300, True),    # Stage 1: static obstacles
-            #(6, 1, 5, 0, 700_000, 1500, True),    # Stage 2: larger world
-            #(7, 1, 8, 0, 800_000, 1550, True),    # Stage 3
-            #(8, 1, 10, 0, 900_000, 1550, True),   # Stage 4
-
+            # (3, 1, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            # (3, 3, 0, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            # (3, 3, 3, 0, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            # (3, 3, 3, 3, 650_000, 2000, True),  # Stage 0: one drone, empty world
+            # (4, 1, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            # (4, 4, 0, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            # (4, 4, 4, 0, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            # (4, 4, 4, 4, 700_000, 2000, True),  # Stage 0: one drone, empty world
+            # (5, 1, 0, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            # (5, 5, 5, 0, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            # (5, 5, 5, 5, 700_000, 1100, True),  # Stage 0: one drone, empty world
+            # TODO: LOOK AT TIMES IT TAKES DRONE TO REACH TARGET AND REDUCE TIME PER EPISODE
+            # TODO: DOUBLE CHECK LIDAR=TRUE REWARD
+            # (5, 1, 1, 0, 650_000, 1300, True),    # Stage 1: static obstacles
+            # (6, 1, 5, 0, 700_000, 1500, True),    # Stage 2: larger world
+            # (7, 1, 8, 0, 800_000, 1550, True),    # Stage 3
+            # (8, 1, 10, 0, 900_000, 1550, True),   # Stage 4
             # introduce dynamic obstacles
-            #(8, 1, 6, 2, 900_000, 550, True),    # Stage 5
-            #(9, 1, 8, 3, 900_000, 600, True),    # Stage 6
-            #(10, 1, 10, 4, 1_000_000, 650, True),  # Stage 7
-
+            # (8, 1, 6, 2, 900_000, 550, True),    # Stage 5
+            # (9, 1, 8, 3, 900_000, 600, True),    # Stage 6
+            # (10, 1, 10, 4, 1_000_000, 650, True),  # Stage 7
             # ---- TWO DRONES ----
-            #(6, 2, 0, 0, 500_000, 500, False),   # Stage 8
-            #(6, 2, 3, 0, 600_000, 550, True),    # Stage 9
-            #(7, 2, 5, 0, 700_000, 550, True),    # Stage 10
-            #(8, 2, 6, 1, 800_000, 550, True),    # Stage 11
-            #(9, 2, 8, 2, 900_000, 600, True),    # Stage 12
-            #(10, 2, 10, 3, 900_000, 600, True),  # Stage 13
-
+            # (6, 2, 0, 0, 500_000, 500, False),   # Stage 8
+            # (6, 2, 3, 0, 600_000, 550, True),    # Stage 9
+            # (7, 2, 5, 0, 700_000, 550, True),    # Stage 10
+            # (8, 2, 6, 1, 800_000, 550, True),    # Stage 11
+            # (9, 2, 8, 2, 900_000, 600, True),    # Stage 12
+            # (10, 2, 10, 3, 900_000, 600, True),  # Stage 13
             # ---- FOUR DRONES ----
-            #(7, 4, 0, 0, 500_000, 600, False),   # Stage 14
-            #(8, 4, 3, 0, 500_000, 600, True),    # Stage 15
-            #(9, 4, 5, 1, 600_000, 650, True),    # Stage 16
-            #(10, 4, 7, 2, 800_000, 650, True),   # Stage 17
-            #(12, 4, 10, 3, 1_000_000, 750, True), # Stage 18
-
+            # (7, 4, 0, 0, 500_000, 600, False),   # Stage 14
+            # (8, 4, 3, 0, 500_000, 600, True),    # Stage 15
+            # (9, 4, 5, 1, 600_000, 650, True),    # Stage 16
+            # (10, 4, 7, 2, 800_000, 650, True),   # Stage 17
+            # (12, 4, 10, 3, 1_000_000, 750, True), # Stage 18
             # ---- FULL SWARM ----
-            #(10, 8, 6, 2, 1_400_000, 600, True),   # Stage 19
-            #(12, 8, 8, 3, 1_500_000, 700, True),   # Stage 20
-            #(14, 8, 10, 4, 1_700_000, 800, True),  # Stage 21
+            # (10, 8, 6, 2, 1_400_000, 600, True),   # Stage 19
+            # (12, 8, 8, 3, 1_500_000, 700, True),   # Stage 20
+            # (14, 8, 10, 4, 1_700_000, 800, True),  # Stage 21
         ]
         self.current_stage = 0
 
