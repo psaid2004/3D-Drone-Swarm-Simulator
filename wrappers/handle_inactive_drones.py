@@ -6,7 +6,7 @@ import numpy as np
 class HandleInactiveDrones(VecEnvWrapper):
     """
     After VecNormalize in training, force inactive drone slots in vec to zero observations (consistent with env).
-    This makes inactive slots look truly inert to policy.
+    This makes inactive slots look invisible to policy.
     """
 
     def __init__(self, venv, active_drones: int, max_drones: int) -> None:

@@ -119,7 +119,7 @@ def compute_step_state(env, obs_dict) -> StepState:
 
         # skip drones if they are already dead/despawned before goal check
         if env._dead[i] or env._despawned[i]:
-            continue  # TODO THIS WAS AND PREVIOUSLY BUT I THINK IT SHOULD BE OR?
+            continue
 
         pos = obs_dict[a][POS_SLICE]
         target = (
