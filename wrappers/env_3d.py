@@ -19,6 +19,7 @@ from wrappers.step_logic import (
 )
 from wrappers.rewards import compute_rewards
 from wrappers.stats_trackers import EpisodeStatsTracker
+from envs.complex_world_loader import apply_complex_world
 
 from config.defaults import *
 
@@ -41,6 +42,7 @@ class DroneSwarm3D(ParallelEnv):
             lidar: bool = False,
             render_mode: Optional[str] = None,
             seed: Optional[int] = None,
+            complex_world_name: str | None = None,
     ):
 
         self._init_config(
@@ -53,6 +55,7 @@ class DroneSwarm3D(ParallelEnv):
             num_swarms=num_swarms,
             lidar=lidar,
             render_mode=render_mode,
+            complex_world_name=complex_world_name,
         )
 
         self._init_rng(seed)
@@ -75,6 +78,7 @@ class DroneSwarm3D(ParallelEnv):
             num_swarms: int,
             lidar: bool,
             render_mode: Optional[str],
+            complex_world_name: str | None = None,
     ):
         """ Store environment configuration. """
         self.world_scale = float(world_scale)
@@ -117,6 +121,7 @@ class DroneSwarm3D(ParallelEnv):
         self.max_steps = int(max_steps)
         self.lidar = bool(lidar)
         self.render_mode = render_mode
+        self.complex_world_name = complex_world_name
 
 
     def _init_rng(self, seed: Optional[int]) -> None:
@@ -290,6 +295,7 @@ class DroneSwarm3D(ParallelEnv):
 
         return None
 
+
     def _call_physics(self, fn, *args, **kwargs):
         if self._p is None:
             raise RuntimeError("PyBullet not available")
@@ -306,6 +312,10 @@ class DroneSwarm3D(ParallelEnv):
                 f"args={args} kwargs={kwargs} error={repr(e)}"
             )
             raise
+
+
+
+
         # TODO IF TOO MANY OF THE ABOVE EXCEPTIONS ARE THROWN, TAKE TRY STATEMENT ABOVE OUT AND UNCOMMENT BELOW
         # if "physicsClientId" in kwargs:
         #     return fn(*args, **kwargs)
@@ -696,10 +706,23 @@ class DroneSwarm3D(ParallelEnv):
             return
 
         t = 1.0 / 60.0
+        alive_obstacles = []
 
         for obstacle in self._obstacles:
+            body_id = getattr(obstacle, "body_id", None)
+
+            # skip already-removed bodies
+            if body_id is None:
+                continue
+
             if isinstance(obstacle, Dynamic):
                 obstacle.update_obstacle(t)
+
+            # keep only obstacles that are still valid after update
+            if getattr(obstacle, "body_id", None) is not None:
+                alive_obstacles.append(obstacle)
+
+        self._obstacles = alive_obstacles
 
 
     def obstacle_overlap(self, object):
@@ -736,7 +759,7 @@ class DroneSwarm3D(ParallelEnv):
             if isinstance(obs, Dynamic):
                 self._qworld.add_dynamic_object(id(obs), obs)
             else:
-                self._qworld.add_static_object(obs) # TODO CARIM THIS METHOD DOES NOT EXIST IN YOUR CLASS?
+                self._qworld.add_static_object(obs)
 
 
     def candidate_collides_over_time(self, candidate, horizon_steps, dt=1.0/60.0, margin=0.0):
@@ -1065,12 +1088,23 @@ class DroneSwarm3D(ParallelEnv):
 
         p = self._p
         obs_pos = []
+        alive_obstacles = []
+
         for object in self._obstacles:
+            body_id = getattr(object, "body_id", None)
+            if body_id is None:
+                continue
+
             try:
-                pos, _ = self._call_physics(p.getBasePositionAndOrientation, object.body_id)
-                obs_pos.append(pos)
+                pos, _ = p.getBasePositionAndOrientation(body_id)
             except Exception:
-                pass
+                object.body_id = None
+                continue
+
+            obs_pos.append(pos)
+            alive_obstacles.append(object)
+
+        self._obstacles = alive_obstacles
 
         if len(obs_pos) == 0:
             return np.zeros(3, dtype=np.float32)
@@ -1543,10 +1577,15 @@ class DroneSwarm3D(ParallelEnv):
             self._obstacle_collision_once[:] = False
             self._drone_collision_once[:] = False
 
-            self._rebuild_query_world_from_current_scene()
             self._targets = self._make_targets()
-            self._spawn_obstacles()
-            self._spawn_walls()
+            if self.complex_world_name is not None:
+                self._spawn_walls()
+                apply_complex_world(self, self.complex_world_name)
+            else:
+                self._spawn_obstacles()
+                self._spawn_walls()
+
+            self._rebuild_query_world_from_current_scene()
 
             obs0 = self._build_obs_dict()
 
@@ -1586,29 +1625,22 @@ class DroneSwarm3D(ParallelEnv):
         self.spawn_positions = np.empty((0, 3))
 
 
-    def remove_all_obstacles(self) -> None:
-        """Helper for removing obstacles from current episode environment."""
-        if self._p is None:
-            self._obstacles = []
+    def _safe_remove_body(self, body_id) -> None:
+        """Remove a PyBullet body only if it still exists."""
+        if self._p is None or body_id is None:
             return
 
-        for obj in self._obstacles:
-            try:
-                if getattr(obj, "body_id", None) is not None:
-                    self._call_physics(self._p.removeBody, obj.body_id)
-            except Exception:
-                pass
-
-        self._obstacles = []
+        try:
+            self._p.getBodyInfo(body_id)
+            self._p.removeBody(body_id)
+        except Exception:
+            return
 
 
     def remove_walls(self) -> None:
         """ Helper for removing walls from current episode environment."""
         for body_id in self._wall_ids:
-            try:
-                self._call_physics(self._p.removeBody, body_id)
-            except Exception:
-                pass
+            self._safe_remove_body(body_id)
         self._wall_ids = []
 
 
@@ -1628,12 +1660,27 @@ class DroneSwarm3D(ParallelEnv):
                 continue
 
             seen.add(body_id)
-            try:
-                self._call_physics(self._p.removeBody, body_id)
-            except Exception:
-                pass
+            self._safe_remove_body(body_id)
+
+            if hasattr(tgt, "body_id"):
+                tgt.body_id = None
 
         self._targets = []
+
+
+    def remove_all_obstacles(self) -> None:
+        """Helper for removing obstacles from current episode environment."""
+        if self._p is None:
+            self._obstacles = []
+            return
+
+        for obj in self._obstacles:
+            body_id = getattr(obj, "body_id", None)
+            self._safe_remove_body(body_id)
+            if hasattr(obj, "body_id"):
+                obj.body_id = None
+
+        self._obstacles = []
 
 
     def restore_drone_visuals_and_collisions(self) -> None:

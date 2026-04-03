@@ -164,7 +164,15 @@ class Dynamic(EnvObject):
         super().__init__(start_pos, size, orientation)
 
     def update_obstacle(self, dt):
-        pos, orn = self.physics_call(p.getBasePositionAndOrientation, self.body_id)
+        if self.body_id is None:
+            return
+
+        try:
+            pos, orn = p.getBasePositionAndOrientation(self.body_id)
+        except Exception:
+            self.body_id = None
+            return
+
         pos = list(pos)
 
         # move along chosen axis
@@ -178,7 +186,11 @@ class Dynamic(EnvObject):
             pos[self.axis] = self.max
             self.direction = -1
 
-        self.physics_call(p.resetBasePositionAndOrientation, self.body_id, pos, orn)
+        try:
+            p.resetBasePositionAndOrientation(self.body_id, pos, orn)
+        except Exception:
+            self.body_id = None
+            return
 
     def get_swept_area(self):
         center = self.start_pos.copy()

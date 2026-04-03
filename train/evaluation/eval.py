@@ -22,9 +22,9 @@ class EvaluateTraining:
             lidar: bool,
             model_num: int,
             render_mode: Optional[str] = None,
-            world_scale: float = 5.0,
+            world_scale: float = 6.0,
             max_steps: int = 4000,
-            num_episodes: int = 30,
+            num_episodes: int = 25,
             compute_path_optimality: bool = False, # set True if your env emits 'optimal_path_length'
     ):
 
@@ -242,11 +242,11 @@ if __name__ == "__main__":
 
     evaluation = EvaluateTraining(
         model_num=model_number,
-        n_drones=8,
-        n_static_obstacles=8,
-        n_dynamic_obstacles=2,
+        n_drones=10,
+        n_static_obstacles=10,
+        n_dynamic_obstacles=8,
         lidar=True,
-        render_mode="Human",
+        render_mode=None,
     )
     evaluation.evaluate_model()
 

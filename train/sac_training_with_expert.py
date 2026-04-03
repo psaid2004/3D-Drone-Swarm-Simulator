@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os, time
-from pathlib import Path
 import numpy as np
 
 # import wandb
@@ -18,8 +17,6 @@ from stable_baselines3.common.type_aliases import ReplayBufferSamples
 from stable_baselines3.common.callbacks import (
     CallbackList,
     CheckpointCallback,
-    EvalCallback,
-    StopTrainingOnNoModelImprovement,
 )
 from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
 from stable_baselines3.sac.policies import SACPolicy
@@ -34,6 +31,7 @@ from wrappers.env_3d import DroneSwarm3D
 from wrappers.env_reset_fix import SB3VecResetTupleFix
 from wrappers.handle_inactive_drones import HandleInactiveDrones
 from train.expert_blender import ExpertPolicy
+from envs.complex_world_loader import apply_complex_world
 
 warnings.filterwarnings("ignore", message=".*Box low's precision lowered.*")
 warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
@@ -237,8 +235,11 @@ def create_env(
     max_episode_steps,
     lidar_enabled,
     render_mode=None,
+    complex_world_name=None,
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
+
+    print("i am going to make an env", world_scale, num_drones, num_static_obstacles, num_dynamic_obstacles)
 
     env = DroneSwarm3D(
         world_scale=world_scale,
@@ -248,7 +249,8 @@ def create_env(
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
         render_mode=render_mode,
-        max_drones_per_swarm=MAX_DRONES_PER_SWARM
+        max_drones_per_swarm=MAX_DRONES_PER_SWARM,
+        complex_world_name=complex_world_name,
     )
 
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
@@ -422,7 +424,7 @@ def train(device: str = "auto"):
 
     # --- build stage-0 env ---
 
-    ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0 = curr[0]
+    ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0, complex_world = curr[0]
     print(
         f"\n=== Stage 0 | world={ws0} active drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
@@ -468,7 +470,7 @@ def train(device: str = "auto"):
         max_episode_steps=steps_per_episode,
         lidar_enabled=lidar0,
         render_mode=None,
-
+        complex_world_name=complex_world,
     )
 
     # eval_env = create_env(
@@ -552,6 +554,7 @@ def train(device: str = "auto"):
             stage_steps,
             steps_per_episode,
             lidar_enabled,
+            complex_world_name
     ) in enumerate(curr[1:], start=1):
         stage_steps = int(stage_steps)
 
@@ -585,6 +588,7 @@ def train(device: str = "auto"):
             num_dynamic_obstacles=num_dynamic_obs,
             max_episode_steps=steps_per_episode,
             lidar_enabled=lidar_enabled,
+            complex_world_name=complex_world_name,
         )
 
         # new_eval_env = create_env(

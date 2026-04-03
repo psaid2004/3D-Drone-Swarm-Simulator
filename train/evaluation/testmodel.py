@@ -1,9 +1,13 @@
 import os
 from stable_baselines3 import SAC
 import numpy as np
+import json
 from wrappers.env_3d import DroneSwarm3D
 from pathlib import Path
 from envs.createObjects import EnvObject, Dynamic
+from train.sac_training_with_expert import ExpertBlendPolicy
+from train.expert_blender import ExpertPolicy
+from wrappers.env_3d import DroneSwarm3D
 
 class SingleEpisodeRunner:
     def __init__(
@@ -46,7 +50,7 @@ class SingleEpisodeRunner:
 
         # --- Uncomment to load scenarios ---
         scenarios = self.get_ml_test_scenarios()
-        selected_scenario = "hallway"
+        selected_scenario = "wall_holes"
         object_configs = scenarios[selected_scenario]()
 
         self.obs_dict, self.info = self.env.reset()
@@ -250,10 +254,10 @@ class SingleEpisodeRunner:
 
 if __name__ == "__main__":
     runner = SingleEpisodeRunner(
-        model_num=0,
-        n_drones=8,
-        n_static_obstacles=8,
-        n_dynamic_obstacles=2,
+        model_num=2,
+        n_drones=10,
+        n_static_obstacles=0,
+        n_dynamic_obstacles=0,
         lidar=True,
         render_mode="human",
     )
