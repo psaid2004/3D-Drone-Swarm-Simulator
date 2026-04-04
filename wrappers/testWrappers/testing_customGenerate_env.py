@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import time
 import numpy as np
 from wrappers.env_3d import DroneSwarm3D
@@ -12,9 +13,11 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
         return np.zeros_like(v)
     return v / norm
 
+
 # Pre-set folder with configs
 def _configs_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "interface" / "configs"
+
 
 # Load object configurations from JSON files
 def _load_object_config(config_name: str) -> list[dict]:
@@ -24,6 +27,7 @@ def _load_object_config(config_name: str) -> list[dict]:
     if not isinstance(data, list):
         raise ValueError(f"Expected a list in {path}, got {type(data).__name__}")
     return data
+
 
 # Load different scenarios
 def load_wall_holes_config() -> list[dict]:
@@ -36,7 +40,10 @@ def load_two_walls_with_holes_config() -> list[dict]:
 
 def load_hallway_config() -> list[dict]:
     return _load_object_config("hallway.json")
+
+
 # Load different scenarios
+
 
 # Apply object configurations to the environment
 def apply_object_config(env: DroneSwarm3D, object_configs: list[dict]) -> None:
@@ -81,20 +88,22 @@ def get_ml_test_scenarios() -> dict[str, callable]:
         "hallway": load_hallway_config,
     }
 
+
 def main():
     # --- create environment ----
     n_drones = 2
     n_steps = 8000
 
     pz_env = DroneSwarm3D(
-        world_scale = 2.0,
+        world_scale=2.0,
         num_drones_per_swarm=n_drones,
-        num_static_obstacles = 5,
-        num_dynamic_obstacles = 3,
+        num_static_obstacles=5,
+        num_dynamic_obstacles=3,
         max_steps=n_steps,
         num_swarms=1,
         lidar=True,
-        render_mode="human")
+        render_mode="human",
+    )
 
     # --- Uncomment to load scenarios ---
     # scenarios = get_ml_test_scenarios()
@@ -102,11 +111,10 @@ def main():
     # object_configs = scenarios[selected_scenario]()
 
     obs_dict, info = pz_env.reset()
-    
-    # --- Uncomment to apply scenario ---
-    
-    # apply_object_config(pz_env, object_configs)
 
+    # --- Uncomment to apply scenario ---
+
+    # apply_object_config(pz_env, object_configs)
 
     print("Initial observations:")
     # for drone, obs in obs_dict.items():
@@ -127,9 +135,13 @@ def main():
             dir_vec = safe_unit(dir_vec)
             speed = np.clip(np.linalg.norm(to_target) / 5.0, 0.05, 1.0)
             u3 = speed * 2.0 - 1.0
-            action_dict[drone] = np.array([dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32)
+            action_dict[drone] = np.array(
+                [dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32
+            )
 
-        obs_dict, reward_dict, term_dict, trunc_dict, info_dict = pz_env.step(action_dict)
+        obs_dict, reward_dict, term_dict, trunc_dict, info_dict = pz_env.step(
+            action_dict
+        )
 
         # Print status every 50 steps
         if step % 50 == 0:
@@ -183,6 +195,7 @@ def main():
 
     input("Press Enter to close environment...")
     pz_env.close()
+
 
 if __name__ == "__main__":
     main()

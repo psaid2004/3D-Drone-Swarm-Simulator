@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # config/experiment.py
 """
 Single source of truth for experiment-wide settings.

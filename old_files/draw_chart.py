@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import json
 import plotly.graph_objects as go
 
@@ -52,7 +53,7 @@ import plotly.graph_objects as go
 
 file_paths = [
     "run-models_tb_logs_PPO_3-tag-stats_collision_steps_rate.json",
-    "run-models_tb_logs_PPO_5-tag-stats_collision_steps_rate (1).json"
+    "run-models_tb_logs_PPO_5-tag-stats_collision_steps_rate (1).json",
 ]
 
 
@@ -135,7 +136,7 @@ fig.update_layout(
     xaxis_title="Training Step",
     yaxis_title="Collisions per step",
     # If you switch metrics, update the labels above (optional).
-    template="plotly_white"
+    template="plotly_white",
 )
 
 # =============================================================================

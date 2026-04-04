@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import time
 import numpy as np
 
@@ -74,7 +75,9 @@ while not done:
     if dist < GOAL_REACH_DISTANCE:
         action = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
     else:
-        action = np.array([direction[0], direction[1], direction[2], 1.0], dtype=np.float32)
+        action = np.array(
+            [direction[0], direction[1], direction[2], 1.0], dtype=np.float32
+        )
 
     obs, rew, term, trunc, info = env.step({agent: action})
     step_idx += 1
@@ -88,7 +91,9 @@ while not done:
 
     # rays around the front-middle of the horizontal FOV
     center_idx = LIDAR_NUM_RAYS // 2
-    front_window = mid_layer[max(0, center_idx - 2): min(LIDAR_NUM_RAYS, center_idx + 3)]
+    front_window = mid_layer[
+        max(0, center_idx - 2) : min(LIDAR_NUM_RAYS, center_idx + 3)
+    ]
 
     print(
         f"step={step_idx:03d} | "

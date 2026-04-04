@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 This file defines DEFAULTS (constants). Training / evaluation scripts import these values.
 """
@@ -7,12 +8,12 @@ MAX_DRONES_PER_SWARM = 10
 # =============================================================================
 # DEFAULT OBSERVATION SLICES
 # =============================================================================
-POS_SLICE = slice(0, 3) # position vector
-VEL_SLICE = slice(3, 6) # velocity vector
-TARGET_SLICE = slice(6, 9) # vector to target
-OBS_SLICE = slice(9, 12) # vector to nearest obstacle
-CENTROID_SLICE = slice(12, 15) # vector to nearest centroid
-TEAMMATE_SLICE = slice(15, 18) # vector to nearest teammate
+POS_SLICE = slice(0, 3)  # position vector
+VEL_SLICE = slice(3, 6)  # velocity vector
+TARGET_SLICE = slice(6, 9)  # vector to target
+OBS_SLICE = slice(9, 12)  # vector to nearest obstacle
+CENTROID_SLICE = slice(12, 15)  # vector to nearest centroid
+TEAMMATE_SLICE = slice(15, 18)  # vector to nearest teammate
 
 # =============================================================================
 # Swarm Spawn Variables
@@ -70,31 +71,33 @@ COLLISION_DIST = 0.0
 # =============================================================================
 # Reward - per-step shaping
 # =============================================================================
-PROG_COEF = 25 # reward coefficient for progressing closer to goal
-TIME_PEN = 0.03 # small time penalty each step (until drone reaches or collides)
-CNTRL_PEN = 0.0 # penalty coefficient for large / aggressive actions (prevents jittering)
+PROG_COEF = 25  # reward coefficient for progressing closer to goal
+TIME_PEN = 0.03  # small time penalty each step (until drone reaches or collides)
+CNTRL_PEN = (
+    0.0  # penalty coefficient for large / aggressive actions (prevents jittering)
+)
 
-NEAR_OBS_PEN = 0.0 # penalty for being too close to an obstacle
-NEAR_FRONT_OBS_PEN = 0.0 # penalty for being too close to an obstacle in front of drone
-NEAR_SIDE_OBS_PEN = 0.0 # penalty for being too close to an obstacle on side of drone
-DIST_PEN = 0.03 #0.15 # penalty coefficient for staying far from target (prevents drone not moving) # TODO OTHER IMPLEMENTATIONS HAVE THIS AS 1
-ZERO_SPEED_PEN = 0.0 # penalty for drone not moving
+NEAR_OBS_PEN = 0.0  # penalty for being too close to an obstacle
+NEAR_FRONT_OBS_PEN = 0.0  # penalty for being too close to an obstacle in front of drone
+NEAR_SIDE_OBS_PEN = 0.0  # penalty for being too close to an obstacle on side of drone
+DIST_PEN = 0.03  # 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
+ZERO_SPEED_PEN = 0.0  # penalty for drone not moving
 ALIGN_COEF = 0.1
 
 # =============================================================================
 # Reward - swarm shaping
 # =============================================================================
-COHESION_PEN = 5.0 # penalty for when drones in swarm spread too far
-SEPARATION_PEN = 3.0 # penalty for when drones in swarm get too close
+COHESION_PEN = 5.0  # penalty for when drones in swarm spread too far
+SEPARATION_PEN = 3.0  # penalty for when drones in swarm get too close
 
 # =============================================================================
 # Reward - terminal bonuses / penalties
 # =============================================================================
-WALL_COLLISION_PEN = 40.0 # drone vs wall collision penalty
-OBSTACLE_COLLISION_PEN = 40.0 # drone vs obstacle collision penalty
-DRONE_COLLISION_PEN = 40.0 # drone vs drone collision penalty
-GOAL_BONUS = 250 # one-time bonus for reaching the goal
-TRUNC_PEN = 50 # penalty for if episode was truncated
+WALL_COLLISION_PEN = 40.0  # drone vs wall collision penalty
+OBSTACLE_COLLISION_PEN = 40.0  # drone vs obstacle collision penalty
+DRONE_COLLISION_PEN = 40.0  # drone vs drone collision penalty
+GOAL_BONUS = 250  # one-time bonus for reaching the goal
+TRUNC_PEN = 50  # penalty for if episode was truncated
 
 # =============================================================================
 # Reward - smoothness coefficients
@@ -111,39 +114,3 @@ eps = 1e-8
 # Paths
 # =============================================================================
 MODELS_DIR = "models"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# OLD VARIABLE STORAGE
-# TAKEOFF_STEPS = 30 # first 30 steps of episode is purely drone takeoff
-# TAKEOFF_VZ = 1.0 # takeoff velocity of drone during first takeoff steps
-# HOVER_BIAS_VZ = 0.0 # add constant upward bias to counter gravity drift
-# DEFAULT_TERMINATE_ON_COHESION_BREAK = False
-# DEFAULT_TERMINATE_ON_SEPARATION = False
-
-
-
-
-
-

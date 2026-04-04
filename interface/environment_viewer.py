@@ -1,16 +1,15 @@
+# -*- coding: utf-8 -*-
 
 import random
 import threading
 import time
-import importlib
 import numpy as np
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from envs.createObjects import Dynamic, EnvObject
 from wrappers.env_3d import DroneSwarm3D as env
-from envs.createWorld import SUPPORTED_SHAPES 
-
+from envs.createWorld import SUPPORTED_SHAPES
 
 
 class EnvironmentViewer:
@@ -117,6 +116,9 @@ class EnvironmentViewer:
         with self._speed_lock:
             self._speed_multiplier = max(0.1, float(speed_multiplier))
 
+    def set_num_swarms(self, num_swarms: int):
+        self._num_swarms = max(1, int(num_swarms))
+
     def get_speed_multiplier(self) -> float:
         with self._speed_lock:
             return float(self._speed_multiplier)
@@ -161,8 +163,16 @@ class EnvironmentViewer:
                 self._apply_object_configs(current_env, configs)
                 self._apply_spawn_configs(
                     current_env,
-                    self._get_drone_spawn_configs() if callable(self._get_drone_spawn_configs) else [],
-                    self._get_target_spawn_configs() if callable(self._get_target_spawn_configs) else [],
+                    (
+                        self._get_drone_spawn_configs()
+                        if callable(self._get_drone_spawn_configs)
+                        else []
+                    ),
+                    (
+                        self._get_target_spawn_configs()
+                        if callable(self._get_target_spawn_configs)
+                        else []
+                    ),
                 )
                 # print("Env made")
                 self._episode += 1
@@ -173,12 +183,11 @@ class EnvironmentViewer:
                 self._record_frame(current_env)
 
                 while not self._stop_event.is_set():
-
                     if self._restart_event.is_set():
                         restart_requested = True
                         self._restart_event.clear()
                         break
-                    
+
                     act_dict = self._build_action_dict(obs_dict)
                     obs_dict, _, done, trunc, _ = current_env.step(act_dict)
                     self._step += 1
@@ -248,7 +257,6 @@ class EnvironmentViewer:
             except Exception:
                 pass
 
-
     def _apply_object_configs(self, env_instance, configs):
         p = getattr(env_instance, "_p", None)
         if p is None:
@@ -292,13 +300,37 @@ class EnvironmentViewer:
                 continue
 
         env_instance._obstacles = new_obstacles
-        env_instance.num_static_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "static")
-        env_instance.num_dynamic_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
+        env_instance.num_static_obstacles = sum(
+            1 for cfg in configs if cfg.get("kind") == "static"
+        )
+        env_instance.num_dynamic_obstacles = sum(
+            1 for cfg in configs if cfg.get("kind") == "dynamic"
+        )
 
     def _apply_spawn_configs(self, env_instance, drone_spawns, target_spawns):
         p = getattr(env_instance, "_p", None)
         if p is None:
             return
+
+        def _apply_body_color(body_id: int, rgba):
+            rgba = [float(c) for c in rgba]
+            rgba = [max(0.0, min(1.0, c)) for c in rgba]
+            try:
+                num_joints = env_instance._call_physics(p.getNumJoints, int(body_id))
+            except Exception:
+                num_joints = 0
+
+            for link_idx in range(-1, int(num_joints)):
+                try:
+                    env_instance._call_physics(
+                        p.changeVisualShape,
+                        int(body_id),
+                        int(link_idx),
+                        rgbaColor=rgba,
+                    )
+                except Exception:
+                    continue
+
         drone_ids = list(getattr(env_instance, "_drone_ids", []))
         if drone_ids and drone_spawns:
             for i, body_id in enumerate(drone_ids[: len(drone_spawns)]):
@@ -321,6 +353,8 @@ class EnvironmentViewer:
                         [0.0, 0.0, 0.0],
                         [0.0, 0.0, 0.0],
                     )
+                    if "color" in cfg:
+                        _apply_body_color(int(body_id), cfg.get("color"))
                 except Exception:
                     continue
         seen = set()
@@ -352,65 +386,46 @@ class EnvironmentViewer:
                     )
                     if hasattr(target, "start_pos"):
                         target.start_pos = np.array(pos, dtype=np.float32)
+                    if "color" in cfg:
+                        color = cfg.get("color")
+                        _apply_body_color(int(body_id), color)
+                        if hasattr(target, "color"):
+                            target.color = color
                 except Exception:
                     continue
 
     ################ Model Load logic ################
 
     def _load_model(self, report_error: bool = True):
-        ## No model specified, use heuristic
         if not self._model_path:
             with self._model_lock:
                 self._model = None
                 self._model_backend = None
             return True, "No model selected."
 
-        ## Attempt to load model from specified path
-        model_path = Path(self._model_path)
-        if not model_path.is_file():
-            with self._model_lock:
-                self._model = None
-                self._model_backend = None
-            message = f"Model load failed: file not found ({model_path})."
-            if report_error:
-                self._on_error(message)
-            return False, message
-        
-        # Try loading with stable-baselines3 backends
-        try:
-            sb3 = importlib.import_module("stable_baselines3")
-            PPO = getattr(sb3, "PPO")
-            SAC = getattr(sb3, "SAC")
-        except Exception as exc:
-            with self._model_lock:
-                self._model = None
-                self._model_backend = None
-            message = "Model load failed: error importing stable-baselines3."
-            if report_error:
-                self._on_error(message)
-            return False, message
+        path = Path(self._model_path)
+        if not path.is_file():
+            return self._on_error(f"File not found: {path}", report_error)
 
-        # Try loading with each backend, return on first success
-        load_attempts = (("PPO", PPO), ("SAC", SAC))
-        load_failures = []
-        for backend_name, backend_cls in load_attempts:
+        try:
+            from stable_baselines3 import PPO, SAC
+        except Exception:
+            return self._on_error("Failed to import stable_baselines3", report_error)
+
+        errors = []
+        for name, cls in (("PPO", PPO), ("SAC", SAC)):
             try:
-                loaded_model = backend_cls.load(str(model_path))
+                model = cls.load(str(path))
                 with self._model_lock:
-                    self._model = loaded_model
-                    self._model_backend = backend_name
-                return True, f"Loaded model: {model_path.name} ({backend_name})"
-            except Exception as exc:
-                load_failures.append(f"{backend_name}: {exc}")
-                continue
-        # All loads failed
-        with self._model_lock:
-            self._model = None
-            self._model_backend = None
-        message = "Failed to load models."
-        if report_error:
-            self._on_error(message)
-        return False, message
+                    self._model = model
+                    self._model_backend = name
+                return True, f"Loaded {path.name} ({name})"
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+
+        return self._on_error(
+            "All backends failed:\n" + "\n".join(errors), report_error
+        )
 
     def _heuristic_action(self, obs: np.ndarray) -> np.ndarray:
         to_target = obs[6:9]
@@ -435,14 +450,15 @@ class EnvironmentViewer:
         except Exception:
             return self._heuristic_action(obs)
 
-    def _build_action_dict(self, obs_dict: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def _build_action_dict(
+        self, obs_dict: Dict[str, np.ndarray]
+    ) -> Dict[str, np.ndarray]:
         act_dict: Dict[str, np.ndarray] = {}
         for agent, obs in obs_dict.items():
             act_dict[agent] = self._predict_action(obs)
         return act_dict
 
     ################ Model Load logic ################
-
 
     ################ Recording and replay logic ################
 
@@ -486,7 +502,7 @@ class EnvironmentViewer:
             "obstacles": obstacle_states,
             "targets": target_states,
         }
-    
+
     def _record_frame(self, env_instance):
         frame = self._capture_frame(env_instance)
         with self._record_lock:
@@ -507,13 +523,19 @@ class EnvironmentViewer:
                 "step": int(frame.get("step", 0)),
             }
 
-    def _capture_body_state(self, env_instance, body_id: int) -> Optional[Dict[str, Any]]:
+    def _capture_body_state(
+        self, env_instance, body_id: int
+    ) -> Optional[Dict[str, Any]]:
         p = getattr(env_instance, "_p", None)
         if p is None:
             return None
         try:
-            position, orientation = env_instance._call_physics(p.getBasePositionAndOrientation, int(body_id))
-            linear_velocity, angular_velocity = env_instance._call_physics(p.getBaseVelocity, int(body_id))
+            position, orientation = env_instance._call_physics(
+                p.getBasePositionAndOrientation, int(body_id)
+            )
+            linear_velocity, angular_velocity = env_instance._call_physics(
+                p.getBaseVelocity, int(body_id)
+            )
             return {
                 "body_id": int(body_id),
                 "position": [float(v) for v in position],

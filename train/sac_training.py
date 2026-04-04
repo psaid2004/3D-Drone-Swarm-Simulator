@@ -1,6 +1,8 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import os, time
+import os
+import time
 from pathlib import Path
 
 import torch
@@ -9,8 +11,10 @@ import warnings
 import supersuit as ss
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import (
-    CallbackList, CheckpointCallback, EvalCallback, ProgressBarCallback, StopTrainingOnNoModelImprovement
-
+    CallbackList,
+    CheckpointCallback,
+    EvalCallback,
+    ProgressBarCallback,
 )
 from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
 
@@ -28,29 +32,31 @@ warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
 
 # ---- FILESYSTEM HELPERS ----
 def get_next_model_path(
-        num_drones: int,
-        num_static_obs: int,
-        num_dynamic_obs: int,
-        base=f"{MODELS_DIR}/sac_",
-        ext=".zip"
+    num_drones: int,
+    num_static_obs: int,
+    num_dynamic_obs: int,
+    base=f"{MODELS_DIR}/sac_",
+    ext=".zip",
 ):
     """Find a new model filename that does not overwrite an existing model."""
     k = 0
-    while os.path.isfile(f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"):
+    while os.path.isfile(
+        f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"
+    ):
         k += 1
 
     return f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"
 
-def get_next_checkpoint_dir(
-        num_drones: int,
-        num_static_obs: int,
-        num_dynamic_obs: int
-):
+
+def get_next_checkpoint_dir(num_drones: int, num_static_obs: int, num_dynamic_obs: int):
     k = 0
-    while os.path.isdir(f"{MODELS_DIR}/sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"):
+    while os.path.isdir(
+        f"{MODELS_DIR}/sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"
+    ):
         k += 1
 
     return f"sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"
+
 
 # ---- CREATE ENV ----
 def create_env(
@@ -60,7 +66,7 @@ def create_env(
     num_dynamic_obstacles,
     max_episode_steps,
     lidar_enabled,
-    render_mode=None #"human"
+    render_mode=None,  # "human"
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -72,7 +78,7 @@ def create_env(
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
         render_mode=render_mode,
-        max_drones_per_swarm=MAX_DRONES_PER_SWARM
+        max_drones_per_swarm=MAX_DRONES_PER_SWARM,
     )
 
     # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on
@@ -186,15 +192,17 @@ def make_stage_callbacks(
         verbose=0,
     )
 
-    stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
+    stats_cb.reset_for_new_stage(
+        stage_start_ts=model_num_timesteps, stage_info=stage_info
+    )
 
-#TODO: ES CODE UNCOMMENT FOR ES
+    # TODO: ES CODE UNCOMMENT FOR ES
 
-    #stop_no_improve_cb = StopTrainingOnNoModelImprovement(
+    # stop_no_improve_cb = StopTrainingOnNoModelImprovement(
     #    max_no_improvement_evals=8,
     #    min_evals=3,
     #    verbose=1,
-    #)
+    # )
 
     # evaluate current policy on clean evaluate environment
     eval_cb = EvalCallback(
@@ -205,21 +213,23 @@ def make_stage_callbacks(
         n_eval_episodes=5,
         deterministic=True,
         render=False,
-        #callback_after_eval=stop_no_improve_cb,
+        # callback_after_eval=stop_no_improve_cb,
         verbose=1,
     )
 
-    return CallbackList([
-        progress_cb,
-        stats_cb,
-        ckpt_cb,
-        eval_cb,
-    ])
+    return CallbackList(
+        [
+            progress_cb,
+            stats_cb,
+            ckpt_cb,
+            eval_cb,
+        ]
+    )
 
 
 # ---- SAC TRAINING ----
 def train(device: str = "auto"):
-    """ Train the SAC model while looping through all curriculum stages."""
+    """Train the SAC model while looping through all curriculum stages."""
     os.makedirs(MODELS_DIR, exist_ok=True)
 
     if device == "auto":
@@ -229,7 +239,9 @@ def train(device: str = "auto"):
     print(f"Device: {device_}")
 
     curr = Curriculum().stages
-    total_planned_timesteps = int(sum(int(s[4]) for s in curr)) #sum of all curriculum stage timesteps
+    total_planned_timesteps = int(
+        sum(int(s[4]) for s in curr)
+    )  # sum of all curriculum stage timesteps
 
     # --- build stage-0 env ---
     ws0, nd0, ns0, ndyn0, steps0, horizon0, lidar0 = curr[0]
@@ -274,10 +286,9 @@ def train(device: str = "auto"):
         tensorboard_log=f"{MODELS_DIR}/tb_logs",
         verbose=0,
         device=device_,
-    ) # TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
+    )  # TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
 
     # --- train stage 0 first ---
-
 
     callbacks = make_stage_callbacks(
         stage_idx=0,
@@ -314,13 +325,13 @@ def train(device: str = "auto"):
 
     # --- curriculum stages ---
     for idx, (
-            world_scale,
-            num_drones,
-            num_static_obs,
-            num_dynamic_obs,
-            stage_steps,
-            episode_horizon,
-            lidar_enabled,
+        world_scale,
+        num_drones,
+        num_static_obs,
+        num_dynamic_obs,
+        stage_steps,
+        episode_horizon,
+        lidar_enabled,
     ) in enumerate(curr[1:], start=1):
         stage_steps = int(stage_steps)
 
@@ -394,9 +405,9 @@ def train(device: str = "auto"):
 
         # save the model up until now
         path = get_next_model_path(
-            num_drones = num_drones,
-            num_static_obs = num_static_obs,
-            num_dynamic_obs = num_dynamic_obs
+            num_drones=num_drones,
+            num_static_obs=num_static_obs,
+            num_dynamic_obs=num_dynamic_obs,
         )
 
         model.save(path)
