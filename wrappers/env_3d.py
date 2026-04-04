@@ -531,10 +531,10 @@ class DroneSwarm3D(ParallelEnv):
         or other drones.
         """
         for _ in range(max_attempts):
-            t = self.generate_target_xyz(swarm_edge, GOAL_EDGE_MARGIN)
+            t = self.generate_target_xyz(swarm_edge, TARGET_EDGE_MARGIN)
 
             drone_positions = self.spawn_positions[:self.total_num_drones]
-            possible_target = Target(color,t, GOAL_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
+            possible_target = Target(color, t, TARGET_RADIUS, physics_call= self._call_physics, call_gui=self._call_gui)
             if possible_target.isValidPosition(drone_positions, self._obstacles, min_dist):
                 possible_target.spawn_target()
                 return possible_target
@@ -651,7 +651,7 @@ class DroneSwarm3D(ParallelEnv):
             # Generate other attributes with some variability
             ori = [float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi)), float(self.rng.uniform(-np.pi, np.pi))]
             size = float(self.rng.uniform(0.8, 1.2))
-            speed = self.rng.uniform(0.8, 1.2)
+            speed = self.rng.uniform(0.5, 0.8)
             direction = self.rng.choice([-1,1])
 
             

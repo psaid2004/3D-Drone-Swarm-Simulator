@@ -17,17 +17,17 @@ TEAMMATE_SLICE = slice(15, 18) # vector to nearest teammate
 # =============================================================================
 # Swarm Spawn Variables
 # =============================================================================
-SWARM_RADIUS = 0.6 # Radius of swarm (AKA how far from the center can drones spawn)
+SWARM_RADIUS = 0.8 # Radius of swarm (AKA how far from the center can drones spawn)
 SWARM_EDGE_MARGIN = 1  # How far from environment border the swarm center is
-SWARM_MIN_SEPARATION = 0.15  # Min distance between drones in the swarm
+SWARM_MIN_SEPARATION = 0.25  # Min distance between drones in the swarm
 
 # =============================================================================
 # Goal
 # =============================================================================
-GOAL_RADIUS = 0.5 # actual radius of the goal
+TARGET_RADIUS = 0.5 # actual radius of the goal
 #TODO USE THIS FOR SPAWNING TARGETS
-GOAL_EDGE_MARGIN = 0.6  # Minimum distance between the wall and the goal
-GOAL_REACH_DISTANCE = 0.6 #0.4 # How close drone needs to be around goal to be a successful reach
+TARGET_EDGE_MARGIN = 0.6  # Minimum distance between the wall and the goal
+TARGET_REACH_DISTANCE = 0.6 #0.4 # How close drone needs to be around goal to be a successful reach
 COLORS =  [
     [0.0, 1.0, 0.0, 0.9],  # green
     [0.0, 0.0, 1.0, 0.9],  # blue

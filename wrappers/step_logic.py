@@ -8,7 +8,7 @@ from config.defaults import (
     DEFAULT_SWARM_MIN_SEP,
     COHESION_PEN,
     SEPARATION_PEN,
-    GOAL_REACH_DISTANCE,
+    TARGET_REACH_DISTANCE,
     POS_SLICE
 )
 
@@ -120,7 +120,7 @@ def compute_step_state(env, obs_dict) -> StepState:
         )
         dist = float(np.linalg.norm(target - pos))
 
-        if dist < GOAL_REACH_DISTANCE:
+        if dist < TARGET_REACH_DISTANCE:
             reached_now[i] = True
             env._reached_once[i] = True
 
