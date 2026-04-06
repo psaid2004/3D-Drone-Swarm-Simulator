@@ -86,6 +86,8 @@ class StepStatsCallback(BaseCallback):
         self._stage_start_ts = (
             0  # global timestep when current curriculum stage started
         )
+        self._stage_active_steps = 0
+
         self._should_stop = False  # flag to stop training
 
         self._episode_batch = {}
@@ -98,6 +100,7 @@ class StepStatsCallback(BaseCallback):
     ) -> None:
         self._consecutive_good = 0
         self._stage_start_ts = int(stage_start_ts)
+        self._stage_active_steps = 0
         self._should_stop = False
         self._episode_batch = {}
         self._episode_batch_counter = 0
@@ -545,7 +548,7 @@ class StepStatsCallback(BaseCallback):
         if self.stage_info is not None:
             si = self.stage_info
             total = max(1, si.total_planned_timesteps)
-            pct = 100.0 * self.num_timesteps / total
+            pct = 100.0 * self._stage_active_steps / max(1, si.stage_timesteps)
 
             self.logger.record("curriculum/stage_idx", float(si.stage_idx))
             self.logger.record("curriculum/world_scale", float(si.world_scale))
@@ -571,7 +574,7 @@ class StepStatsCallback(BaseCallback):
                 f"static={si.num_static_obstacles}, "
                 f"dynamic={si.num_dynamic_obstacles}, "
                 f"stage_ts={si.stage_timesteps} "
-                f"global_ts={self.num_timesteps}/{total} ({pct:.1f}%)\n"
+                f"active_steps={self._stage_active_steps}/{si.stage_timesteps} ({pct:.1f}%)\n"
             )
 
         # ---- Console print ----
@@ -618,6 +621,7 @@ class StepStatsCallback(BaseCallback):
     def _on_rollout_end(self) -> None:
         if self._agent_steps <= 0:
             return
+        self._stage_active_steps += self._agent_steps  # ← add this
 
         denom_all_drones_count = max(1, self.total_drone_count)
         denom_drones_steps = max(1, self._agent_steps)
@@ -684,7 +688,7 @@ class StepStatsCallback(BaseCallback):
             return
 
         steps_in_stage = self.num_timesteps - self._stage_start_ts
-        if steps_in_stage < self.min_stage_timesteps:
+        if self._stage_active_steps < self.min_stage_timesteps:
             return
 
         reach_rate = float(reaches_ever) / float(denom_all_drones_count)

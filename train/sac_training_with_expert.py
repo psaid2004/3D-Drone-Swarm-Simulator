@@ -249,7 +249,7 @@ def create_env(
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
-        render_mode=render_mode,
+        render_mode="human",
         max_drones_per_swarm=MAX_DRONES_PER_SWARM,
     )
 
