@@ -550,6 +550,8 @@ def train(device: str = "auto"):
         vn.save(norm_path)
         print(f"[SAVED VECNORMALIZE] {norm_path}")
 
+    all_stats_cbs = []  # ← add this before the stage-0 learn
+
     # --- curriculum stages ---
     for idx, (
         world_scale,
@@ -651,6 +653,11 @@ def train(device: str = "auto"):
             callback=callbacks,
             progress_bar=True,
         )
+        # ← ADD HERE
+        # after each curriculum stage learn:
+        stats_cb = callbacks.callbacks[0]
+        stats_cb.print_stage_summary()
+        all_stats_cbs.append(stats_cb)  # ← add this
 
         # save the model up until now
         path = get_next_model_path(
@@ -683,6 +690,10 @@ def train(device: str = "auto"):
     # wandb.finish()
 
     print("Training complete.")
+    # at the very end of train():
+    print("\n=== FULL TRAINING SUMMARY ===")
+    for cb in all_stats_cbs:
+        cb.print_stage_summary()
 
 
 if __name__ == "__main__":

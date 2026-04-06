@@ -102,6 +102,14 @@ class StepStatsCallback(BaseCallback):
         self._episode_batch = {}
         self._episode_batch_counter = 0
 
+        # ← ADD THESE
+        self._stage_reached = 0
+        self._stage_wall_collision = 0
+        self._stage_obstacle_collision = 0
+        self._stage_drone_collision = 0
+        self._stage_timeout = 0
+        self._stage_episodes = 0
+
         if stage_info is not None:
             self.stage_info = stage_info
 
@@ -342,6 +350,22 @@ class StepStatsCallback(BaseCallback):
                     )
 
                     self._flush_episode_batch_stats()
+                    # ← ADD HERE
+                    for ep in self._episode_batch.values():
+                        self._stage_episodes += 1
+                        if ep["reached"]:
+                            self._stage_reached += 1
+                        elif ep["wall_collision"]:
+                            self._stage_wall_collision += 1
+                        elif ep["obstacle_collision"]:
+                            self._stage_obstacle_collision += 1
+                        elif ep["drone_collision"]:
+                            self._stage_drone_collision += 1
+                        elif ep["truncated"] or (
+                                self.stage_info is not None
+                                and ep["ep_len"] >= self.stage_info.episode_horizon
+                        ):
+                            self._stage_timeout += 1
                     self._episode_batch = {}
 
             # -------------------------------------------------
@@ -695,3 +719,28 @@ class StepStatsCallback(BaseCallback):
             # self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
             # self.model.env.reset()  # optional: clean reset
             # TODO FIGURE OUT IF ABOVE TWO LINES ARE STILL NEEDED
+
+    def print_stage_summary(self) -> None:
+        total = max(1, self._stage_episodes)
+        si = self.stage_info
+
+        header = ""
+        if si is not None:
+            header = (
+                f"[Stage {si.stage_idx} Summary] "
+                f"scale={si.world_scale:.1f} "
+                f"drones={si.num_drones} "
+                f"static={si.num_static_obstacles} "
+                f"dynamic={si.num_dynamic_obstacles}\n"
+            )
+
+        print(
+            header
+            + f"  Total episodes    : {total}\n"
+            + f"  Reached target    : {self._stage_reached} ({100*self._stage_reached/total:.1f}%)\n"
+            + f"  Wall collision    : {self._stage_wall_collision} ({100*self._stage_wall_collision/total:.1f}%)\n"
+            + f"  Obstacle collision: {self._stage_obstacle_collision} ({100*self._stage_obstacle_collision/total:.1f}%)\n"
+            + f"  Drone collision   : {self._stage_drone_collision} ({100*self._stage_drone_collision/total:.1f}%)\n"
+            + f"  Timeout           : {self._stage_timeout} ({100*self._stage_timeout/total:.1f}%)\n",
+            flush=True,
+        )

@@ -93,9 +93,8 @@ def compute_rewards(
         if env._step_count <= 1:
             r_progress = 0.0
         else:
-            r_progress = PROG_COEF * (
-                prev_dist_to_target - dist_to_target
-            )  # reward for change in distance to target
+            raw_progress = prev_dist_to_target - dist_to_target
+            r_progress = PROG_COEF * raw_progress * dist_to_target# reward for change in distance to target
 
         if not env.lidar:
             # easier reward during early curriculum
@@ -176,13 +175,13 @@ def compute_rewards(
             r_progress
             + r_distance_pen
             + r_time
-            + r_ctrl
-            + r_near
-            + r_align
-            + r_tan
+            # + r_ctrl
+            # + r_near
+            # + r_align
+            # + r_tan
             + r_final
-            + step_state.cohesion_pen
-            + step_state.sep_pen
+            # + step_state.cohesion_pen
+            # + step_state.sep_pen
         )
         r_info = {"r_progress": r_progress}
 
@@ -196,8 +195,8 @@ def compute_rewards(
                 r -= 0.25 * TRUNC_PEN
 
         # penalty for if drone has no / little speed (is not moving)
-        if speed < 0.1:
-            r -= ZERO_SPEED_PEN
+        # if speed < 0.1:
+        #     r -= ZERO_SPEED_PEN
 
         # print(r_info)
         # print(r)

@@ -7,7 +7,7 @@ from envs.createObjects import EnvObject
 from config.defaults import (
     POS_SLICE,
     TARGET_SLICE,
-    GOAL_REACH_DISTANCE,
+    TARGET_REACH_DISTANCE,
     LIDAR_NUM_RAYS,
     LIDAR_NUM_LAYERS,
 )
@@ -72,7 +72,7 @@ while not done:
     direction = unit_vec(to_target)
 
     # move straight toward target
-    if dist < GOAL_REACH_DISTANCE:
+    if dist < TARGET_REACH_DISTANCE:
         action = np.array([0.0, 0.0, 0.0, -1.0], dtype=np.float32)
     else:
         action = np.array(

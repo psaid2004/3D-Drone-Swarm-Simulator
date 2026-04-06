@@ -175,11 +175,28 @@ def compute_step_state(env, obs_dict) -> StepState:
         sep_pen=float(sep_pen),
     )
 
+#
+# def compute_terminations(env, step_state) -> Tuple[dict, dict]:
+#     """Compute terminations."""
+#     term_dict = {}  # whether agent terminated
+#     trunc_dict = {}  # whether agent is truncated by time limit
+#
+#     for i, agent in enumerate(env.possible_agents):
+#         if i >= env.total_num_drones:
+#             term_dict[agent] = False
+#             trunc_dict[agent] = False
+#             continue
+#
+#         term_dict[agent] = bool(
+#             env._dead[i] or env._reached_once[i] or step_state.episode_done
+#         )
+#         trunc_dict[agent] = bool(step_state.time_limit)
+#
+#     return term_dict, trunc_dict
 
 def compute_terminations(env, step_state) -> Tuple[dict, dict]:
-    """Compute terminations."""
-    term_dict = {}  # whether agent terminated
-    trunc_dict = {}  # whether agent is truncated by time limit
+    term_dict = {}
+    trunc_dict = {}
 
     for i, agent in enumerate(env.possible_agents):
         if i >= env.total_num_drones:
@@ -187,12 +204,12 @@ def compute_terminations(env, step_state) -> Tuple[dict, dict]:
             trunc_dict[agent] = False
             continue
 
-        term_dict[agent] = bool(
-            env._dead[i] or env._reached_once[i] or step_state.episode_done
-        )
+        term_dict[agent] = bool(step_state.episode_done and not step_state.time_limit)
         trunc_dict[agent] = bool(step_state.time_limit)
 
     return term_dict, trunc_dict
+
+
 
 
 def build_info_dict(env, step_state) -> dict:

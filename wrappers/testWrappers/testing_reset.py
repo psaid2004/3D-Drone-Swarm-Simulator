@@ -69,7 +69,7 @@ def run_episode(env, n_steps):
 
 def main():
     n_drones = 2
-    n_steps = 1000
+    n_steps = 100
 
     pz_env = DroneSwarm3D(
         world_scale=5.0,
