@@ -118,9 +118,18 @@ class EvaluateTraining:
                 trunc = {a: False for a in self.env.possible_agents}
 
                 while True:
+                    #act_dict = {
+                    #    a: model.predict(obs, deterministic=True)[0]
+                    #    for a, obs in obs_dict.items()
+                    #}
+
+                    agents = list(obs_dict.keys())
+                    obs_batch = np.stack([obs_dict[a] for a in agents], axis=0)
+                    act_batch, _ = model.predict(obs_batch, deterministic=True)
+
                     act_dict = {
-                        a: model.predict(obs, deterministic=True)[0]
-                        for a, obs in obs_dict.items()
+                        agent: act_batch[i]
+                        for i, agent in enumerate(agents)
                     }
 
                     obs_dict, _rew_dict, done, trunc, info = self.env.step(act_dict)
@@ -259,7 +268,7 @@ if __name__ == "__main__":
         n_static_obstacles=8,
         n_dynamic_obstacles=2,
         lidar=True,
-        render_mode="Human",
+        render_mode=None, #"human",
     )
     evaluation.evaluate_model()
 
