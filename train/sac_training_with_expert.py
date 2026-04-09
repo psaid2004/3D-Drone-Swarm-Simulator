@@ -400,6 +400,7 @@ def make_stage_callbacks(
         blend_end=blend_end,
         stage_timesteps=stage_steps,
         stage_start_ts=model_num_timesteps,
+        stats_cb = stats_cb
     )
 
     return CallbackList(
@@ -509,7 +510,7 @@ def train(device: str = "auto"):
         policy_kwargs=dict(
             net_arch=NET_ARCH,
             expert_policy=expert,
-            blend_ratio=INITIAL_BLEND,
+            blend_ratio=0, #Set to zero was INITIAL_BLEND before
         ),
     )
 
@@ -605,6 +606,8 @@ def train(device: str = "auto"):
             rb.n_envs = actual_n_envs
 
         safe_close(old_train_env)  # close only after everything is transferred
+        print(f"[DEBUG] blend_ratio after set_env: {model.policy.blend_ratio:.4f}")
+
         # -------------------------------------------
 
         print(f"\n=== Stage {idx} | world={world_scale} drones={num_drones} "
