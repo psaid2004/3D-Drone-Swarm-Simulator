@@ -249,7 +249,7 @@ def create_env(
         num_dynamic_obstacles=num_dynamic_obstacles,
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
-        render_mode="human",
+        render_mode=None,
         max_drones_per_swarm=MAX_DRONES_PER_SWARM,
     )
 
@@ -321,6 +321,7 @@ def make_stage_callbacks(
     episode_horizon: int,
     total_planned_timesteps: int,
     model_num_timesteps: int,
+    blend_start, blend_end
 ):
     """
     Build the full callback stack for one curriculum stage.
@@ -395,9 +396,10 @@ def make_stage_callbacks(
     # )
 
     blend_cb = BlendScheduleCallback(
-        initial_blend=INITIAL_BLEND,
-        final_blend=FINAL_BLEND,
-        total_timesteps=total_planned_timesteps,
+        blend_start=blend_start,
+        blend_end=blend_end,
+        stage_timesteps=stage_steps,
+        stage_start_ts=model_num_timesteps,
     )
 
     return CallbackList(
@@ -430,7 +432,7 @@ def train(device: str = "auto"):
 
     # --- build stage-0 env ---
 
-    ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0 = curr[0]
+    ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0, blend_s0, blend_e0 = curr[0]
     print(
         f"\n=== Stage 0 | world={ws0} active drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
@@ -516,6 +518,8 @@ def train(device: str = "auto"):
         model.policy.set_vec_normalise(vn)
 
     # --- train stage 0 first ---
+    all_stats_cbs = []
+
 
     callbacks = make_stage_callbacks(
         stage_idx=0,
@@ -527,14 +531,18 @@ def train(device: str = "auto"):
         episode_horizon=steps_per_episode,
         total_planned_timesteps=total_planned_timesteps,
         model_num_timesteps=model.num_timesteps,
+        blend_start=blend_s0,
+        blend_end=blend_e0,
     )
 
     model.learn(
-        total_timesteps=steps0,
+        total_timesteps=steps0 * 10, # 10* due to masked drones
         reset_num_timesteps=False,
         callback=callbacks,
         progress_bar=True,
     )
+
+    all_stats_cbs.append(callbacks.callbacks[0])
 
     path = get_next_model_path(
         num_drones=nd0,
@@ -550,42 +558,14 @@ def train(device: str = "auto"):
         vn.save(norm_path)
         print(f"[SAVED VECNORMALIZE] {norm_path}")
 
-    all_stats_cbs = []  # ← add this before the stage-0 learn
 
     # --- curriculum stages ---
-    for idx, (
-        world_scale,
-        num_drones,
-        num_static_obs,
-        num_dynamic_obs,
-        stage_steps,
-        steps_per_episode,
-        lidar_enabled,
-    ) in enumerate(curr[1:], start=1):
+    for idx, (world_scale, num_drones, num_static_obs, num_dynamic_obs,
+              stage_steps, steps_per_episode, lidar_enabled,
+              blend_start, blend_end) in enumerate(curr[1:], start=1):
+
         stage_steps = int(stage_steps)
-
-        print(
-            f"\n=== Stage {idx} | world={world_scale} "
-            f"drones={num_drones} static={num_static_obs} "
-            f"dynamic={num_dynamic_obs} steps={stage_steps} ==="
-        )
-
-        new_expert = ExpertPolicy(world_scale=world_scale, use_lidar=lidar_enabled)
-        model.policy.expert = new_expert
-
-        # wandb.log({
-        #     "curriculum/current_stage": idx,
-        #     "curriculum/world_scale": world_scale,
-        #     "curriculum/active_drones": num_drones,
-        #     "curriculum/static_obstacles": num_static_obs,
-        #     "curriculum/dynamic_obstacles": num_dynamic_obs,
-        #     "curriculum/episode_horizon": steps_per_episode,
-        #     "curriculum/lidar_enabled": int(lidar_enabled),
-        # }, step=model.num_timesteps)
-
-        # swap envs
         old_train_env = model.get_env()
-        # old_eval_env = eval_env
 
         new_train_env = create_env(
             world_scale=world_scale,
@@ -596,42 +576,40 @@ def train(device: str = "auto"):
             lidar_enabled=lidar_enabled,
         )
 
-        # new_eval_env = create_env(
-        #     world_scale=world_scale,
-        #     num_drones=num_drones,
-        #     num_static_obstacles=num_static_obs,
-        #     num_dynamic_obstacles=num_dynamic_obs,
-        #     max_episode_steps=steps_per_episode,
-        #     lidar_enabled=lidar_enabled,
-        # )
-
-        # Carry normalization stats forward.
         copy_vec_normalize_stats(old_train_env, new_train_env)
-        # copy_vec_normalize_stats(old_train_env, new_eval_env)
 
         if model.observation_space != new_train_env.observation_space:
-            raise ValueError(
-                f"Observation space changed across stages.\n"
-                f"model.observation_space={model.observation_space}\n"
-                f"new_train_env.observation_space={new_train_env.observation_space}"
-            )
+            safe_close(new_train_env)
+            raise ValueError(f"Obs space mismatch at stage {idx}")
 
         if model.action_space != new_train_env.action_space:
-            raise ValueError(
-                f"Action space changed across stages.\n"
-                f"model.action_space={model.action_space}\n"
-                f"new_train_env.action_space={new_train_env.action_space}"
-            )
+            safe_close(new_train_env)
+            raise ValueError(f"Action space mismatch at stage {idx}")
 
+        # ---- swap everything in the right order ----
         model.set_env(new_train_env)
-        # eval_env = new_eval_env
 
-        # safe_close(old_eval_env)
-        safe_close(old_train_env)
+        new_expert = ExpertPolicy(world_scale=world_scale, use_lidar=lidar_enabled)
+        model.policy.expert = new_expert
+        model.policy.blend_ratio = blend_start
 
         vn = unwrap_vec_normalize(new_train_env)
         if vn is not None:
             model.policy.set_vec_normalise(vn)
+
+        # resize replay buffer mask if drone count changed
+        actual_n_envs = new_train_env.num_envs
+        rb = model.replay_buffer
+        if hasattr(rb, 'active_mask') and rb.active_mask.shape[1] != actual_n_envs:
+            rb.active_mask = np.zeros((rb.buffer_size, actual_n_envs), dtype=np.bool_)
+            rb.n_envs = actual_n_envs
+
+        safe_close(old_train_env)  # close only after everything is transferred
+        # -------------------------------------------
+
+        print(f"\n=== Stage {idx} | world={world_scale} drones={num_drones} "
+              f"static={num_static_obs} dynamic={num_dynamic_obs} "
+              f"steps={stage_steps} blend={blend_start:.2f}→{blend_end:.2f} ===")
 
         callbacks = make_stage_callbacks(
             stage_idx=idx,
@@ -643,40 +621,28 @@ def train(device: str = "auto"):
             episode_horizon=steps_per_episode,
             total_planned_timesteps=total_planned_timesteps,
             model_num_timesteps=model.num_timesteps,
+            blend_start=blend_start,  # ← correct variables
+            blend_end=blend_end,  # ← correct variables
         )
 
-        print(f"timesteps={model.num_timesteps}, blend={model.policy.blend_ratio:.4f}")
-
         model.learn(
-            total_timesteps=stage_steps,
+            total_timesteps=stage_steps * 10, # 10* due to masked drones
             reset_num_timesteps=False,
             callback=callbacks,
             progress_bar=True,
         )
-        # ← ADD HERE
-        # after each curriculum stage learn:
+
         stats_cb = callbacks.callbacks[0]
         stats_cb.print_stage_summary()
-        all_stats_cbs.append(stats_cb)  # ← add this
+        all_stats_cbs.append(stats_cb)
 
-        # save the model up until now
-        path = get_next_model_path(
-            num_drones=num_drones,
-            num_static_obs=num_static_obs,
-            num_dynamic_obs=num_dynamic_obs,
-        )
-
+        path = get_next_model_path(num_drones=num_drones,
+                                   num_static_obs=num_static_obs,
+                                   num_dynamic_obs=num_dynamic_obs)
         model.save(path)
-        print(f"[SAVED MODEL] {path}")
-
-        # save the normalised observation to use during evaluation
         vn = unwrap_vec_normalize(model.get_env())
         if vn is not None:
-            norm_path = path.replace(".zip", "_vec_normalize.pkl")
-            vn.save(norm_path)
-            print(f"[SAVED VECNORMALIZE] {norm_path}")
-
-        train_env = new_train_env
+            vn.save(path.replace(".zip", "_vec_normalize.pkl"))
 
     # save the final normalised values
     final_vn = unwrap_vec_normalize(model.get_env())
@@ -685,7 +651,7 @@ def train(device: str = "auto"):
         final_vn.save(final_norm_path)
         print(f"[SAVED FINAL VEC_NORMALIZE] {final_norm_path}")
 
-    safe_close(train_env)
+    safe_close(model.get_env())
 
     # wandb.finish()
 

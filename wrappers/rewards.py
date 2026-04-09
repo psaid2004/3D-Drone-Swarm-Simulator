@@ -90,21 +90,16 @@ def compute_rewards(
 
         # --------------- 3. Progress, distance, time, and action cost ---------------
 
-        if env._step_count <= 1:
+        if env._step_count == 0:
             r_progress = 0.0
         else:
             raw_progress = prev_dist_to_target - dist_to_target
-            r_progress = PROG_COEF * raw_progress * dist_to_target# reward for change in distance to target
+            r_progress = PROG_COEF * raw_progress # reward for change in distance to target
 
-        if not env.lidar:
-            # easier reward during early curriculum
-            r_distance_pen = -0.25 * DIST_PEN * dist_to_target
-            r_time = -0.25 * TIME_PEN
-            r_ctrl = 0.0
-        else:
-            r_distance_pen = -DIST_PEN * dist_to_target
-            r_time = -TIME_PEN
-            r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i]))
+
+        r_distance_pen = -DIST_PEN * dist_to_target
+        r_time = -TIME_PEN
+        r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i]))
 
         # --------------- 4. Alignment reward ---------------
 
@@ -112,7 +107,8 @@ def compute_rewards(
         speed = float(np.linalg.norm(vel))
 
         # +0.5 if moving directly toward target, else - 0.5
-        r_align = 0.0 if not env.lidar else ALIGN_COEF * alignment
+        if alignment > 0:
+            r_align = ALIGN_COEF * alignment
 
         # --------------- 5. Final-mile shaping ---------------
 
@@ -174,12 +170,12 @@ def compute_rewards(
         r = (
             r_progress
             + r_distance_pen
-            + r_time
+            # + r_time
             # + r_ctrl
             # + r_near
-            # + r_align
+            + r_align
             # + r_tan
-            + r_final
+            # + r_final
             # + step_state.cohesion_pen
             # + step_state.sep_pen
         )

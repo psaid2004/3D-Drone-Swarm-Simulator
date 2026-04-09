@@ -26,11 +26,20 @@ class Curriculum:
     - stage_training_timesteps = how long to train in that curriculum stage
     - episode_horizon = per-episode max number of steps before truncation
     - lidar_enabled = whether LiDAR is included in the observation/action logic for that stage
+    - blend_start: expert ratio at start of this stage (1.0 = full expert)
+    - blend_end:   expert ratio at end of this stage   (0.0 = pure RL)
     """
 
     def __init__(self):
-        self.stages: List[Tuple[float, int, int, int, int, int, bool]] = [
-            (3, 3, 0, 0, 300_000, 1500, True),
+        self.stages: List[Tuple[float, int, int, int, int, int, bool,float, float]] = [
+            (2, 1, 0, 0, 10_000, 1200, True, 0.9, 0.7),  # stage 0
+            # (2, 1, 0, 0, 5_000_000, 1500, True, 0.7, 0.4),  # stage 1
+            # (2, 1, 0, 0, 5_500_000, 1700, True, 0.4, 0.2),
+            # (2, 1, 0, 0, 7_000_000, 2000, True, 0.2, 0.0),
+
+            # (4, 1, 0, 0, 400_000, 2500, True),
+            #
+            # (3, 3, 0, 0, 300_000, 1500, True),
             # (3, 5, 0, 0, 350_000, 1700, True),
             # (4, 8, 0, 0, 400_000, 2000, True),
             #
@@ -48,6 +57,8 @@ class Curriculum:
             # (7, 8, 8, 2, 550_000, 3300, True),
             # (8, 10, 8, 3, 600_000, 3600, True),
             # (9, 10, 10, 4, 700_000, 3900, True),
+            # (3, 3, 0, 0, 300_000, 1500, True),
+
             # ---- SINGLE DRONE ----
             # (2, 1, 0, 0, 700_000, 700, True),   # Stage 0: one drone, empty world
             # (3, 1, 0, 0, 700_000, 750, False),  # Stage 0: one drone, empty world

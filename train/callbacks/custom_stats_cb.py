@@ -280,6 +280,10 @@ class StepStatsCallback(BaseCallback):
                 if len(self._episode_batch) == self.num_envs:
                     self._episode_batch_counter += 1
 
+                    # Print blend ratio per episode (debugging)
+                    blend_ratio = self.model.policy.blend_ratio
+                    print(f"[BlendRatio] {blend_ratio:.4f}", flush=True)
+
                     print(
                         f"\n[EpisodeBatch {self._episode_batch_counter}] all {self.num_envs} envs concluded once:",
                         flush=True,
@@ -381,6 +385,7 @@ class StepStatsCallback(BaseCallback):
 
             self._agent_steps += 1
             self._print_agent_steps += 1
+            self._stage_active_steps += 1
 
             self._dist_to_target_sum += dist_to_target
             self._cmd_speed_sum += cmd_speed
@@ -564,7 +569,8 @@ class StepStatsCallback(BaseCallback):
             )
             self.logger.record("curriculum/stage_timesteps", float(si.stage_timesteps))
             self.logger.record(
-                "curriculum/progress_frac", float(self.num_timesteps) / float(total)
+                "curriculum/progress_frac", float(self._stage_active_steps) / float(max(1, si.stage_timesteps))
+
             )
 
             prefix = (
@@ -621,7 +627,6 @@ class StepStatsCallback(BaseCallback):
     def _on_rollout_end(self) -> None:
         if self._agent_steps <= 0:
             return
-        self._stage_active_steps += self._agent_steps  # ← add this
 
         denom_all_drones_count = max(1, self.total_drone_count)
         denom_drones_steps = max(1, self._agent_steps)
@@ -687,7 +692,6 @@ class StepStatsCallback(BaseCallback):
         if not self.enable_stage_early_stop:
             return
 
-        steps_in_stage = self.num_timesteps - self._stage_start_ts
         if self._stage_active_steps < self.min_stage_timesteps:
             return
 
@@ -714,13 +718,13 @@ class StepStatsCallback(BaseCallback):
 
         if self._consecutive_good >= self.patience:
             self._should_stop = True
-            if self.verbose >= 1:
-                print(
-                    f"[StageEarlyStop] triggered at num_timesteps={self.num_timesteps} "
-                    f"(stage_steps={steps_in_stage})",
-                    flush=True,
-                )
-            # self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
+            print(
+                f"[StageEarlyStop] triggered at active_steps={self._stage_active_steps} "
+                f"(budget={self.stage_info.stage_timesteps if self.stage_info else 'N/A'} "
+                f"streak={self._consecutive_good}/{self.patience})",
+                flush=True,
+            )
+        # self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
             # self.model.env.reset()  # optional: clean reset
             # TODO FIGURE OUT IF ABOVE TWO LINES ARE STILL NEEDED
 
