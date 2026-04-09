@@ -80,7 +80,7 @@ CNTRL_PEN = (
 NEAR_OBS_PEN = 0.0  # penalty for being too close to an obstacle
 NEAR_FRONT_OBS_PEN = 0.0  # penalty for being too close to an obstacle in front of drone
 NEAR_SIDE_OBS_PEN = 0.0  # penalty for being too close to an obstacle on side of drone
-DIST_PEN = 0.0 # Deactive for early stages  # 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
+DIST_PEN = 0.15  # 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 ZERO_SPEED_PEN = 0.0  # penalty for drone not moving
 ALIGN_COEF = 0.1
 
