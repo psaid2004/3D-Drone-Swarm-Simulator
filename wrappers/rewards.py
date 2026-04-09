@@ -107,8 +107,10 @@ def compute_rewards(
         speed = float(np.linalg.norm(vel))
 
         # +0.5 if moving directly toward target, else - 0.5
+        r_align = 0
         if alignment > 0:
             r_align = ALIGN_COEF * alignment
+
 
         # --------------- 5. Final-mile shaping ---------------
 
