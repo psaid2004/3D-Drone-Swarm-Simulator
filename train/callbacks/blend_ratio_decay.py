@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 from stable_baselines3.common.callbacks import BaseCallback
+from config.defaults import *
+
 
 
 class BlendScheduleCallback(BaseCallback):
@@ -19,7 +21,7 @@ class BlendScheduleCallback(BaseCallback):
         self.stage_start_ts = stage_start_ts
 
     def _on_step(self) -> bool:
-        steps_into_stage = self.model.num_timesteps - self.stage_start_ts
+        steps_into_stage = self.model.num_timesteps/MAX_DRONES_PER_SWARM - self.stage_start_ts #due to masked drones
         progress = min(steps_into_stage / self.stage_timesteps, 1.0)
         blend = self.blend_start + progress * (self.blend_end - self.blend_start)
         self.model.policy.blend_ratio = float(blend)

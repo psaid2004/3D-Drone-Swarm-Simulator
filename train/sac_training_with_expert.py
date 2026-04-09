@@ -536,7 +536,7 @@ def train(device: str = "auto"):
     )
 
     model.learn(
-        total_timesteps=steps0 * 10, # 10* due to masked drones
+        total_timesteps=steps0 * MAX_DRONES_PER_SWARM, # due to masked drones
         reset_num_timesteps=False,
         callback=callbacks,
         progress_bar=True,
@@ -626,7 +626,7 @@ def train(device: str = "auto"):
         )
 
         model.learn(
-            total_timesteps=stage_steps * 10, # 10* due to masked drones
+            total_timesteps=stage_steps * MAX_DRONES_PER_SWARM, # due to masked drones
             reset_num_timesteps=False,
             callback=callbacks,
             progress_bar=True,

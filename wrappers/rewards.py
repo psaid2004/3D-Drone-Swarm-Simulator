@@ -171,7 +171,7 @@ def compute_rewards(
 
         r = (
             r_progress
-            + r_distance_pen
+            # + r_distance_pen
             # + r_time
             # + r_ctrl
             # + r_near
