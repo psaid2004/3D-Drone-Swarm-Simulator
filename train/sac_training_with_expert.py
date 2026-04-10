@@ -643,11 +643,26 @@ def train(device: str = "auto"):
                                    num_static_obs=num_static_obs,
                                    num_dynamic_obs=num_dynamic_obs)
         model.save(path)
+
+        print(f"[SAVED MODEL] {path}")
         vn = unwrap_vec_normalize(model.get_env())
         if vn is not None:
-            vn.save(path.replace(".zip", "_vec_normalize.pkl"))
+            norm_path = path.replace(".zip", "_vec_normalize.pkl")
+            vn.save(norm_path)
+            print(f"[SAVED VECNORMALIZE] {norm_path}")
 
     # save the final normalised values
+    final_vn = unwrap_vec_normalize(model.get_env())
+    if final_vn is not None:
+        final_norm_path = f"{MODELS_DIR}/final_vec_normalize.pkl"
+        final_vn.save(final_norm_path)
+        print(f"[SAVED FINAL VEC_NORMALIZE] {final_norm_path}")
+
+    # Save final model BEFORE closing the env
+    final_path = f"{MODELS_DIR}/final_model.zip"
+    model.save(final_path)
+    print(f"[SAVED FINAL MODEL] {final_path}")
+
     final_vn = unwrap_vec_normalize(model.get_env())
     if final_vn is not None:
         final_norm_path = f"{MODELS_DIR}/final_vec_normalize.pkl"

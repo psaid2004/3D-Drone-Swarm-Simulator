@@ -197,6 +197,7 @@ class StepStatsCallback(BaseCallback):
         env_step_idx = self._env_steps
         self._env_steps += 1
         self._print_env_steps += 1
+        self._stage_active_steps += 1
 
         reached_this_step = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
         active_this_step = np.zeros((self.num_envs, self.num_drones), dtype=np.bool_)
@@ -385,7 +386,6 @@ class StepStatsCallback(BaseCallback):
 
             self._agent_steps += 1
             self._print_agent_steps += 1
-            self._stage_active_steps += 1
 
             self._dist_to_target_sum += dist_to_target
             self._cmd_speed_sum += cmd_speed
