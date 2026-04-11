@@ -243,7 +243,6 @@ def run_stage_transition_test(max_drones: int = 10) -> None:
     Mimics curriculum stage transition without SB3:
     stage 0 -> 1 active drone
     stage 1 -> 2 active drones
-    both with same fixed max capacity
     """
     print(f"\n=== STAGE TRANSITION TEST | max_drones={max_drones} ===")
 
@@ -298,13 +297,10 @@ def run_stage_transition_test(max_drones: int = 10) -> None:
 
 
 def main():
-    # 1) visual smoke test
     run_episode(active_drones=4, max_drones=10, n_steps=8000, render=True)
 
-    # 2) reset stability
     run_reset_test(active_drones=1, max_drones=10, n_steps_before_reset=50)
 
-    # 3) stage-like change in active drone count
     run_stage_transition_test(max_drones=10)
 
     print("\nALL TESTS PASSED")
