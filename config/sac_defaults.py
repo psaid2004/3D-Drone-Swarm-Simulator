@@ -6,9 +6,9 @@ This file defines defaults for the parameters of SAC.
 GAMMA           = 0.99
 BATCH_SIZE      = 128
 BUFFER_SIZE     = 300000
-LEARNING_STARTS = 2000         # random exploration before training begins
-TRAIN_FREQ      = 500           # env steps between gradient updates
-GRADIENT_STEPS  = 1250           # gradient updates per train_freq
+LEARNING_STARTS = 500            # random exploration before training begins
+TRAIN_FREQ      = 500            # env steps between gradient updates
+GRADIENT_STEPS  = 1750           # gradient updates per train_freq
 LEARNING_RATE   = 3e-4
 ENTROPY_COEF    = "auto"
 
@@ -20,4 +20,4 @@ N_ENVS = 4
 # ---- EXPERT CONFIG ----
 INITIAL_BLEND   = 0.8        # expert weight at start
 FINAL_BLEND     = 0.0        # pure RL at end
-BLEND_DECAY_FRAC = 0.30       # fraction of total timesteps to decay over # TODO I MADE THIS LESS BUT DEPENDS ON CURRICULUM SO ONCE THAT IS SET, I CAN FIGURE OUT WHAT THIS WILL BE
+BLEND_DECAY_FRAC = 0.35       # fraction of total timesteps to decay over # TODO I MADE THIS LESS BUT DEPENDS ON CURRICULUM SO ONCE THAT IS SET, I CAN FIGURE OUT WHAT THIS WILL BE

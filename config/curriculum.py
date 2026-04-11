@@ -30,7 +30,7 @@ class Curriculum:
 
     def __init__(self):
 
-        self.stages: List[Tuple[float, int, int, int, int, int, bool, str]] = [
+        self.stages: List[Tuple[float, int, int, int, int, int, bool, None]] = [
 
             (3, 3, 0, 0, 300_000, 1500, True, None),
             (3, 5, 0, 0, 350_000, 1700, True, None),
@@ -49,12 +49,14 @@ class Curriculum:
 
             (9, 10, 10, 4, 700_000, 4100, True, None),
 
-            (4, 10, 10, 6, 700_000, 3000, True, None),
-            (5, 10, 10, 8, 700_000, 3500, True, None),
+            (4, 10, 10, 6, 900_000, 3000, True, None),
+            (5, 10, 10, 8, 900_000, 3500, True, None),
 
-            (5, 10, 0, 0, 400_000, 3000, True, "wall_holes"),
-            (5, 10, 0, 0, 400_000, 3000, True, "two_walls_with_holes"),
-            (4, 10, 0, 0, 400_000, 2500, True, "hallway"),
+            (6, 10, 10, 14, 900_000, 3500, True, None),
+
+            # (5, 10, 0, 0, 400_000, 3000, True, "wall_holes"),
+            # (5, 10, 0, 0, 400_000, 3000, True, "two_walls_with_holes"),
+            # (4, 10, 0, 0, 400_000, 2500, True, "hallway"),
         ]
         self.current_stage = 0
 

@@ -7,12 +7,12 @@ from train.expert_blender import ExpertPolicy
 
 
 def main():
-    n_drones = 2
-    n_static_obstacles = 10
-    n_dynamic_obstacles = 5
+    n_drones = 10
+    n_static_obstacles = 15
+    n_dynamic_obstacles = 0
     n_steps = 8000
     use_lidar = True
-    num_swarms = 1
+    num_swarms = 2
     world_scale = 3.0
 
     env = DroneSwarm3D(
