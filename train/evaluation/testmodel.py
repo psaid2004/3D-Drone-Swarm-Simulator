@@ -1,13 +1,25 @@
 # -*- coding: utf-8 -*-
+import json
 import os
 from stable_baselines3 import SAC
 import numpy as np
+
+from train.expert_blender import ExpertPolicy
+from train.sac_training_with_expert import ExpertBlendPolicy
 from wrappers.env_3d import DroneSwarm3D
 from pathlib import Path
 from envs.createObjects import EnvObject, Dynamic
 
 
-class SingleEpisodeRunner:
+class TestModel:
+    """ Class created to manually test and view effectiveness of trained models
+        The model name is described by the configuration of the curriculum it was trained one i.e:
+        -n_drones : Number of drones
+        -n_static_obstacles : Number of static obstacles
+        -n_dynamic_obstacles : Number of dynamic obstacles
+        -model_num : The number of the model, to differentiate models with same configurations
+
+    """
     def __init__(
         self,
         n_drones: int,
@@ -28,6 +40,7 @@ class SingleEpisodeRunner:
         self.max_steps = max_steps
         self.model_num = model_num
 
+        # Path configurations
         MODELS_DIR = "models"
         self.MODEL_PREFIX = "sac"
 
@@ -35,9 +48,11 @@ class SingleEpisodeRunner:
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         )
 
+        # Find the specifc file based on the inputs
         self.MODEL_NAME = f"{self.MODEL_PREFIX}_{self.model_num}_{self.n_drones}_{self.n_static_obstacles}_{self.n_dynamic_obstacles}"
         self.MODEL_PATH = os.path.join(PROJECT_ROOT, MODELS_DIR, f"{self.MODEL_NAME}")
 
+        # Create environment to test model
         self.env = DroneSwarm3D(
             world_scale=self.world_scale,
             num_drones_per_swarm=self.n_drones,
@@ -48,18 +63,21 @@ class SingleEpisodeRunner:
             render_mode=self.render_mode,
         )
 
+
+        # Load environments for specfic scenarios
         # --- Uncomment to load scenarios ---
-        scenarios = self.get_ml_test_scenarios()
-        selected_scenario = "hallway"
-        object_configs = scenarios[selected_scenario]()
 
-        self.obs_dict, self.info = self.env.reset()
-
-        # --- Uncomment to apply scenario ---
-
-        self.apply_object_config(self.env, object_configs)
+        # scenarios = self.get_ml_test_scenarios()
+        #
+        # #Change the scenarios below
+        # selected_scenario = "hallway" #hallway/two_walls_with_holes/wall_holes
+        # object_configs = scenarios[selected_scenario]()
+        #
+        # obs_dict, self.info = self.env.reset()
+        # self.apply_object_config(self.env, object_configs)
 
     def _load_model(self):
+        """ Load the trained model """
         model = SAC.load(
             self.MODEL_PATH,
             custom_objects={
@@ -69,21 +87,14 @@ class SingleEpisodeRunner:
             print_system_info=True,
         )
 
-        # Reattach runtime expert object used by ExpertBlendPolicy
-        model.policy.expert = ExpertPolicy(
-            world_scale=self.world_scale,
-            use_lidar=self.lidar,
-        )
-
         return model
 
     def run_episode(self, seed: int = None):
         model = self._load_model()
 
-        # obs_dict, _ = self.env.reset(seed=seed)
+        # Choose a set seed if desired
+        obs_dict, _ = self.env.reset(seed=seed)
 
-        done = {a: False for a in self.env.possible_agents}
-        trunc = {a: False for a in self.env.possible_agents}
         ep_len = 0
 
         # ---- episode counters ----
@@ -102,9 +113,8 @@ class SingleEpisodeRunner:
             # Get deterministic actions
             act_dict = {
                 a: model.predict(obs, deterministic=True)[0]
-                for a, obs in self.obs_dict.items()
+                for a, obs in obs_dict.items()
             }
-            obs_dict, _, done, trunc, info = self.env.step(act_dict)
 
             obs_dict, rewards, done, trunc, info = self.env.step(act_dict)
 
@@ -255,11 +265,12 @@ class SingleEpisodeRunner:
 
 
 if __name__ == "__main__":
-    runner = SingleEpisodeRunner(
-        model_num=0,
-        n_drones=8,
-        n_static_obstacles=8,
-        n_dynamic_obstacles=2,
+    """The values below must be changed to match the name of the model"""
+    runner = TestModel(
+        model_num=6,
+        n_drones=2,
+        n_static_obstacles=0,
+        n_dynamic_obstacles=0,
         lidar=True,
         render_mode="human",
     )

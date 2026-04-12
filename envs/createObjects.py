@@ -3,24 +3,6 @@ import pybullet as p
 import numpy as np
 
 
-class Swarm:
-    def _init_(self, max_drones):
-        self.max_dr = max_drones
-        self.drones = []
-
-    def add_drone(self, drone):
-        if len(self.drones) < self.max_dr:
-            self.drones.append(drone)
-            return True
-
-        return False
-
-
-class Drone:
-    def _init_(self, start_pos, euler_angles):
-        self.start_pos = start_pos
-        self.rotation = p.getQuaternionFromEuler(euler_angles)
-
 def safe_unit(v: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(v)
     if norm < 1e-6:

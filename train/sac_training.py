@@ -497,6 +497,8 @@ def train(device: str = "auto"):
         copy_vec_normalize_stats(old_train_env, new_eval_env)
 
         if model.observation_space != new_train_env.observation_space:
+            safe_close(new_train_env)
+            safe_close(new_eval_env)
             raise ValueError(
                 f"Observation space changed across stages.\n"
                 f"model.observation_space={model.observation_space}\n"
@@ -504,6 +506,8 @@ def train(device: str = "auto"):
             )
 
         if model.action_space != new_train_env.action_space:
+            safe_close(new_train_env)
+            safe_close(new_eval_env)
             raise ValueError(
                 f"Action space changed across stages.\n"
                 f"model.action_space={model.action_space}\n"
@@ -512,6 +516,9 @@ def train(device: str = "auto"):
 
         model.set_env(new_train_env)
         eval_env = new_eval_env
+
+        safe_close(old_eval_env)
+        safe_close(old_train_env)
 
         callbacks = make_stage_callbacks(
             stage_idx=idx,
@@ -549,10 +556,11 @@ def train(device: str = "auto"):
             vn.save(norm_path)
             print(f"[SAVED VECNORMALIZE] {norm_path}")
 
-        safe_close(old_eval_env)
-        safe_close(old_train_env)
-
         train_env = new_train_env
+
+    final_path = f"{MODELS_DIR}/final_model.zip"
+    model.save(final_path)
+    print(f"[SAVED FINAL MODEL] {final_path}")
 
     # save the final normalised values
     final_vn = unwrap_vec_normalize(model.get_env())
@@ -560,6 +568,7 @@ def train(device: str = "auto"):
         final_norm_path = f"{MODELS_DIR}/final_vec_normalize.pkl"
         final_vn.save(final_norm_path)
         print(f"[SAVED FINAL VEC_NORMALIZE] {final_norm_path}")
+    safe_close(model.get_env())
 
     safe_close(eval_env)
     safe_close(train_env)

@@ -13,7 +13,7 @@ from envs.createObjects import Dynamic, EnvObject, safe_unit
 from envs.createWorld import SUPPORTED_SHAPES
 from interface.core.frame_buffer import FrameBuffer
 from wrappers.env_3d import DroneSwarm3D as _DroneSwarm3D
-from config.defaults import GOAL_REACH_DISTANCE, MIN_SPAWN_DIST_FROM_DRONE, SWARM_MIN_SEPARATION
+from config.defaults import TARGET_REACH_DISTANCE, MIN_SPAWN_DIST_FROM_DRONE, SWARM_MIN_SEPARATION
 
 
 class EnvRunner:

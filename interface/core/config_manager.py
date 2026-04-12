@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from config.defaults import GOAL_EDGE_MARGIN, SWARM_EDGE_MARGIN
+from config.defaults import TARGET_EDGE_MARGIN, SWARM_EDGE_MARGIN
 from envs.createWorld import SUPPORTED_SHAPES, generate_edge_xyz, random_obstacle_config
 from interface.types import DroneSpawnConfig, ObjectConfig, SwarmConfig, TargetSpawnConfig
 
@@ -298,7 +298,7 @@ class ConfigManager:
         else:
             swarm_edge = random.randint(0, 3)
         opposite_edge = {0: 1, 1: 0, 2: 3, 3: 2}[swarm_edge]
-        x, y, z = generate_edge_xyz(opposite_edge, self._world_scale, GOAL_EDGE_MARGIN)
+        x, y, z = generate_edge_xyz(opposite_edge, self._world_scale, TARGET_EDGE_MARGIN)
         return {
             "name": f"Target Spawn {index + 1}",
             "x": x,
