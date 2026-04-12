@@ -4,7 +4,11 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 class BlendScheduleCallback(BaseCallback):
     def __init__(
-        self, initial_blend: float, final_blend: float, total_timesteps: int, verbose=0
+            self,
+            initial_blend: float,
+            final_blend: float,
+            total_timesteps: int,
+            verbose=0
     ):
         super().__init__(verbose)
         self.initial_blend = initial_blend
@@ -16,4 +20,5 @@ class BlendScheduleCallback(BaseCallback):
         progress = min(self.model.num_timesteps / self.total_timesteps, 1.0)
         blend = self.initial_blend + progress * (self.final_blend - self.initial_blend)
         self.model.policy.blend_ratio = blend
+
         return True

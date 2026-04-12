@@ -9,7 +9,6 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 PRINT_EVERY = 200
 
-
 @dataclass
 class CurriculumStageInfo:
     stage_idx: int
@@ -30,7 +29,7 @@ class StepStatsCallback(BaseCallback):
     """
     Logs rollout-level multi-agent stats from flattened PettingZoo infos.
 
-    Expected per-agent info keys:
+    Expected per-agent info dict keys:
         active: bool
         reached: bool
         reached_now: bool
@@ -57,13 +56,14 @@ class StepStatsCallback(BaseCallback):
         num_envs: int,
         stage_info: Optional[CurriculumStageInfo] = None,
         print_every: int = PRINT_EVERY,
-        # early-stop tools
+
+        # early-stop parameters
         enable_stage_early_stop: bool = True,
         reach_threshold: float = 0.85,
         max_collision_rate: float = 0.05,
         patience: int = 10,
         min_stage_timesteps: int = 10000,
-        verbose: int = 0,  # TODO FIGURE OUT WHETHER THESE ARE THE CORRECT AND OPTIMAL VALUES
+        verbose: int = 0,
     ):
         super().__init__(verbose)
 
@@ -98,6 +98,7 @@ class StepStatsCallback(BaseCallback):
     def reset_for_new_stage(
         self, stage_start_ts: int, stage_info: Optional[CurriculumStageInfo] = None
     ) -> None:
+        """ Reset after each stage in the curriculum. """
         self._consecutive_good = 0
         self._stage_start_ts = int(stage_start_ts)
         self._stage_active_steps = 0
@@ -105,7 +106,6 @@ class StepStatsCallback(BaseCallback):
         self._episode_batch = {}
         self._episode_batch_counter = 0
 
-        # ← ADD THESE
         self._stage_reached = 0
         self._stage_wall_collision = 0
         self._stage_obstacle_collision = 0
@@ -241,11 +241,6 @@ class StepStatsCallback(BaseCallback):
                 info.get("episode_done_all_reached", False)
             )
 
-            # -------------------------------------------------
-            # Handle episode-summary info FIRST, before skipping
-            # inactive drones, because VecMonitor may attach the
-            # episode info to a non-active slot.
-            # -------------------------------------------------
             episode_info = info.get("episode", None)
             if episode_info is not None:
                 episode_summary = {
@@ -353,7 +348,7 @@ class StepStatsCallback(BaseCallback):
                     )
 
                     self._flush_episode_batch_stats()
-                    # ← ADD HERE
+
                     for ep in self._episode_batch.values():
                         self._stage_episodes += 1
                         if ep["reached"]:
@@ -371,9 +366,7 @@ class StepStatsCallback(BaseCallback):
                             self._stage_timeout += 1
                     self._episode_batch = {}
 
-            # -------------------------------------------------
-            # Skip inactive drones for speed/distance/reach stats
-            # -------------------------------------------------
+            # --- Skip inactive drones for speed/distance/reach stats ---
             if not active:
                 continue
 
@@ -599,9 +592,7 @@ class StepStatsCallback(BaseCallback):
                 flush=True,
             )
 
-        # self.logger.dump(self.num_timesteps)
-
-        # ---- reset print-window counters here only ----
+        # ---- reset print-window counters ----
         self._print_collision_now_count = 0
         self._print_wall_collision_now_count = 0
         self._print_obstacle_collision_now_count = 0
@@ -625,63 +616,11 @@ class StepStatsCallback(BaseCallback):
 
         denom_all_drones_count = max(1, self.total_drone_count)
         denom_drones_steps = max(1, self._agent_steps)
-        denom_env_steps = max(1, self._env_steps)
 
         reaches_ever = len(self._reached_ever)
-        reaches_now = len(self._reached_now)
 
         # out of all drone decisions taken, how many of them resulted in a collision right now
         collision_step_rate = self._collision_now_count / denom_drones_steps
-        wall_collision_step_rate = self._wall_collision_now_count / denom_drones_steps
-        obstacle_collision_step_rate = (
-            self._obstacle_collision_now_count / denom_drones_steps
-        )
-        drone_collision_step_rate = self._drone_collision_now_count / denom_drones_steps
-
-        mean_dist_to_target = self._dist_to_target_sum / denom_drones_steps
-        mean_cmd_speed = self._cmd_speed_sum / denom_drones_steps
-        mean_actual_speed = self._actual_speed_sum / denom_drones_steps
-
-        team_any = 0
-        team_all = 0
-
-        for e in range(self.num_envs):
-            reached_anytime = self._env_drone_reached_anytime[e]
-            team_any += int(np.any(reached_anytime))
-            team_all += int(np.all(reached_anytime))
-
-        print_denom_drones_steps = max(1, self._print_agent_steps)
-
-        print_mean_dist_to_target = (
-            self._print_dist_to_target_sum / print_denom_drones_steps
-        )
-        print_mean_cmd_speed = self._print_cmd_speed_sum / print_denom_drones_steps
-        print_mean_actual_speed = (
-            self._print_actual_speed_sum / print_denom_drones_steps
-        )
-
-        print_episode_done_all_collided = self.episode_done_collision
-        print_episode_done_all_reached = self.episode_done_all_reached
-
-        print_collision_step_rate = (
-            self._print_collision_now_count / print_denom_drones_steps
-        )
-        print_wall_collision_step_rate = (
-            self._print_wall_collision_now_count / print_denom_drones_steps
-        )
-        print_obstacle_collision_step_rate = (
-            self._print_obstacle_collision_now_count / print_denom_drones_steps
-        )
-        print_drone_collision_step_rate = (
-            self._print_drone_collision_now_count / print_denom_drones_steps
-        )
-
-        print_total_wall_collisions = self._print_wall_collision_ever_count
-        print_total_collisions = (
-            self._print_wall_collision_ever_count
-            + self._print_obstacle_collision_ever_count
-            + self._print_drone_collision_ever_count
-        )
 
         # ---- Early stop decision ----
         if not self.enable_stage_early_stop:
@@ -720,9 +659,6 @@ class StepStatsCallback(BaseCallback):
                     f"(stage_steps={steps_in_stage})",
                     flush=True,
                 )
-            # self.model._total_timesteps = self.num_timesteps  # forces learn-loop exit in practice
-            # self.model.env.reset()  # optional: clean reset
-            # TODO FIGURE OUT IF ABOVE TWO LINES ARE STILL NEEDED
 
     def print_stage_summary(self) -> None:
         total = max(1, self._stage_episodes)

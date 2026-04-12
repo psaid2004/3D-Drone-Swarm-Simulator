@@ -12,7 +12,6 @@ from config.defaults import MAX_DRONES_PER_SWARM
 from config.sac_defaults import (
     LEARNING_RATE,
     BUFFER_SIZE,
-    BATCH_SIZE,
     TRAIN_FREQ,
     GAMMA,
     ENTROPY_COEF,
@@ -108,7 +107,6 @@ class ReplayBufferInspectorCallback(BaseCallback):
 
         vn = unwrap_vec_normalize(self.training_env)
 
-        # what the model sees
         policy_obs = new_obs.copy()
 
         # approximate raw obs for debugging
@@ -127,9 +125,6 @@ class ReplayBufferInspectorCallback(BaseCallback):
 
         max_slots_to_show = min(len(infos), self.max_slots_to_show)
 
-        # ------------------------------------------------------------------
-        # 1) Inspect rollout observations and infos
-        # ------------------------------------------------------------------
         for flat_idx in range(max_slots_to_show):
             info = infos[flat_idx]
             obs_norm = policy_obs[flat_idx]
@@ -160,9 +155,7 @@ class ReplayBufferInspectorCallback(BaseCallback):
                 f"    policy_obs[:12] = {np.array2string(obs_norm[:12], precision=3, suppress_small=True)}"
             )
 
-        # ------------------------------------------------------------------
-        # 2) Print expert / RL / final action comparison
-        # ------------------------------------------------------------------
+        # Print expert / RL / final action comparison
         try:
             obs_tensor = torch.as_tensor(
                 policy_obs, device=self.model.device, dtype=torch.float32
@@ -208,9 +201,7 @@ class ReplayBufferInspectorCallback(BaseCallback):
         except Exception as e:
             print(f"[DEBUG] action comparison failed: {e}")
 
-        # ------------------------------------------------------------------
-        # 3) Inspect replay buffer
-        # ------------------------------------------------------------------
+        # Inspect the custom replay buffer insertions
         rb = self.model.replay_buffer
         if rb is None:
             print("[DEBUG] replay buffer is None")
@@ -281,9 +272,7 @@ class ReplayBufferInspectorCallback(BaseCallback):
                     f"    act      = {np.array2string(acts_last[slot], precision=3, suppress_small=True)}"
                 )
 
-        # ------------------------------------------------------------------
-        # 4) Inspect sampled minibatch
-        # ------------------------------------------------------------------
+        # Inspect the sampled minibatch
         if current_size >= max(2, self.sample_batch_size):
             try:
                 batch = rb.sample(self.sample_batch_size)
@@ -367,7 +356,7 @@ def run_debug_curriculum(
             learning_rate=LEARNING_RATE,
             buffer_size=BUFFER_SIZE,
             learning_starts=0,
-            batch_size=BATCH_SIZE,
+            batch_size=4,
             train_freq=TRAIN_FREQ,
             gradient_steps=1,
             gamma=GAMMA,
@@ -405,7 +394,7 @@ def run_debug_curriculum(
             num_parallel_envs=N_ENVS,
             print_every_steps=1,
             max_print_steps=steps_to_run,
-            sample_batch_size=min(32, BATCH_SIZE),
+            sample_batch_size=4,
             max_slots_to_show=12,
             verbose=0,
         )

@@ -5,9 +5,6 @@ import os
 import time
 import numpy as np
 
-# import wandb
-# from wandb.integration.sb3 import WandbCallback
-
 import torch
 import warnings
 
@@ -177,7 +174,7 @@ class ActiveSlotReplayBuffer(ReplayBuffer):
         super().add(obs, next_obs, action, reward, done, infos)
 
     def sample(self, batch_size: int, env=None) -> ReplayBufferSamples:
-        """"""
+        """ Sample from the replay buffer by only selecting from active slots."""
         # check how many rows of buffer are already full
         upper_bound = self.buffer_size if self.full else self.pos
 
@@ -355,7 +352,6 @@ def make_stage_callbacks(
         num_drones=int(num_drones),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
-        # print_every=5000,
         enable_stage_early_stop=True,
         reach_threshold=0.85,
         max_collision_rate=0.05,
@@ -367,32 +363,6 @@ def make_stage_callbacks(
     stats_cb.reset_for_new_stage(
         stage_start_ts=model_num_timesteps, stage_info=stage_info
     )
-    #
-    # stop_no_improve_cb = StopTrainingOnNoModelImprovement(
-    #     max_no_improvement_evals=8,
-    #     min_evals=3,
-    #     verbose=1,
-    # )
-
-    # evaluate current policy on clean evaluate environment
-    # eval_cb = EvalCallback(
-    #     eval_env=eval_env,
-    #     best_model_save_path=str(Path(MODELS_DIR) / "best_model"),
-    #     log_path=str(Path(MODELS_DIR) / "eval_logs"),
-    #     eval_freq=max(10_000 // max(1, N_ENVS), 1),
-    #     n_eval_episodes=5,
-    #     deterministic=True,
-    #     render=False,
-    #     callback_after_eval=stop_no_improve_cb,
-    #     verbose=1,
-    # )
-    #
-    # wandb_cb = WandbCallback(
-    #     model_save_path=str(Path(MODELS_DIR) / "wandb_models" / f"stage_{stage_idx}"),
-    #     model_save_freq=max(1, 10_000 // max(1, N_ENVS)),
-    #     gradient_save_freq=0,  # start with 0; turn on later if you want
-    #     verbose=1,
-    # )
 
     blend_cb = BlendScheduleCallback(
         initial_blend=INITIAL_BLEND,
@@ -404,8 +374,6 @@ def make_stage_callbacks(
         [
             stats_cb,
             ckpt_cb,
-            # eval_cb,
-            # wandb_cb,
             blend_cb,
         ]
     )
@@ -429,41 +397,11 @@ def train(device: str = "auto"):
     )  # sum of all curriculum stage timesteps
 
     # --- build stage-0 env ---
-
     ws0, nd0, ns0, ndyn0, steps0, steps_per_episode, lidar0 = curr[0]
     print(
         f"\n=== Stage 0 | world={ws0} active drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
     )
-    #
-    # wandb.init(
-    #     project="drone-swarm-sac",
-    #     name=f"sac_stage0_ws{ws0}_d{nd0}",
-    #     config={
-    #         "algorithm": "SAC",
-    #         "world_scale": ws0,
-    #         "initial_active_drones": nd0,
-    #         "max_drones_per_swarm": MAX_DRONES_PER_SWARM,
-    #         "num_static_obstacles": ns0,
-    #         "num_dynamic_obstacles": ndyn0,
-    #         "steps_stage0": steps0,
-    #         "episode_horizon": steps_per_episode,
-    #         "lidar": lidar0,
-    #         "n_envs": N_ENVS,
-    #         "learning_rate": LEARNING_RATE,
-    #         "buffer_size": BUFFER_SIZE,
-    #         "learning_starts": LEARNING_STARTS,
-    #         "batch_size": BATCH_SIZE,
-    #         "train_freq": str(TRAIN_FREQ),
-    #         "gradient_steps": GRADIENT_STEPS,
-    #         "gamma": GAMMA,
-    #         "entropy_coef": ENTROPY_COEF,
-    #         "net_arch": NET_ARCH,
-    #         "initial_blend": INITIAL_BLEND,
-    #     },
-    #     sync_tensorboard=True,
-    #     save_code=True,
-    # )
 
     # --- SAC model with expert-blend policy ---
     expert = ExpertPolicy(world_scale=ws0, use_lidar=lidar0)
@@ -477,16 +415,6 @@ def train(device: str = "auto"):
         lidar_enabled=lidar0,
         render_mode=None,
     )
-
-    # eval_env = create_env(
-    #     world_scale=ws0,
-    #     num_drones=nd0,
-    #     num_static_obstacles=ns0,
-    #     num_dynamic_obstacles=ndyn0,
-    #     max_episode_steps=steps_per_episode,
-    #     lidar_enabled=lidar0,
-    #     render_mode=None,
-    # )
 
     # --- create SAC model ---
     model = SAC(
@@ -516,7 +444,6 @@ def train(device: str = "auto"):
         model.policy.set_vec_normalise(vn)
 
     # --- train stage 0 first ---
-
     callbacks = make_stage_callbacks(
         stage_idx=0,
         world_scale=ws0,
@@ -571,19 +498,8 @@ def train(device: str = "auto"):
         new_expert = ExpertPolicy(world_scale=world_scale, use_lidar=lidar_enabled)
         model.policy.expert = new_expert
 
-        # wandb.log({
-        #     "curriculum/current_stage": idx,
-        #     "curriculum/world_scale": world_scale,
-        #     "curriculum/active_drones": num_drones,
-        #     "curriculum/static_obstacles": num_static_obs,
-        #     "curriculum/dynamic_obstacles": num_dynamic_obs,
-        #     "curriculum/episode_horizon": steps_per_episode,
-        #     "curriculum/lidar_enabled": int(lidar_enabled),
-        # }, step=model.num_timesteps)
-
         # swap envs
         old_train_env = model.get_env()
-        # old_eval_env = eval_env
 
         new_train_env = create_env(
             world_scale=world_scale,
@@ -594,18 +510,8 @@ def train(device: str = "auto"):
             lidar_enabled=lidar_enabled,
         )
 
-        # new_eval_env = create_env(
-        #     world_scale=world_scale,
-        #     num_drones=num_drones,
-        #     num_static_obstacles=num_static_obs,
-        #     num_dynamic_obstacles=num_dynamic_obs,
-        #     max_episode_steps=steps_per_episode,
-        #     lidar_enabled=lidar_enabled,
-        # )
-
         # Carry normalization stats forward.
         copy_vec_normalize_stats(old_train_env, new_train_env)
-        # copy_vec_normalize_stats(old_train_env, new_eval_env)
 
         if model.observation_space != new_train_env.observation_space:
             raise ValueError(
@@ -622,9 +528,7 @@ def train(device: str = "auto"):
             )
 
         model.set_env(new_train_env)
-        # eval_env = new_eval_env
 
-        # safe_close(old_eval_env)
         safe_close(old_train_env)
 
         vn = unwrap_vec_normalize(new_train_env)
@@ -679,8 +583,6 @@ def train(device: str = "auto"):
         print(f"[SAVED FINAL VEC_NORMALIZE] {final_norm_path}")
 
     safe_close(train_env)
-
-    # wandb.finish()
 
     print("Training complete.")
 

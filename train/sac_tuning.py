@@ -1,20 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 import optuna
-import torch
 
-from stable_baselines3 import SAC
 from stable_baselines3.common.evaluation import evaluate_policy
-from config.sac_defaults import *
-from config.curriculum import Curriculum
 from train.sac_training import *
-
-# reuse your existing functions
-# create_env, unwrap_vec_normalize, safe_close, Curriculum, etc.
 
 
 def sample_sac_params(trial):
-    """Define search space (VERY IMPORTANT)"""
+    """Define search space """
 
     return {
         "learning_rate": trial.suggest_loguniform("learning_rate", 1e-5, 3e-4),

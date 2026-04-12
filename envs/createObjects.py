@@ -2,7 +2,12 @@
 import pybullet as p
 import numpy as np
 
-
+def safe_unit(v: np.ndarray) -> np.ndarray:
+    norm = np.linalg.norm(v)
+    if norm < 1e-6:
+        return np.zeros_like(v)
+    return v / norm
+    
 class EnvObject:
     def __init__(self, start_pos, size, orientation):
         self.size = size
@@ -83,7 +88,6 @@ class EnvObject:
         self.radius = collision_kwargs.get("radius", conf.get("radius"))
         self.height = collision_kwargs.get("height")
 
-    # kwargs = keyword arguments
     def create(self, shape, physics_call, color=(1, 0, 0, 1)):
         self.physics_call = physics_call
         self.shape = shape

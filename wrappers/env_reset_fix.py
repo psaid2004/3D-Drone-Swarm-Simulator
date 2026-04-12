@@ -15,7 +15,7 @@ class SB3VecResetTupleFix(VecEnvWrapper):
     2) step_wait() sometimes returns (obs, rewards, terminations, truncations, infos)
        -> SB3 expects (obs, rewards, dones, infos)
 
-    Stores reset-info in self.last_reset_info (optional).
+    Stores reset-info in self.last_reset_info.
     """
 
     def __init__(self, venv):
@@ -61,7 +61,6 @@ class SB3VecResetTupleFix(VecEnvWrapper):
                         infos[i]["terminated"] = bool(terminations[i])
                         infos[i]["truncated"] = bool(truncations[i])
 
-            # Auto-reset handling # TODO CHANGE THIS SO IT WAITS FOR OTHER DRONES TO REACH OR FOR THEM TO DIE/TIMEOUT
             if dones.any():
                 for i in range(len(dones)):
                     if dones[i] and isinstance(infos[i], dict):
@@ -102,7 +101,6 @@ class SB3VecResetTupleFix(VecEnvWrapper):
                         else:
                             infos[i]["truncated"] = False
 
-            # Auto-reset handling  # TODO CHANGE THIS SO IT WAITS FOR OTHER DRONES TO REACH OR FOR THEM TO DIE/TIMEOUT
             if dones.any():
                 for i in range(len(dones)):
                     if dones[i] and isinstance(infos[i], dict):

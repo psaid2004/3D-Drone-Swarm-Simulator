@@ -13,16 +13,7 @@ class ExpertPolicy:
       5. Avoid teammates.
       6. Slow down smoothly near any danger.
 
-    Observation layout:
-      [0:3]   pos
-      [3:6]   vel
-      [6:9]   to_target
-      [9:12]  to_nearest_obs
-      [12:15] to_centroid
-      [15:18] to_nearest_teammate
-      [18:]   lidar hit fractions  (LIDAR_NUM_LAYERS × LIDAR_NUM_RAYS)
-
-    Action: [dir_x, dir_y, dir_z, speed] in [-1, 1]
+    Action result: [dir_x, dir_y, dir_z, speed] in [-1, 1]
     """
 
     def __init__(
@@ -31,15 +22,19 @@ class ExpertPolicy:
         wall_margin: float = 2.5,  # if wall in margin -> react
         target_brake_dist: float = 1.5,  # if target in radius -> brake
         teammate_avoid_radius: float = 2.0,  # if teammate in radius -> react
+
         world_scale: float = 5.0,
         use_lidar: bool = True,
+
         speed_default: float = 0.75,
         speed_near_obs: float = 0.25,
         speed_near_target: float = 0.30,
         speed_near_teammate: float = 0.30,
+
         lidar_weight: float = 0.30,  # how strongly lidar influences final direction
         wall_weight: float = 0.55,  # how strongly wall avoidance influences final direction
         teammate_weight: float = 0.8,  # how strongly teammate avoidance influences final direction
+
         fly_over_gain: float = 0.30,  # obstacle directly ahead -> add  upward bias so the drone can go over it
     ):
         self.avoid_radius = avoid_radius
@@ -66,7 +61,6 @@ class ExpertPolicy:
         Derive the expert action given the current observation.
 
         Returns: Action: [dir_x, dir_y, dir_z, speed] in [-1, 1]
-
         """
         obs = np.asarray(obs, dtype=np.float32)
 

@@ -1,0 +1,197 @@
+Fixed final model evaluated on all curriculum stages
+Loaded model path: C:\Users\David\PyCharmMiscProject\3d-drone-swarms\models\sac_0_8_8_2
+Episodes per stage: 50
+
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|   Stage |   World |   Drones |   Static |   Dynamic |   Max Steps | LiDAR   | Collision-Free   | Success   | Collision Ep.   | Wall-hit Ep.   |   Avg Ep. Len |   Bad Seeds |
++=========+=========+==========+==========+===========+=============+=========+==================+===========+=================+================+===============+=============+
+|       0 |       3 |        3 |        0 |         0 |        5000 | True    | 100.00%          | 100.00%   | 0.00%           | 0.00%          |       1270.58 |           0 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       1 |       3 |        5 |        0 |         0 |        5000 | True    | 100.00%          | 100.00%   | 0.00%           | 0.00%          |       1493.56 |           0 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       2 |       3 |        5 |        2 |         0 |        5000 | True    | 96.00%           | 96.00%    | 4.00%           | 0.00%          |       1851.3  |           2 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       3 |       4 |        5 |        3 |         0 |        5000 | True    | 100.00%          | 100.00%   | 0.00%           | 0.00%          |       2458.2  |           0 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       4 |       4 |        5 |        4 |         1 |        5000 | True    | 98.00%           | 98.00%    | 2.00%           | 2.00%          |       2623.9  |           1 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       5 |       5 |        5 |        5 |         1 |        5000 | True    | 96.00%           | 96.00%    | 4.00%           | 2.00%          |       3026.9  |           2 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       6 |       5 |        8 |        5 |         1 |        5000 | True    | 98.00%           | 98.00%    | 2.00%           | 0.00%          |       3245.52 |           1 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       7 |       6 |        8 |        6 |         2 |        5000 | True    | 98.00%           | 98.00%    | 2.00%           | 0.00%          |       3656.3  |           1 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       8 |       7 |        8 |        8 |         2 |        5000 | True    | 100.00%          | 100.00%   | 0.00%           | 0.00%          |       4025.64 |           0 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|       9 |       8 |       10 |        8 |         3 |        5000 | True    | 98.00%           | 94.00%    | 2.00%           | 0.00%          |       4519.2  |           3 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+|      10 |       9 |       10 |       10 |         4 |        5000 | True    | 96.00%           | 82.00%    | 4.00%           | 2.00%          |       4695.62 |           9 |
++---------+---------+----------+----------+-----------+-------------+---------+------------------+-----------+-----------------+----------------+---------------+-------------+
+
+Detailed per-stage results:
+
+Stage 0
+  world_scale           : 3
+  n_drones              : 3
+  n_static_obstacles    : 0
+  n_dynamic_obstacles   : 0
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 100.00%
+  success_rate          : 100.00%
+  collision_episode_rate: 0.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 1270.58
+  bad_seeds_count       : 0
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_0_world_3_drones_3_static_0_dynamic_0.txt
+
+Stage 1
+  world_scale           : 3
+  n_drones              : 5
+  n_static_obstacles    : 0
+  n_dynamic_obstacles   : 0
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 100.00%
+  success_rate          : 100.00%
+  collision_episode_rate: 0.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 1493.56
+  bad_seeds_count       : 0
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_1_world_3_drones_5_static_0_dynamic_0.txt
+
+Stage 2
+  world_scale           : 3
+  n_drones              : 5
+  n_static_obstacles    : 2
+  n_dynamic_obstacles   : 0
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 96.00%
+  success_rate          : 96.00%
+  collision_episode_rate: 4.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 1851.30
+  bad_seeds_count       : 2
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_2_world_3_drones_5_static_2_dynamic_0.txt
+
+Stage 3
+  world_scale           : 4
+  n_drones              : 5
+  n_static_obstacles    : 3
+  n_dynamic_obstacles   : 0
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 100.00%
+  success_rate          : 100.00%
+  collision_episode_rate: 0.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 2458.20
+  bad_seeds_count       : 0
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_3_world_4_drones_5_static_3_dynamic_0.txt
+
+Stage 4
+  world_scale           : 4
+  n_drones              : 5
+  n_static_obstacles    : 4
+  n_dynamic_obstacles   : 1
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 98.00%
+  success_rate          : 98.00%
+  collision_episode_rate: 2.00%
+  wall_hit_episode_rate : 2.00%
+  avg_episode_length    : 2623.90
+  bad_seeds_count       : 1
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_4_world_4_drones_5_static_4_dynamic_1.txt
+
+Stage 5
+  world_scale           : 5
+  n_drones              : 5
+  n_static_obstacles    : 5
+  n_dynamic_obstacles   : 1
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 96.00%
+  success_rate          : 96.00%
+  collision_episode_rate: 4.00%
+  wall_hit_episode_rate : 2.00%
+  avg_episode_length    : 3026.90
+  bad_seeds_count       : 2
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_5_world_5_drones_5_static_5_dynamic_1.txt
+
+Stage 6
+  world_scale           : 5
+  n_drones              : 8
+  n_static_obstacles    : 5
+  n_dynamic_obstacles   : 1
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 98.00%
+  success_rate          : 98.00%
+  collision_episode_rate: 2.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 3245.52
+  bad_seeds_count       : 1
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_6_world_5_drones_8_static_5_dynamic_1.txt
+
+Stage 7
+  world_scale           : 6
+  n_drones              : 8
+  n_static_obstacles    : 6
+  n_dynamic_obstacles   : 2
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 98.00%
+  success_rate          : 98.00%
+  collision_episode_rate: 2.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 3656.30
+  bad_seeds_count       : 1
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_7_world_6_drones_8_static_6_dynamic_2.txt
+
+Stage 8
+  world_scale           : 7
+  n_drones              : 8
+  n_static_obstacles    : 8
+  n_dynamic_obstacles   : 2
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 100.00%
+  success_rate          : 100.00%
+  collision_episode_rate: 0.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 4025.64
+  bad_seeds_count       : 0
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_8_world_7_drones_8_static_8_dynamic_2.txt
+
+Stage 9
+  world_scale           : 8
+  n_drones              : 10
+  n_static_obstacles    : 8
+  n_dynamic_obstacles   : 3
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 98.00%
+  success_rate          : 94.00%
+  collision_episode_rate: 2.00%
+  wall_hit_episode_rate : 0.00%
+  avg_episode_length    : 4519.20
+  bad_seeds_count       : 3
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_9_world_8_drones_10_static_8_dynamic_3.txt
+
+Stage 10
+  world_scale           : 9
+  n_drones              : 10
+  n_static_obstacles    : 10
+  n_dynamic_obstacles   : 4
+  max_steps             : 5000
+  lidar                 : True
+  collision_free_rate   : 96.00%
+  success_rate          : 82.00%
+  collision_episode_rate: 4.00%
+  wall_hit_episode_rate : 2.00%
+  avg_episode_length    : 4695.62
+  bad_seeds_count       : 9
+  bad_seeds_file        : ./bad_episodes_videos\bad_episodes_sac_0_8_8_2_stage_10_world_9_drones_10_static_10_dynamic_4.txt
+
