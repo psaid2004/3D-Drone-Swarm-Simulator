@@ -52,16 +52,29 @@ venv\Scripts\Activate.ps1
 venv\Scripts\activate.bat
 ```
 
-3. **Upgrade pip:**
+4. **Upgrade pip:**
 ```bash
 python -m pip install --upgrade pip
 ```
 
-3. **Install Dependencies:**
+5. **Install Dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 This will install `gym-pybullet-drones` from the GitHub repository specified in requirements.txt.
+
+
+6. **(Optional) Set up Weights & Biases (wandb) for logging:**
+
+If you want to track training metrics using Weights & Biases (only available in `/train/sac_training.py`):
+
+```bash
+pip install wandb
+```
+Then log in to your account:
+```bash
+wandb login
+```
 
 ---
 ## ⚡ Quick Start 🏋️ Training
