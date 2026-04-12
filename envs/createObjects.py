@@ -3,6 +3,11 @@ import pybullet_data
 import time
 import numpy as np
 
+def safe_unit(v: np.ndarray) -> np.ndarray:
+    norm = np.linalg.norm(v)
+    if norm < 1e-6:
+        return np.zeros_like(v)
+    return v / norm
     
 class EnvObject:
     def __init__(self, start_pos, size, orientation):

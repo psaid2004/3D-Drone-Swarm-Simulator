@@ -1,45 +1,45 @@
-
 import random
 import threading
 import time
-import importlib
-import numpy as np
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Callable, Dict, Optional, Tuple
 
-from envs.createObjects import Dynamic, EnvObject
-from wrappers.env_3d import DroneSwarm3D as env
-from envs.createWorld import SUPPORTED_SHAPES 
+import numpy as np
+
+from envs.createObjects import Dynamic, EnvObject, safe_unit
+from envs.createWorld import SUPPORTED_SHAPES
+from interface.core.frame_buffer import FrameBuffer
+from wrappers.env_3d import DroneSwarm3D as _DroneSwarm3D
+from config.defaults import GOAL_REACH_DISTANCE, MIN_SPAWN_DIST_FROM_DRONE, SWARM_MIN_SEPARATION
 
 
-
-class EnvironmentViewer:
+class EnvRunner:
     def __init__(
         self,
-        object_configs_getter,
-        drone_spawn_configs_getter,
-        target_spawn_configs_getter,
-        on_state,
-        on_stopped,
-        on_error,
-        num_drones=0,
-        max_steps=5000,
-        lidar=False,
-        render_mode="human",
-        model_path="",
-        world_scale=5,
-        num_swarms=1,
-        seed=None,
+        frame_buffer: FrameBuffer,
+        object_configs_getter: Callable,
+        drone_spawn_configs_getter: Callable,
+        target_spawn_configs_getter: Callable,
+        on_state: Callable,
+        on_stopped: Callable,
+        on_error: Callable,
+        num_drones: int = 1,
+        max_steps: int = 5000,
+        lidar: bool = False,
+        render_mode: str = "human",
+        model_path: str = "",
+        world_scale: float = 5.0,
+        num_swarms: int = 1,
+        seed: Optional[int] = None,
     ):
-        self._max_recorded_frames = 999999
-        #### Initialize attributes
-        # Basic attributes
+        self._frame_buffer = frame_buffer
         self._get_object_configs = object_configs_getter
         self._get_drone_spawn_configs = drone_spawn_configs_getter
         self._get_target_spawn_configs = target_spawn_configs_getter
         self._on_state = on_state
         self._on_stopped = on_stopped
         self._on_error = on_error
+
         self._num_drones = max(1, int(num_drones))
         self._max_steps = max(1, int(max_steps))
         self._lidar = bool(lidar)
@@ -48,9 +48,8 @@ class EnvironmentViewer:
         self._num_swarms = max(1, int(num_swarms))
         self._seed = int(seed) if seed is not None else None
 
-        # Simulation control attributes
         self._running = False
-        self._sim_thread = None
+        self._sim_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._restart_event = threading.Event()
         self._speed_lock = threading.Lock()
@@ -60,27 +59,25 @@ class EnvironmentViewer:
         self._episode = 0
         self._step = 0
 
-        # Recording attributes
-        self._record_lock = threading.Lock()
-        self._recorded_frames: List[Dict[str, Any]] = []
-        self._replay_index = 0
-
-        ## Model management
         self._model_path = str(model_path or "").strip()
         self._model = None
-        self._model_backend = None
+        self._model_backend: Optional[str] = None
         self._model_lock = threading.Lock()
 
-        self._load_model(report_error=True)
+        self._last_warning: str = ""
+
+        self._load_model(report_error=False)
+
+    # ---- Public  ----
 
     @property
-    def running(self):
+    def running(self) -> bool:
         return self._running
 
     def start(self):
         if self._running:
             return
-        self._clear_recording()
+        self._frame_buffer.clear()
         self._close_current_env()
         self._running = True
         self._stop_event.clear()
@@ -104,7 +101,7 @@ class EnvironmentViewer:
         if self._running:
             self._restart_event.set()
 
-    def set_model_path(self, model_path: str):
+    def set_model_path(self, model_path: str) -> Tuple[bool, str]:
         self._model_path = str(model_path or "").strip()
         return self._load_model(report_error=True)
 
@@ -117,89 +114,82 @@ class EnvironmentViewer:
         with self._speed_lock:
             self._speed_multiplier = max(0.1, float(speed_multiplier))
 
-    def set_num_swarms(self, num_swarms: int):
-        self._num_swarms = max(1, int(num_swarms))
-
     def get_speed_multiplier(self) -> float:
         with self._speed_lock:
             return float(self._speed_multiplier)
 
+    def set_num_swarms(self, num_swarms: int):
+        self._num_swarms = max(1, int(num_swarms))
+
     def get_replay_frame_count(self) -> int:
-        with self._record_lock:
-            return len(self._recorded_frames)
+        return self._frame_buffer.get_count()
 
     def get_replay_index(self) -> int:
-        with self._record_lock:
-            return int(self._replay_index)
+        return self._frame_buffer.get_index()
 
     def seek_replay_frame(self, index: int) -> bool:
-        with self._record_lock:
-            if not self._recorded_frames:
-                return False
-            bounded_index = max(0, min(int(index), len(self._recorded_frames) - 1))
-            frame = dict(self._recorded_frames[bounded_index])
-
         with self._env_lock:
             env_ref = self._current_env
-            if env_ref is None:
-                return False
-            self._apply_frame(env_ref, frame)
+        return self._frame_buffer.seek(index, env_ref)
 
-        with self._record_lock:
-            self._replay_index = bounded_index
+    def get_replay_frame_meta(self, index: int):
+        return self._frame_buffer.get_meta(index)
 
-        return True
+    # ---- Simulation loop ----
 
     def _simulation_loop(self):
+        """Main simulation loop running in the background thread."""
         current_env = None
         try:
-            while not self._stop_event.is_set():
+            while not self._stop_event.is_set(): # Loop over episodes
                 configs = self._get_object_configs()
-                current_env = self._make_env(configs)
+                if current_env is None:
+                    current_env = self._make_env(configs)
 
                 with self._env_lock:
                     self._current_env = current_env
 
-                obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1))
+                obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1)) # Reset env with a random seed for variability
+                self._last_warning = "" 
                 self._apply_object_configs(current_env, configs)
                 self._apply_spawn_configs(
                     current_env,
                     self._get_drone_spawn_configs() if callable(self._get_drone_spawn_configs) else [],
                     self._get_target_spawn_configs() if callable(self._get_target_spawn_configs) else [],
                 )
-                # print("Env made")
                 self._episode += 1
                 self._step = 0
-                done = {agent: False for agent in current_env.possible_agents}
-                trunc = {agent: False for agent in current_env.possible_agents}
-                restart_requested = False
-                self._record_frame(current_env)
+                done = {agent: False for agent in current_env.possible_agents} 
+                trunc = {agent: False for agent in current_env.possible_agents} 
+                restart_requested = False 
+                self._frame_buffer.record(current_env, self._episode, self._step) # Record initial state
 
-                while not self._stop_event.is_set():
-
+                while not self._stop_event.is_set(): # Loop over steps within the episode
                     if self._restart_event.is_set():
                         restart_requested = True
                         self._restart_event.clear()
                         break
-                    
-                    act_dict = self._build_action_dict(obs_dict)
+
+                    act_dict = self._build_action_dict(obs_dict) 
                     obs_dict, _, done, trunc, _ = current_env.step(act_dict)
                     self._step += 1
-                    self._record_frame(current_env)
-                    self._on_state(
-                        {
-                            "episode": self._episode,
-                            "step": self._step,
-                            "drones": len(getattr(current_env, "agents", [])),
-                            "obstacles": len(getattr(current_env, "_obstacles", [])),
-                            "speed_multiplier": self.get_speed_multiplier(),
-                            "recorded_frames": self.get_replay_frame_count(),
-                            "replay_index": self.get_replay_index(),
-                        }
-                    )
+                    self._frame_buffer.record(current_env, self._episode, self._step) # Record after action
+                    state = {
+                        "episode": self._episode,
+                        "step": self._step,
+                        "drones": len(getattr(current_env, "agents", [])),
+                        "obstacles": len(getattr(current_env, "_obstacles", [])),
+                        "speed_multiplier": self.get_speed_multiplier(),
+                        "recorded_frames": self.get_replay_frame_count(),
+                        "replay_index": self.get_replay_index(),
+                    }
+                    if self._last_warning:
+                        state["warning"] = self._last_warning
+                    self._on_state(state)
                     time.sleep((1 / 30) / self.get_speed_multiplier())
 
-                    if all(done[a] or trunc[a] for a in done):
+                    if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated and input is required to continue
+                        input("Simulation ended. Press Enter to continue.")
                         break
 
                 if restart_requested:
@@ -212,23 +202,23 @@ class EnvironmentViewer:
                 if self._stop_event.is_set():
                     break
 
-                current_env.close()
-                with self._env_lock:
-                    self._current_env = None
-                current_env = None
-
         except Exception as exc:
-            print("ERROR: ", exc, "  ", str(exc))
+            print("ERROR:", exc)
             self._on_error(str(exc))
         finally:
             self._running = False
             self._on_stopped()
 
+    # ---- Environment construction ----
+
+    def _warn(self, message: str) -> None:
+        """Store a placement warning; it will be included in the next telemetry state."""
+        self._last_warning = message
+
     def _make_env(self, configs):
         static_count = sum(1 for cfg in configs if cfg.get("kind") == "static")
         dynamic_count = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
-
-        return env(
+        return _DroneSwarm3D(
             num_drones_per_swarm=self._num_drones,
             num_static_obstacles=static_count,
             num_dynamic_obstacles=dynamic_count,
@@ -240,7 +230,6 @@ class EnvironmentViewer:
             world_scale=self._world_scale,
         )
 
-    ## Set current env to None close if still existing
     def _close_current_env(self):
         with self._env_lock:
             env_ref = self._current_env
@@ -256,8 +245,7 @@ class EnvironmentViewer:
         if p is None:
             return
 
-        old_obstacles = list(getattr(env_instance, "_obstacles", []))
-        for obj in old_obstacles:
+        for obj in list(getattr(env_instance, "_obstacles", [])):
             body_id = getattr(obj, "body_id", None)
             if body_id is None:
                 continue
@@ -294,8 +282,15 @@ class EnvironmentViewer:
                 continue
 
         env_instance._obstacles = new_obstacles
-        env_instance.num_static_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "static")
-        env_instance.num_dynamic_obstacles = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
+        env_instance.num_static_obstacles = sum(
+            1 for cfg in configs if cfg.get("kind") == "static"
+        )
+        env_instance.num_dynamic_obstacles = sum(
+            1 for cfg in configs if cfg.get("kind") == "dynamic"
+        )
+
+        # --- TODO: validate user-placed obstacle positions ---
+
 
     def _apply_spawn_configs(self, env_instance, drone_spawns, target_spawns):
         p = getattr(env_instance, "_p", None)
@@ -303,13 +298,11 @@ class EnvironmentViewer:
             return
 
         def _apply_body_color(body_id: int, rgba):
-            rgba = [float(c) for c in rgba]
-            rgba = [max(0.0, min(1.0, c)) for c in rgba]
+            rgba = [max(0.0, min(1.0, float(c))) for c in rgba]
             try:
                 num_joints = env_instance._call_physics(p.getNumJoints, int(body_id))
             except Exception:
                 num_joints = 0
-
             for link_idx in range(-1, int(num_joints)):
                 try:
                     env_instance._call_physics(
@@ -344,10 +337,11 @@ class EnvironmentViewer:
                         [0.0, 0.0, 0.0],
                     )
                     if "color" in cfg:
-                        _apply_body_color(int(body_id), cfg.get("color"))
+                        _apply_body_color(int(body_id), cfg["color"])
                 except Exception:
                     continue
-        seen = set()
+
+        seen: set = set()
         unique_targets = []
         for tgt in list(getattr(env_instance, "_targets", []) or []):
             body_id = getattr(tgt, "body_id", None)
@@ -377,16 +371,19 @@ class EnvironmentViewer:
                     if hasattr(target, "start_pos"):
                         target.start_pos = np.array(pos, dtype=np.float32)
                     if "color" in cfg:
-                        color = cfg.get("color")
-                        _apply_body_color(int(body_id), color)
+                        _apply_body_color(int(body_id), cfg["color"])
                         if hasattr(target, "color"):
-                            target.color = color
+                            target.color = cfg["color"]
                 except Exception:
                     continue
 
-    ################ Model Load logic ################
+                          # --- TODO: validate user-placed obstacle positions ---
 
-    def _load_model(self, report_error: bool = True):
+
+
+    # ---- Model loading ----
+
+    def _load_model(self, report_error: bool = True) -> Tuple[bool, str]:
         if not self._model_path:
             with self._model_lock:
                 self._model = None
@@ -395,12 +392,18 @@ class EnvironmentViewer:
 
         path = Path(self._model_path)
         if not path.is_file():
-            return self._on_error(f"File not found: {path}", report_error)
+            msg = f"File not found: {path}"
+            if report_error:
+                self._on_error(msg)
+            return False, msg
 
         try:
             from stable_baselines3 import PPO, SAC
         except Exception:
-            return self._on_error("Failed to import stable_baselines3", report_error)
+            msg = "Failed to import stable_baselines3"
+            if report_error:
+                self._on_error(msg)
+            return False, msg
 
         errors = []
         for name, cls in (("PPO", PPO), ("SAC", SAC)):
@@ -413,13 +416,18 @@ class EnvironmentViewer:
             except Exception as e:
                 errors.append(f"{name}: {e}")
 
-        return self._on_error("All backends failed:\n" + "\n".join(errors), report_error)
+        msg = "All backends failed:\n" + "\n".join(errors)
+        if report_error:
+            self._on_error(msg)
+        return False, msg
+
+    # ---- Action selection ----
 
     def _heuristic_action(self, obs: np.ndarray) -> np.ndarray:
         to_target = obs[6:9]
         to_centroid = obs[12:15]
-        dir_vec = 0.8 * _safe_unit(to_target) + 0.2 * _safe_unit(to_centroid)
-        dir_vec = _safe_unit(dir_vec)
+        dir_vec = 0.8 * safe_unit(to_target) + 0.2 * safe_unit(to_centroid)
+        dir_vec = safe_unit(dir_vec)
         speed = float(np.clip(np.linalg.norm(to_target) / 5.0, 0.05, 1.0))
         u3 = speed * 2.0 - 1.0
         return np.array([dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32)
@@ -439,135 +447,4 @@ class EnvironmentViewer:
             return self._heuristic_action(obs)
 
     def _build_action_dict(self, obs_dict: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
-        act_dict: Dict[str, np.ndarray] = {}
-        for agent, obs in obs_dict.items():
-            act_dict[agent] = self._predict_action(obs)
-        return act_dict
-
-    ################ Model Load logic ################
-
-
-    ################ Recording and replay logic ################
-
-    def _clear_recording(self):
-        with self._record_lock:
-            self._recorded_frames = []
-            self._replay_index = 0
-
-    def _capture_frame(self, env_instance) -> Dict[str, Any]:
-        drone_states: List[Dict[str, Any]] = []
-        obstacle_states: List[Dict[str, Any]] = []
-        target_states: List[Dict[str, Any]] = []
-
-        for body_id in list(getattr(env_instance, "_drone_ids", [])):
-            state = self._capture_body_state(env_instance, body_id)
-            if state is not None:
-                drone_states.append(state)
-
-        for obstacle in list(getattr(env_instance, "_obstacles", [])):
-            body_id = getattr(obstacle, "body_id", None)
-            if body_id is None:
-                continue
-            state = self._capture_body_state(env_instance, body_id)
-            if state is not None:
-                obstacle_states.append(state)
-
-        seen_targets = set()
-        for target in list(getattr(env_instance, "_targets", []) or []):
-            body_id = getattr(target, "body_id", None)
-            if body_id is None or body_id in seen_targets:
-                continue
-            seen_targets.add(body_id)
-            state = self._capture_body_state(env_instance, body_id)
-            if state is not None:
-                target_states.append(state)
-
-        return {
-            "episode": int(self._episode),
-            "step": int(self._step),
-            "drones": drone_states,
-            "obstacles": obstacle_states,
-            "targets": target_states,
-        }
-    
-    def _record_frame(self, env_instance):
-        frame = self._capture_frame(env_instance)
-        with self._record_lock:
-            self._recorded_frames.append(frame)
-            if len(self._recorded_frames) > self._max_recorded_frames:
-                overflow = len(self._recorded_frames) - self._max_recorded_frames
-                self._recorded_frames = self._recorded_frames[overflow:]
-            self._replay_index = max(0, len(self._recorded_frames) - 1)
-
-    def get_replay_frame_meta(self, index: int) -> Optional[Dict[str, int]]:
-        with self._record_lock:
-            if not self._recorded_frames:
-                return None
-            bounded_index = max(0, min(int(index), len(self._recorded_frames) - 1))
-            frame = self._recorded_frames[bounded_index]
-            return {
-                "episode": int(frame.get("episode", 0)),
-                "step": int(frame.get("step", 0)),
-            }
-
-    def _capture_body_state(self, env_instance, body_id: int) -> Optional[Dict[str, Any]]:
-        p = getattr(env_instance, "_p", None)
-        if p is None:
-            return None
-        try:
-            position, orientation = env_instance._call_physics(p.getBasePositionAndOrientation, int(body_id))
-            linear_velocity, angular_velocity = env_instance._call_physics(p.getBaseVelocity, int(body_id))
-            return {
-                "body_id": int(body_id),
-                "position": [float(v) for v in position],
-                "orientation": [float(v) for v in orientation],
-                "linear_velocity": [float(v) for v in linear_velocity],
-                "angular_velocity": [float(v) for v in angular_velocity],
-            }
-        except Exception:
-            return None
-
-    def _apply_frame(self, env_instance, frame: Dict[str, Any]):
-        p = getattr(env_instance, "_p", None)
-        if p is None:
-            return
-
-        def restore(state: Dict[str, Any]):
-            body_id = int(state.get("body_id", -1))
-            if body_id < 0:
-                return
-            position = state.get("position", [0.0, 0.0, 0.0])
-            orientation = state.get("orientation", [0.0, 0.0, 0.0, 1.0])
-            linear_velocity = state.get("linear_velocity", [0.0, 0.0, 0.0])
-            angular_velocity = state.get("angular_velocity", [0.0, 0.0, 0.0])
-            try:
-                env_instance._call_physics(
-                    p.resetBasePositionAndOrientation,
-                    body_id,
-                    position,
-                    orientation,
-                )
-                env_instance._call_physics(
-                    p.resetBaseVelocity,
-                    body_id,
-                    linear_velocity,
-                    angular_velocity,
-                )
-            except Exception:
-                return
-
-        for state in frame.get("drones", []):
-            restore(state)
-        for state in frame.get("obstacles", []):
-            restore(state)
-        for state in frame.get("targets", []):
-            restore(state)
-
-    ################ Recording and replay logic ################
-
-
-def _safe_unit(vec: np.ndarray) -> np.ndarray:
-    norm = float(np.linalg.norm(vec))
-    if norm < 1e-6:
-        return np.zeros_like(vec)
-    return vec / norm
+        return {agent: self._predict_action(obs) for agent, obs in obs_dict.items()}
