@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from stable_baselines3.common.vec_env import VecEnvWrapper
 import numpy as np
 
@@ -5,10 +6,10 @@ import numpy as np
 class HandleInactiveDrones(VecEnvWrapper):
     """
     After VecNormalize in training, force inactive drone slots in vec to zero observations (consistent with env).
-    This makes inactive slots look truly inert to policy.
+    This makes inactive slots look invisible to policy.
     """
 
-    def __init__(self, venv, active_drones: int, max_drones: int):
+    def __init__(self, venv, active_drones: int, max_drones: int) -> None:
         super().__init__(venv)
         self.active_drones = int(active_drones)
         self.max_drones = int(max_drones)
@@ -23,7 +24,7 @@ class HandleInactiveDrones(VecEnvWrapper):
         )
 
     def _zero_inactive_rows(self, obs: np.ndarray) -> np.ndarray:
-        """ Add the active / inactive flag mask to the observation. """
+        """Add the active / inactive flag mask to the observation."""
         obs = np.array(obs, copy=True)
         obs[self._inactive_mask] = 0.0
         return obs

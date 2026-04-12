@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 
@@ -128,7 +129,9 @@ class CommandTerminal(QFrame):
             self._process.kill()
 
     def _on_output_ready(self):
-        chunk = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        chunk = bytes(self._process.readAllStandardOutput()).decode(
+            "utf-8", errors="replace"
+        )
         self._append_line(chunk)
 
     def _on_process_finished(self, exit_code: int):
@@ -138,6 +141,7 @@ class CommandTerminal(QFrame):
         self.run_btn.setEnabled(False)
         self.stop_btn.setEnabled(False)
         QTimer.singleShot(0, self._start_shell)
+
 
 
 class StreamRedirect(QObject):
@@ -150,6 +154,7 @@ class StreamRedirect(QObject):
 
     def flush(self):
         pass
+
 
 
 class AppTerminal(QFrame):
@@ -186,6 +191,7 @@ class AppTerminal(QFrame):
         self.output.moveCursor(self.output.textCursor().MoveOperation.End)
 
 
+
 class DualTerminal(QWidget):
 
     def __init__(self, parent=None):
@@ -195,3 +201,4 @@ class DualTerminal(QWidget):
         self.app_terminal = AppTerminal()
         layout.addWidget(self.cmd_terminal, 1)
         layout.addWidget(self.app_terminal, 1)
+

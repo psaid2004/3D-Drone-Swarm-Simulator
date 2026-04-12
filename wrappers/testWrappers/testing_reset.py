@@ -1,6 +1,8 @@
+# -*- coding: utf-8 -*-
 import time
 import numpy as np
 from wrappers.env_3d import DroneSwarm3D
+
 
 def safe_unit(v: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(v)
@@ -8,16 +10,14 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
         return np.zeros_like(v)
     return v / norm
 
-def run_episode(env, n_steps):
 
+def run_episode(env, n_steps):
     obs_dict, info = env.reset()
 
     print("\n===== NEW EPISODE STARTED =====")
     print("Initial observations:")
 
-
     for step in range(n_steps):
-
         action_dict = {}
 
         for drone, obs in obs_dict.items():
@@ -66,8 +66,8 @@ def run_episode(env, n_steps):
         env.render()
         time.sleep(1 / 60)
 
-def main():
 
+def main():
     n_drones = 2
     n_steps = 1000
 
@@ -86,9 +86,9 @@ def main():
     n_episodes = 5
 
     for ep in range(n_episodes):
-        print(f"\n==============================")
+        print("\n==============================")
         print(f"RUNNING EPISODE {ep + 1}")
-        print(f"==============================")
+        print("==============================")
 
         run_episode(pz_env, n_steps)
 
@@ -97,6 +97,7 @@ def main():
 
     input("Press Enter to close environment...")
     pz_env.close()
+
 
 if __name__ == "__main__":
     main()

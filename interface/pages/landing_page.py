@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -6,10 +7,19 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
+    QSpinBox,
+    QVBoxLayout,
     QWidget,
+)
+
+
 )
 
 
@@ -37,6 +47,7 @@ class LandingPage(QWidget):
         config_frame.setMaximumWidth(500)
         config_layout = QVBoxLayout(config_frame)
 
+
         config_title = QLabel("Quick Configuration")
         config_title.setStyleSheet("font-weight: bold; font-size: 18px;")
         config_layout.addWidget(config_title)
@@ -50,6 +61,8 @@ class LandingPage(QWidget):
         drone_layout.addStretch()
         config_layout.addLayout(drone_layout)
 
+
+        # Number of obstacles
         obstacle_layout = QHBoxLayout()
         obstacle_layout.addWidget(QLabel("Number of Obstacles:"))
         self.obstacle_spinbox = QSpinBox()
@@ -69,6 +82,8 @@ class LandingPage(QWidget):
         steps_layout.addStretch()
         config_layout.addLayout(steps_layout)
 
+
+        # Render mode
         render_layout = QHBoxLayout()
         render_layout.addWidget(QLabel("Render Mode:"))
         self.render_combo = QComboBox()
@@ -77,6 +92,8 @@ class LandingPage(QWidget):
         render_layout.addStretch()
         config_layout.addLayout(render_layout)
 
+
+        # Lidar option
         self.lidar_checkbox = QCheckBox("Enable Lidar")
         config_layout.addWidget(self.lidar_checkbox)
 
@@ -97,6 +114,9 @@ class LandingPage(QWidget):
         experimental_layout = QVBoxLayout(experimental_frame)
 
         experimental_title = QLabel("Experimental Settings")
+        experimental_title.setStyleSheet(
+            "font-weight: bold; font-size: 18px; margin-bottom: 10px;"
+        )
         experimental_title.setStyleSheet(
             "font-weight: bold; font-size: 18px; margin-bottom: 10px;"
         )
@@ -187,3 +207,4 @@ class LandingPage(QWidget):
             "seed": self.seed_spinbox.value() if self.use_seed_checkbox.isChecked() else None,
         }
         self.switch_to_simulation(config)
+

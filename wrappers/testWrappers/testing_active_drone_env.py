@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import time
 import numpy as np
 from wrappers.env_3d import DroneSwarm3D
@@ -10,7 +11,9 @@ def safe_unit(v: np.ndarray) -> np.ndarray:
     return (v / norm).astype(np.float32)
 
 
-def make_policy_actions(obs_dict: dict[str, np.ndarray], active_drones: int) -> dict[str, np.ndarray]:
+def make_policy_actions(
+    obs_dict: dict[str, np.ndarray], active_drones: int
+) -> dict[str, np.ndarray]:
     """
     Build actions for all visible agents.
     Active drones move toward target.
@@ -40,7 +43,9 @@ def make_policy_actions(obs_dict: dict[str, np.ndarray], active_drones: int) -> 
     return action_dict
 
 
-def print_step_summary(env, step: int, obs_dict, reward_dict, info_dict, max_lines: int = 12) -> None:
+def print_step_summary(
+    env, step: int, obs_dict, reward_dict, info_dict, max_lines: int = 12
+) -> None:
     print(f"\n===== STEP {step} =====")
     shown = 0
     for drone in obs_dict:
@@ -93,20 +98,30 @@ def check_padded_drones_are_inert(
             raise AssertionError(f"{drone} is padded but observation is not all zeros.")
 
         if reward != 0.0:
-            raise AssertionError(f"{drone} is padded but reward is {reward}, expected 0.0.")
+            raise AssertionError(
+                f"{drone} is padded but reward is {reward}, expected 0.0."
+            )
 
         if term not in (False, None):
-            raise AssertionError(f"{drone} is padded but terminated={term}, expected False.")
+            raise AssertionError(
+                f"{drone} is padded but terminated={term}, expected False."
+            )
 
         if trunc not in (False, None):
-            raise AssertionError(f"{drone} is padded but truncated={trunc}, expected False.")
+            raise AssertionError(
+                f"{drone} is padded but truncated={trunc}, expected False."
+            )
 
         if info.get("active", True) is not False:
             raise AssertionError(f"{drone} is padded but info['active'] is not False.")
 
 
-def run_episode(active_drones: int, max_drones: int, n_steps: int = 300, render: bool = True) -> None:
-    print(f"\n=== RUN EPISODE | active_drones={active_drones}, max_drones={max_drones} ===")
+def run_episode(
+    active_drones: int, max_drones: int, n_steps: int = 300, render: bool = True
+) -> None:
+    print(
+        f"\n=== RUN EPISODE | active_drones={active_drones}, max_drones={max_drones} ==="
+    )
 
     env = DroneSwarm3D(
         world_scale=4.0,
@@ -127,18 +142,29 @@ def run_episode(active_drones: int, max_drones: int, n_steps: int = 300, render:
     print(f"max_total_num_drones = {env.max_total_num_drones}")
     print(f"len(obs_dict)        = {len(obs_dict)}")
 
-    assert len(env.possible_agents) == max_drones, "possible_agents should equal fixed max capacity"
+    assert (
+        len(env.possible_agents) == max_drones
+    ), "possible_agents should equal fixed max capacity"
     assert env.total_num_drones == active_drones, "active drone count mismatch"
     assert env.max_total_num_drones == max_drones, "max drone count mismatch"
-    assert len(obs_dict) == max_drones, "obs_dict should contain all fixed-capacity agents"
+    assert (
+        len(obs_dict) == max_drones
+    ), "obs_dict should contain all fixed-capacity agents"
 
     # Initial padded-agent sanity check
     initial_rewards = {a: 0.0 for a in obs_dict}
     initial_terms = {a: False for a in obs_dict}
     initial_truncs = {a: False for a in obs_dict}
-    initial_infos = {a: {"active": i < active_drones} for i, a in enumerate(obs_dict.keys())}
+    initial_infos = {
+        a: {"active": i < active_drones} for i, a in enumerate(obs_dict.keys())
+    }
     check_padded_drones_are_inert(
-        obs_dict, initial_rewards, initial_terms, initial_truncs, initial_infos, active_drones
+        obs_dict,
+        initial_rewards,
+        initial_terms,
+        initial_truncs,
+        initial_infos,
+        active_drones,
     )
 
     for step in range(n_steps):
@@ -167,8 +193,12 @@ def run_episode(active_drones: int, max_drones: int, n_steps: int = 300, render:
     print("[OK] episode run completed")
 
 
-def run_reset_test(active_drones: int, max_drones: int, n_steps_before_reset: int = 50) -> None:
-    print(f"\n=== RESET TEST | active_drones={active_drones}, max_drones={max_drones} ===")
+def run_reset_test(
+    active_drones: int, max_drones: int, n_steps_before_reset: int = 50
+) -> None:
+    print(
+        f"\n=== RESET TEST | active_drones={active_drones}, max_drones={max_drones} ==="
+    )
 
     env = DroneSwarm3D(
         world_scale=4.0,
@@ -213,7 +243,6 @@ def run_stage_transition_test(max_drones: int = 10) -> None:
     Mimics curriculum stage transition without SB3:
     stage 0 -> 1 active drone
     stage 1 -> 2 active drones
-    both with same fixed max capacity
     """
     print(f"\n=== STAGE TRANSITION TEST | max_drones={max_drones} ===")
 
@@ -268,13 +297,10 @@ def run_stage_transition_test(max_drones: int = 10) -> None:
 
 
 def main():
-    # 1) visual smoke test
     run_episode(active_drones=4, max_drones=10, n_steps=8000, render=True)
 
-    # 2) reset stability
     run_reset_test(active_drones=1, max_drones=10, n_steps_before_reset=50)
 
-    # 3) stage-like change in active drone count
     run_stage_transition_test(max_drones=10)
 
     print("\nALL TESTS PASSED")

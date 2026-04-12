@@ -1,6 +1,6 @@
+# -*- coding: utf-8 -*-
 import pybullet as p
-import numpy as np
-from envs.createObjects import EnvObject, Dynamic
+
 
 class CollisionQueryWorld:
     def __init__(self):
@@ -10,16 +10,14 @@ class CollisionQueryWorld:
         self.static_bodies = []
         self.dynamic_bodies = {}
         self.temp_bodies = []
-    
+
     def close(self):
-        if p.isConnected(self.cid) :
+        if p.isConnected(self.cid):
             p.disconnect(self.cid)
-    
+
     def _create_body_from_spec(self, spec, pos, quat):
         shape_id = p.createCollisionShape(
-            physicsClientId=self.cid,
-            shapeType=spec["geom"],
-            **spec["collision_kwargs"]
+            physicsClientId=self.cid, shapeType=spec["geom"], **spec["collision_kwargs"]
         )
         body_id = p.createMultiBody(
             baseMass=0,
@@ -27,29 +25,33 @@ class CollisionQueryWorld:
             baseVisualShapeIndex=-1,
             basePosition=pos,
             baseOrientation=quat,
-            physicsClientId=self.cid
+            physicsClientId=self.cid,
         )
         return body_id
 
     def add_dynamic_object(self, key, obj):
         pos = obj.start_pos
-        body_id = self._create_body_from_spec(obj.collision_shape_spec, pos, obj.baseQuat)
+        body_id = self._create_body_from_spec(
+            obj.collision_shape_spec, pos, obj.baseQuat
+        )
         self.dynamic_bodies[key] = body_id
         return body_id
 
     def add_static_object(self, obj):
         pos = obj.start_pos
-        body_id = self._create_body_from_spec(obj.collision_shape_spec(), pos, obj.baseQuat)
+        body_id = self._create_body_from_spec(
+            obj.collision_shape_spec(), pos, obj.baseQuat
+        )
         self.static_bodies.append(body_id)
         return body_id
 
-    
     def add_temp_object(self, obj):
         pos = obj.start_pos
-        body_id = self._create_body_from_spec(obj.collision_shape_spec, pos, obj.baseQuat)
+        body_id = self._create_body_from_spec(
+            obj.collision_shape_spec, pos, obj.baseQuat
+        )
         self.temp_bodies.append(body_id)
         return body_id
-
 
     def set_body_pose(self, body_id, pos, quat):
         p.resetBasePositionAndOrientation(
@@ -67,13 +69,13 @@ class CollisionQueryWorld:
             physicsClientId=self.cid,
         )
         return len(pts) > 0
-    
+
     def remove_body(self, body_id):
         try:
-            p.removeBody(body_id, physicsClientIds = self.cid)
+            p.removeBody(body_id, physicsClientIds=self.cid)
         except Exception:
             pass
-    
+
     def clear(self):
         self.close()
         self.cid = p.connect(p.DIRECT)

@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
+
 import random
 import threading
 import time
+import numpy as np
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
@@ -157,6 +160,7 @@ class EnvRunner:
                     self._get_drone_spawn_configs() if callable(self._get_drone_spawn_configs) else [],
                     self._get_target_spawn_configs() if callable(self._get_target_spawn_configs) else [],
                 )
+                # print("Env made")
                 self._episode += 1
                 self._step = 0
                 done = {agent: False for agent in current_env.possible_agents} 

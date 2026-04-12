@@ -1,6 +1,5 @@
+# -*- coding: utf-8 -*-
 import pybullet as p
-import pybullet_data
-import time
 import numpy as np
 
 def safe_unit(v: np.ndarray) -> np.ndarray:
@@ -23,70 +22,72 @@ class EnvObject:
         self.SHAPE_CONFIGS = {
             "box": {
                 "geom": p.GEOM_BOX,
-                "collision_kwargs": lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
-                "visual_kwargs":    lambda s: {"halfExtents": np.array([0.2, 0.2, 0.2]) * s},
+                "collision_kwargs": lambda s: {
+                    "halfExtents": np.array([0.2, 0.2, 0.2]) * s
+                },
+                "visual_kwargs": lambda s: {
+                    "halfExtents": np.array([0.2, 0.2, 0.2]) * s
+                },
                 "use_orientation": False,
-                "radius" : 0.2*size
+                "radius": 0.2 * size,
             },
             "wall": {
                 "geom": p.GEOM_BOX,
-                "collision_kwargs": lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
-                "visual_kwargs":    lambda s: {"halfExtents": np.array([0.3, 0.05, 0.2]) * s},
+                "collision_kwargs": lambda s: {
+                    "halfExtents": np.array([0.3, 0.05, 0.2]) * s
+                },
+                "visual_kwargs": lambda s: {
+                    "halfExtents": np.array([0.3, 0.05, 0.2]) * s
+                },
                 "use_orientation": True,
-                "radius" : 0.3 * size
+                "radius": 0.3 * size,
             },
             "sphere": {
                 "geom": p.GEOM_SPHERE,
                 "collision_kwargs": lambda s: {"radius": 0.2 * s},
-                "visual_kwargs":    lambda s: {"radius": 0.2 * s},
+                "visual_kwargs": lambda s: {"radius": 0.2 * s},
                 "use_orientation": False,
-                "radius" : 0.2 * size
+                "radius": 0.2 * size,
             },
             "cylinder": {
                 "geom": p.GEOM_CYLINDER,
                 "collision_kwargs": lambda s: {"radius": 0.1 * s, "height": 0.5 * s},
-                "visual_kwargs":    lambda s: {"radius": 0.1 * s, "length": 0.5 * s}, 
+                "visual_kwargs": lambda s: {"radius": 0.1 * s, "length": 0.5 * s},
                 "use_orientation": True,
-                "radius": 0.1 * size 
+                "radius": 0.1 * size,
             },
             "x_pos_wall": {
                 "geom": p.GEOM_BOX,
                 "collision_kwargs": lambda s: {"halfExtents": np.array([0.05, s, s])},
-                "visual_kwargs":    lambda s: {"halfExtents": np.array([0.05, s, s])},
-                "use_orientation": False
+                "visual_kwargs": lambda s: {"halfExtents": np.array([0.05, s, s])},
+                "use_orientation": False,
             },
             "y_pos_wall": {
                 "geom": p.GEOM_BOX,
                 "collision_kwargs": lambda s: {"halfExtents": np.array([s, 0.05, s])},
-                "visual_kwargs":    lambda s: {"halfExtents": np.array([s, 0.05, s])},
-                "use_orientation": False
+                "visual_kwargs": lambda s: {"halfExtents": np.array([s, 0.05, s])},
+                "use_orientation": False,
             },
             "z_pos_wall": {
                 "geom": p.GEOM_BOX,
                 "collision_kwargs": lambda s: {"halfExtents": np.array([s, s, 0.05])},
-                "visual_kwargs":    lambda s: {"halfExtents": np.array([s, s, 0.05])},
-                "use_orientation": False
-            }
+                "visual_kwargs": lambda s: {"halfExtents": np.array([s, s, 0.05])},
+                "use_orientation": False,
+            },
         }
-    
-    
+
     def set_shape_spec(self, shape):
         self.shape = shape
         conf = self.SHAPE_CONFIGS[shape]
         geom = conf["geom"]
         collision_kwargs = conf["collision_kwargs"](self.size)
-        
-        self.collision_shape_spec = {
-            "geom": geom,
-            "collision_kwargs": collision_kwargs
-        }
-        
+
+        self.collision_shape_spec = {"geom": geom, "collision_kwargs": collision_kwargs}
+
         self.half_extents = collision_kwargs.get("halfExtents")
         self.radius = collision_kwargs.get("radius", conf.get("radius"))
         self.height = collision_kwargs.get("height")
-    
-    
-    # kwargs = keyword arguments
+
     def create(self, shape, physics_call, color=(1, 0, 0, 1)):
         self.physics_call = physics_call
         self.shape = shape
@@ -95,45 +96,44 @@ class EnvObject:
         geom = self.collision_shape_spec["geom"]
         collision_kwargs = self.collision_shape_spec["collision_kwargs"]
         visual_kwargs = conf["visual_kwargs"](self.size)
-        
-        
-        collision = physics_call(p.createCollisionShape,geom, **collision_kwargs)
-        visual = physics_call(p.createVisualShape,geom, rgbaColor=color, **visual_kwargs)
-        
+
+        collision = physics_call(p.createCollisionShape, geom, **collision_kwargs)
+        visual = physics_call(
+            p.createVisualShape, geom, rgbaColor=color, **visual_kwargs
+        )
+
         body_kwargs = {
             "baseMass": 0,
             "baseCollisionShapeIndex": collision,
             "baseVisualShapeIndex": visual,
             "basePosition": self.start_pos,
         }
-        
+
         if conf["use_orientation"]:
             body_kwargs["baseOrientation"] = p.getQuaternionFromEuler(self.orientation)
 
         body = physics_call(p.createMultiBody, **body_kwargs)
         self.body_id = body  # store ID in object
         return self.body_id
- # and targets?
+
+    # and targets?
     def isOverlapping(self, obstacle):
         pts = self.physics_call(
-            p.getClosestPoints,
-            bodyA=self.body_id,
-            bodyB=obstacle.body_id,
-            distance=0.0
+            p.getClosestPoints, bodyA=self.body_id, bodyB=obstacle.body_id, distance=0.0
         )
         if len(pts) > 0:
             return True
         else:
             return False
 
-    def is_in_swept_area(self, object, safety_margin = 0.3):
+    def is_in_swept_area(self, object, safety_margin=0.3):
         center, half_extents = object.get_swept_area()
         p = self.start_pos
         for axis in range(3):
             if abs(p[axis] - center[axis]) > half_extents[axis] + safety_margin:
                 return False
         return True
-    
+
     # Check if obstacle is too close to drones or the targets
     def isValidPosition(self, dronePositions, targets, min_dist):
         # Check if too close to drones
@@ -153,10 +153,9 @@ class EnvObject:
                 return False
 
         return True
-    
+
     def pose_at_time(self, t: float):
         return self.start_pos.tolist(), self.baseQuat
-
 
 
 class Dynamic(EnvObject):
@@ -195,10 +194,7 @@ class Dynamic(EnvObject):
 
     def isOverlapping(self, obstacle):
         pts = self.physics_call(
-            p.getClosestPoints,
-            bodyA=self.body_id,
-            bodyB=obstacle.body_id,
-            distance=0.0
+            p.getClosestPoints, bodyA=self.body_id, bodyB=obstacle.body_id, distance=0.0
         )
         if len(pts) > 0:
             return True
@@ -208,33 +204,32 @@ class Dynamic(EnvObject):
     def axis_position_at_time(self, t):
         path_length = self.max - self.min
         x0 = float(self.start_pos[self.axis])
-        v = float(self.direction) * float(self.speed) #sigend velocity
-        
-        unfolded = x0 + v * t # motion formula
+        v = float(self.direction) * float(self.speed)  # sigend velocity
+
+        unfolded = x0 + v * t  # motion formula
         y = (unfolded - self.min) % (2 * path_length)
         if y <= path_length:
             return self.min + y
         else:
-            return self.min + (2 * path_length - y) # bounce backwards
-    
+            return self.min + (2 * path_length - y)  # bounce backwards
+
     def full_position_at_time(self, t):
         pos = self.start_pos.copy()
         pos[self.axis] = self.axis_position_at_time(t)
         return pos
-    
-    def full_position_at_step(self, step: int, dt: float = 1.0/60.0) -> np.array:
+
+    def full_position_at_step(self, step: int, dt: float = 1.0 / 60.0) -> np.array:
         return self.full_position_at_time(step * dt)
-    
+
     def get_period(self) -> float:
         path_length = self.max - self.min
         return 2.0 * path_length / self.speed
-    
+
     def pose_at_time(self, t: float):
         return self.full_position_at_time(t).tolist(), self.baseQuat
-    
 
 
-class Target():
+class Target:
     def __init__(self, color, start_pos, radius, physics_call, call_gui):
         self.start_pos = start_pos
         self.radius = radius
@@ -271,12 +266,15 @@ class Target():
             rgbaColor=self.color,
         )
 
-
         body = self.call_gui(
-                p.createMultiBody,
-                baseMass=0.0,
-                baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=vis,
-                basePosition=[float(self.start_pos[0]), float(self.start_pos[1]), float(self.start_pos[2])],
-            )
+            p.createMultiBody,
+            baseMass=0.0,
+            baseCollisionShapeIndex=-1,
+            baseVisualShapeIndex=vis,
+            basePosition=[
+                float(self.start_pos[0]),
+                float(self.start_pos[1]),
+                float(self.start_pos[2]),
+            ],
+        )
         return body

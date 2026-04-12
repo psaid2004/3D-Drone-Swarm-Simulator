@@ -1,19 +1,13 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 import optuna
-import torch
-import numpy as np
 
-from stable_baselines3 import SAC
 from stable_baselines3.common.evaluation import evaluate_policy
-from config.sac_defaults import *
-from config.curriculum import Curriculum
 from train.sac_training import *
-# reuse your existing functions
-# create_env, unwrap_vec_normalize, safe_close, Curriculum, etc.
 
 
 def sample_sac_params(trial):
-    """Define search space (VERY IMPORTANT)"""
+    """Define search space """
 
     return {
         "learning_rate": trial.suggest_loguniform("learning_rate", 1e-5, 3e-4),
@@ -83,10 +77,7 @@ def objective(trial):
         model.learn(total_timesteps=TUNING_TIMESTEPS)
 
         mean_reward, _ = evaluate_policy(
-            model,
-            eval_env,
-            n_eval_episodes=5,
-            deterministic=True
+            model, eval_env, n_eval_episodes=5, deterministic=True
         )
 
     except Exception as e:
@@ -99,14 +90,15 @@ def objective(trial):
 
     return mean_reward
 
+
 def run_tuning():
     study = optuna.create_study(direction="maximize")
 
     study.optimize(
         objective,
-        n_trials=30,     # increase later (50–100)
-        n_jobs=1,        # set >1 for parallel
-        show_progress_bar = True
+        n_trials=30,  # increase later (50–100)
+        n_jobs=1,  # set >1 for parallel
+        show_progress_bar=True,
     )
 
     print("\n===== BEST PARAMS =====")

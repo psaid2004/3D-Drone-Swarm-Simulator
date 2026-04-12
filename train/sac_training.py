@@ -1,16 +1,24 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import os, time
+import os
+import time
 from pathlib import Path
+import numpy as np
 
 import torch
 import warnings
 
+import wandb
+from wandb.integration.sb3 import WandbCallback
+
 import supersuit as ss
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import (
-    CallbackList, CheckpointCallback, EvalCallback, ProgressBarCallback, StopTrainingOnNoModelImprovement
-
+    CallbackList,
+    CheckpointCallback,
+    EvalCallback,
+    StopTrainingOnNoModelImprovement
 )
 from stable_baselines3.common.vec_env import VecNormalize, VecMonitor
 
@@ -21,6 +29,10 @@ from config.sac_defaults import *
 from train.callbacks.custom_stats_cb import StepStatsCallback, CurriculumStageInfo
 from wrappers.env_3d import DroneSwarm3D
 from wrappers.env_reset_fix import SB3VecResetTupleFix
+from wrappers.handle_inactive_drones import HandleInactiveDrones
+
+from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3.common.type_aliases import ReplayBufferSamples
 
 warnings.filterwarnings("ignore", message=".*Box low's precision lowered.*")
 warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
@@ -28,29 +40,110 @@ warnings.filterwarnings("ignore", message=".*Box high's precision lowered.*")
 
 # ---- FILESYSTEM HELPERS ----
 def get_next_model_path(
-        num_drones: int,
-        num_static_obs: int,
-        num_dynamic_obs: int,
-        base=f"{MODELS_DIR}/sac_",
-        ext=".zip"
+    num_drones: int,
+    num_static_obs: int,
+    num_dynamic_obs: int,
+    base=f"{MODELS_DIR}/sac_",
+    ext=".zip",
 ):
     """Find a new model filename that does not overwrite an existing model."""
     k = 0
-    while os.path.isfile(f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"):
+    while os.path.isfile(
+        f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"
+    ):
         k += 1
 
     return f"{base}{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}{ext}"
 
-def get_next_checkpoint_dir(
-        num_drones: int,
-        num_static_obs: int,
-        num_dynamic_obs: int
-):
+
+def get_next_checkpoint_dir(num_drones: int, num_static_obs: int, num_dynamic_obs: int):
     k = 0
-    while os.path.isdir(f"{MODELS_DIR}/sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"):
+    while os.path.isdir(
+        f"{MODELS_DIR}/sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"
+    ):
         k += 1
 
     return f"sac_drones_{k}_{num_drones}_{num_static_obs}_{num_dynamic_obs}"
+
+
+class ActiveSlotReplayBuffer(ReplayBuffer):
+    """
+    Replay buffer that stores all transitions but only samples from slots whose info['active'] was True when inserted.
+
+    Normal SAC replay buffer: samples uniformly from all slot-transitions that were stored.
+    This custom replay buffer: samples uniformly only from slot-transitions where info["active"] was True.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.active_mask = np.zeros((self.buffer_size, self.n_envs), dtype=np.bool_)
+
+    def add(self, obs, next_obs, action, reward, done, infos):
+        """Method is called every step when SB3 pushes transition to memory"""
+        # infos is a list of length n_envs
+        active = np.array(
+            [bool(info.get("active", True)) for info in infos],
+            dtype=np.bool_,
+        )
+        # self.pos is current write position to replay buffer
+        # flag the replay buffer position as active / inactive
+        self.active_mask[self.pos] = active
+        # store normal information into replay buffer
+        super().add(obs, next_obs, action, reward, done, infos)
+
+    def sample(self, batch_size: int, env=None) -> ReplayBufferSamples:
+        """ Sample from the replay buffer by only selecting from active slots."""
+        # check how many rows of buffer are already full
+        upper_bound = self.buffer_size if self.full else self.pos
+
+        # find all slots where active mask is true
+        # return the indices in the buffer: [buffer row, slot_idx]
+        valid_pairs = np.argwhere(self.active_mask[:upper_bound])
+
+        # fall back to normal sampling if no valid pairs yet
+        if len(valid_pairs) == 0:
+            return super().sample(batch_size=batch_size, env=env)
+
+        # randomly choose batch size from valid pairs
+        choice = np.random.randint(0, len(valid_pairs), size=batch_size)
+        # get row in buffer
+        batch_indices = valid_pairs[choice, 0]
+        # get slot (col) in buffer
+        env_indices = valid_pairs[choice, 1]
+
+        return self._get_samples_from_pairs(batch_indices, env_indices, env)
+
+    def _get_samples_from_pairs(
+        self, batch_indices, env_indices, env=None
+    ) -> ReplayBufferSamples:
+        """Retrieve the transitions from the replay buffer given the row and column indices"""
+        if self.optimize_memory_usage:
+            next_obs = self.observations[
+                (batch_indices + 1) % self.buffer_size, env_indices, :
+            ]
+        else:
+            next_obs = self.next_observations[batch_indices, env_indices, :]
+
+        if self.handle_timeout_termination:
+            dones = (
+                self.dones[batch_indices, env_indices]
+                * (1 - self.timeouts[batch_indices, env_indices])
+            ).reshape(-1, 1)
+        else:
+            dones = self.dones[batch_indices, env_indices].reshape(-1, 1)
+
+        data = (
+            self._normalize_obs(self.observations[batch_indices, env_indices, :], env),
+            self.actions[batch_indices, env_indices, :],
+            self._normalize_obs(next_obs, env),
+            dones,
+            self._normalize_reward(
+                self.rewards[batch_indices, env_indices].reshape(-1, 1), env
+            ),
+        )
+
+        return ReplayBufferSamples(*tuple(map(self.to_torch, data)))
+
 
 # ---- CREATE ENV ----
 def create_env(
@@ -60,7 +153,7 @@ def create_env(
     num_dynamic_obstacles,
     max_episode_steps,
     lidar_enabled,
-    render_mode=None #"human"
+    render_mode=None,
 ):
     """Build PettingZoo ParallelEnv → SB3 VecEnv."""
 
@@ -72,19 +165,15 @@ def create_env(
         max_steps=max_episode_steps,
         lidar=lidar_enabled,
         render_mode=render_mode,
-        max_drones_per_swarm=MAX_DRONES_PER_SWARM
+        max_drones_per_swarm=MAX_DRONES_PER_SWARM,
     )
 
-    # convert PettingZoo ParallelEnv to vectorised environment shape for SB3 to work on
     vec = ss.pettingzoo_env_to_vec_env_v1(env)
-    # create number of copies of env in parallel
     vec = ss.concat_vec_envs_v1(vec, N_ENVS, base_class="stable_baselines3")
 
     vec = SB3VecResetTupleFix(vec)
-    # record episode-level statistics from the vectorized environment
     vec = VecMonitor(vec)
 
-    # normalizes observations and/or rewards to stabilize training
     vec = VecNormalize(
         vec,
         gamma=GAMMA,
@@ -93,8 +182,14 @@ def create_env(
         clip_obs=5.0,
     )
 
-    return vec
+    # inactive drones become exactly zero again at the policy input
+    vec = HandleInactiveDrones(
+        vec,
+        active_drones=num_drones,
+        max_drones=MAX_DRONES_PER_SWARM,
+    )
 
+    return vec
 
 def unwrap_vec_normalize(env):
     while env is not None:
@@ -130,17 +225,17 @@ def safe_close(env) -> None:
 
 # ---- CALLBACK HELPER ----
 def make_stage_callbacks(
-    *,
-    stage_idx: int,
-    world_scale: float,
-    num_drones: int,
-    num_static_obs: int,
-    num_dynamic_obs: int,
-    stage_steps: int,
-    episode_horizon: int,
-    total_planned_timesteps: int,
-    model_num_timesteps: int,
-    eval_env,
+        *,
+        eval_env,
+        stage_idx: int,
+        world_scale: float,
+        num_drones: int,
+        num_static_obs: int,
+        num_dynamic_obs: int,
+        stage_steps: int,
+        episode_horizon: int,
+        total_planned_timesteps: int,
+        model_num_timesteps: int,
 ):
     """
     Build the full callback stack for one curriculum stage.
@@ -171,30 +266,27 @@ def make_stage_callbacks(
         save_replay_buffer=True,
     )
 
-    progress_cb = ProgressBarCallback()
-
     stats_cb = StepStatsCallback(
-        num_drones=int(MAX_DRONES_PER_SWARM),
+        num_drones=int(num_drones),
         num_envs=int(N_ENVS),
         stage_info=stage_info,
-        # print_every=5000,
         enable_stage_early_stop=True,
         reach_threshold=0.85,
         max_collision_rate=0.05,
         patience=10,
         min_stage_timesteps=10000,
-        verbose=0,
+        verbose=1,
     )
 
-    stats_cb.reset_for_new_stage(stage_start_ts=model_num_timesteps, stage_info=stage_info)
+    stats_cb.reset_for_new_stage(
+        stage_start_ts=model_num_timesteps, stage_info=stage_info
+    )
 
-#TODO: ES CODE UNCOMMENT FOR ES
-
-    #stop_no_improve_cb = StopTrainingOnNoModelImprovement(
-    #    max_no_improvement_evals=8,
-    #    min_evals=3,
-    #    verbose=1,
-    #)
+    stop_no_improve_cb = StopTrainingOnNoModelImprovement(
+        max_no_improvement_evals=8,
+        min_evals=3,
+        verbose=1,
+    )
 
     # evaluate current policy on clean evaluate environment
     eval_cb = EvalCallback(
@@ -205,21 +297,30 @@ def make_stage_callbacks(
         n_eval_episodes=5,
         deterministic=True,
         render=False,
-        #callback_after_eval=stop_no_improve_cb,
+        callback_after_eval=stop_no_improve_cb,
         verbose=1,
     )
 
-    return CallbackList([
-        progress_cb,
-        stats_cb,
-        ckpt_cb,
-        eval_cb,
-    ])
+    wandb_cb = WandbCallback(
+        model_save_path=str(Path(MODELS_DIR) / "wandb_models" / f"stage_{stage_idx}"),
+        model_save_freq=max(1, 10_000 // max(1, N_ENVS)),
+        gradient_save_freq=0,
+        verbose=1,
+    )
+
+    return CallbackList(
+        [
+            stats_cb,
+            ckpt_cb,
+            eval_cb,
+            wandb_cb,
+        ]
+    )
 
 
 # ---- SAC TRAINING ----
 def train(device: str = "auto"):
-    """ Train the SAC model while looping through all curriculum stages."""
+    """Train the SAC model while looping through all curriculum stages."""
     os.makedirs(MODELS_DIR, exist_ok=True)
 
     if device == "auto":
@@ -229,13 +330,44 @@ def train(device: str = "auto"):
     print(f"Device: {device_}")
 
     curr = Curriculum().stages
-    total_planned_timesteps = int(sum(int(s[4]) for s in curr)) #sum of all curriculum stage timesteps
+    total_planned_timesteps = int(
+        sum(int(s[4]) for s in curr)
+    )  # sum of all curriculum stage timesteps
 
     # --- build stage-0 env ---
     ws0, nd0, ns0, ndyn0, steps0, horizon0, lidar0 = curr[0]
     print(
         f"\n=== Stage 0 | world={ws0} drones={nd0} "
         f"static obstacles={ns0} dynamic obstacles={ndyn0} steps={steps0} ==="
+    )
+
+    wandb.init(
+        project="drone-swarm-sac",
+        name=f"sac_stage0_ws{ws0}_d{nd0}",
+        config={
+            "algorithm": "SAC",
+            "world_scale": ws0,
+            "initial_active_drones": nd0,
+            "max_drones_per_swarm": MAX_DRONES_PER_SWARM,
+            "num_static_obstacles": ns0,
+            "num_dynamic_obstacles": ndyn0,
+            "steps_stage0": steps0,
+            "episode_horizon": horizon0,
+            "lidar": lidar0,
+            "n_envs": N_ENVS,
+            "learning_rate": LEARNING_RATE,
+            "buffer_size": BUFFER_SIZE,
+            "learning_starts": LEARNING_STARTS,
+            "batch_size": BATCH_SIZE,
+            "train_freq": str(TRAIN_FREQ),
+            "gradient_steps": GRADIENT_STEPS,
+            "gamma": GAMMA,
+            "entropy_coef": ENTROPY_COEF,
+            "net_arch": NET_ARCH,
+            "initial_blend": INITIAL_BLEND,
+        },
+        sync_tensorboard=True,
+        save_code=True,
     )
 
     # create the training environment
@@ -274,12 +406,11 @@ def train(device: str = "auto"):
         tensorboard_log=f"{MODELS_DIR}/tb_logs",
         verbose=0,
         device=device_,
-    ) # TODO WE NEED TO DO SOME SORT OF HYPERPARAMETER TRAINING HERE TO FIND THE OPTIMAL VALUES
+    )
 
     # --- train stage 0 first ---
-
-
     callbacks = make_stage_callbacks(
+        eval_env=eval_env,
         stage_idx=0,
         world_scale=ws0,
         num_drones=nd0,
@@ -289,7 +420,6 @@ def train(device: str = "auto"):
         episode_horizon=horizon0,
         total_planned_timesteps=total_planned_timesteps,
         model_num_timesteps=model.num_timesteps,
-        eval_env=eval_env,
     )
 
     model.learn(
@@ -314,13 +444,13 @@ def train(device: str = "auto"):
 
     # --- curriculum stages ---
     for idx, (
-            world_scale,
-            num_drones,
-            num_static_obs,
-            num_dynamic_obs,
-            stage_steps,
-            episode_horizon,
-            lidar_enabled,
+        world_scale,
+        num_drones,
+        num_static_obs,
+        num_dynamic_obs,
+        stage_steps,
+        episode_horizon,
+        lidar_enabled,
     ) in enumerate(curr[1:], start=1):
         stage_steps = int(stage_steps)
 
@@ -329,6 +459,16 @@ def train(device: str = "auto"):
             f"drones={num_drones} static={num_static_obs} "
             f"dynamic={num_dynamic_obs} steps={stage_steps} ==="
         )
+
+        wandb.log({
+            "curriculum/current_stage": idx,
+            "curriculum/world_scale": world_scale,
+            "curriculum/active_drones": num_drones,
+            "curriculum/static_obstacles": num_static_obs,
+            "curriculum/dynamic_obstacles": num_dynamic_obs,
+            "curriculum/episode_horizon": episode_horizon,
+            "curriculum/lidar_enabled": int(lidar_enabled),
+        }, step=model.num_timesteps)
 
         # swap envs
         old_train_env = model.get_env()
@@ -394,9 +534,9 @@ def train(device: str = "auto"):
 
         # save the model up until now
         path = get_next_model_path(
-            num_drones = num_drones,
-            num_static_obs = num_static_obs,
-            num_dynamic_obs = num_dynamic_obs
+            num_drones=num_drones,
+            num_static_obs=num_static_obs,
+            num_dynamic_obs=num_dynamic_obs,
         )
 
         model.save(path)
@@ -423,6 +563,8 @@ def train(device: str = "auto"):
 
     safe_close(eval_env)
     safe_close(train_env)
+
+    wandb.finish()
 
     print("Training complete.")
 

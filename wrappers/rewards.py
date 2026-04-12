@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 from typing import Dict
 import numpy as np
@@ -25,7 +26,10 @@ from config.defaults import (
     ALIGN_COEF,
 )
 
-def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[str, float]:
+
+def compute_rewards(
+    env, obs_dict, sim_actions: np.ndarray, step_state
+) -> Dict[str, float]:
     """Compute rewards given observations and actions."""
 
     reward_dict: Dict[str, float] = {}
@@ -84,13 +88,14 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         else:
             alignment = 0.0
 
-
         # --------------- 3. Progress, distance, time, and action cost ---------------
 
         if env._step_count <= 1:
             r_progress = 0.0
         else:
-            r_progress = PROG_COEF * (prev_dist_to_target - dist_to_target) # reward for change in distance to target
+            r_progress = PROG_COEF * (
+                prev_dist_to_target - dist_to_target
+            )  # reward for change in distance to target
 
         if not env.lidar:
             # easier reward during early curriculum
@@ -101,7 +106,6 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
             r_distance_pen = -DIST_PEN * dist_to_target
             r_time = -TIME_PEN
             r_ctrl = -CNTRL_PEN * float(np.linalg.norm(sim_actions[i]))
-
 
         # --------------- 4. Alignment reward ---------------
 
@@ -139,7 +143,7 @@ def compute_rewards(env, obs_dict, sim_actions: np.ndarray, step_state) -> Dict[
         r_near = 0.0
 
         if env.lidar:
-            scan = obs_dict[agent][env._base_obs_dim:]
+            scan = obs_dict[agent][env._base_obs_dim :]
             scan_2d = scan.reshape(LIDAR_NUM_LAYERS, LIDAR_NUM_RAYS)
 
             front_idx = np.array([23, 0, 1], dtype=np.int32)

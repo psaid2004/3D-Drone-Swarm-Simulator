@@ -1,5 +1,7 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 from config.defaults import LIDAR_NUM_RAYS, LIDAR_NUM_LAYERS
+
 
 class ExpertPolicy:
     """
@@ -11,23 +13,14 @@ class ExpertPolicy:
       5. Avoid teammates.
       6. Slow down smoothly near any danger.
 
-    Observation layout:
-      [0:3]   pos
-      [3:6]   vel
-      [6:9]   to_target
-      [9:12]  to_nearest_obs
-      [12:15] to_centroid
-      [15:18] to_nearest_teammate
-      [18:]   lidar hit fractions  (LIDAR_NUM_LAYERS × LIDAR_NUM_RAYS)
-
-    Action: [dir_x, dir_y, dir_z, speed] in [-1, 1]
+    Action result: [dir_x, dir_y, dir_z, speed] in [-1, 1]
     """
 
     def __init__(
         self,
-        avoid_radius: float = 3.5, # if obstacle in radius -> react
+        avoid_radius: float = 3.5,  # if obstacle in radius -> react
         wall_margin: float = 2.5,  # if wall in margin -> react
-        target_brake_dist: float = 1.5, # if target in radius -> brake
+        target_brake_dist: float = 1.5,  # if target in radius -> brake
         teammate_avoid_radius: float = 2.0,  # if teammate in radius -> react
 
         world_scale: float = 5.0,
@@ -38,11 +31,11 @@ class ExpertPolicy:
         speed_near_target: float = 0.30,
         speed_near_teammate: float = 0.30,
 
-        lidar_weight: float = 0.30, # how strongly lidar influences final direction
-        wall_weight: float = 0.55, # how strongly wall avoidance influences final direction
+        lidar_weight: float = 0.30,  # how strongly lidar influences final direction
+        wall_weight: float = 0.55,  # how strongly wall avoidance influences final direction
         teammate_weight: float = 0.8,  # how strongly teammate avoidance influences final direction
 
-        fly_over_gain: float = 0.30, # obstacle directly ahead -> add  upward bias so the drone can go over it
+        fly_over_gain: float = 0.30,  # obstacle directly ahead -> add  upward bias so the drone can go over it
     ):
         self.avoid_radius = avoid_radius
         self.wall_margin = wall_margin
@@ -63,14 +56,12 @@ class ExpertPolicy:
 
         self.fly_over_gain = fly_over_gain
 
-
     def action(self, obs: np.ndarray) -> np.ndarray:
         """
         Derive the expert action given the current observation.
 
         Returns: Action: [dir_x, dir_y, dir_z, speed] in [-1, 1]
-
-         """
+        """
         obs = np.asarray(obs, dtype=np.float32)
 
         pos = obs[0:3]
@@ -102,10 +93,10 @@ class ExpertPolicy:
         teammate_bias = self._teammate_avoidance(obs, to_teammate, dist_to_teammate)
 
         action_dir = (
-                steer_dir
-                + self.lidar_weight * lidar_bias
-                + self.wall_weight * wall_bias
-                + self.teammate_weight * teammate_bias
+            steer_dir
+            + self.lidar_weight * lidar_bias
+            + self.wall_weight * wall_bias
+            + self.teammate_weight * teammate_bias
         )
         action_dir = self.safe_unit(action_dir)
 
@@ -121,26 +112,38 @@ class ExpertPolicy:
 
         # slow near target
         if dist_to_target < self.target_brake_dist:
-            alpha_t = np.clip(dist_to_target / max(self.target_brake_dist, 1e-6), 0.0, 1.0)
-            target_scale = self.speed_near_target + alpha_t * (1.0 - self.speed_near_target)
+            alpha_t = np.clip(
+                dist_to_target / max(self.target_brake_dist, 1e-6), 0.0, 1.0
+            )
+            target_scale = self.speed_near_target + alpha_t * (
+                1.0 - self.speed_near_target
+            )
             speed *= target_scale
 
         if dist_to_teammate < self.teammate_avoid_radius:
-            alpha_m = np.clip(dist_to_teammate / max(self.teammate_avoid_radius, 1e-6), 0.0, 1.0)
-            mate_scale = self.speed_near_teammate + alpha_m * (1.0 - self.speed_near_teammate)
+            alpha_m = np.clip(
+                dist_to_teammate / max(self.teammate_avoid_radius, 1e-6), 0.0, 1.0
+            )
+            mate_scale = self.speed_near_teammate + alpha_m * (
+                1.0 - self.speed_near_teammate
+            )
             speed *= mate_scale
 
         speed_action = float(np.clip(speed * 2.0 - 1.0, -1.0, 1.0))
 
-        return np.array([
-            float(np.clip(action_dir[0], -1.0, 1.0)),
-            float(np.clip(action_dir[1], -1.0, 1.0)),
-            float(np.clip(action_dir[2], -1.0, 1.0)),
-            speed_action,
-        ], dtype=np.float32)
+        return np.array(
+            [
+                float(np.clip(action_dir[0], -1.0, 1.0)),
+                float(np.clip(action_dir[1], -1.0, 1.0)),
+                float(np.clip(action_dir[2], -1.0, 1.0)),
+                speed_action,
+            ],
+            dtype=np.float32,
+        )
 
-
-    def _steer_around_obstacle(self, obs: np.ndarray, dir_target: np.ndarray) -> np.ndarray:
+    def _steer_around_obstacle(
+        self, obs: np.ndarray, dir_target: np.ndarray
+    ) -> np.ndarray:
         """
         Avoid the nearest obstacle by removing the part of the target direction
         that points into it, instead of adding a big repulsive force. This avoids wide circular orbits.
@@ -185,12 +188,12 @@ class ExpertPolicy:
             over[2] = self.fly_over_gain * weight
 
         new_direction_vec = (
-            (1.0 - weight) * dir_target # if weight small -> stay close to target direction
-            + weight * tangential # if weight large -> move more tangential
+            (1.0 - weight)
+            * dir_target  # if weight small -> stay close to target direction
+            + weight * tangential  # if weight large -> move more tangential
             + over
         )
         return self.safe_unit(new_direction_vec)
-
 
     def _lidar_bias(self, obs: np.ndarray) -> np.ndarray:
         """
@@ -208,7 +211,7 @@ class ExpertPolicy:
         if obs.shape[0] < lidar_start + n_lidar or n_lidar <= 0:
             return np.zeros(3, dtype=np.float32)
 
-        lidar = obs[lidar_start: lidar_start + n_lidar]
+        lidar = obs[lidar_start : lidar_start + n_lidar]
         lidar = lidar.reshape(LIDAR_NUM_LAYERS, LIDAR_NUM_RAYS)
 
         # middle layer for horizontal steering
@@ -237,7 +240,6 @@ class ExpertPolicy:
 
         return self.clamp_norm(bias, 1.0)
 
-
     def _wall_avoidance(self, pos: np.ndarray) -> np.ndarray:
         """
         Soft repulsion from wall.
@@ -264,28 +266,32 @@ class ExpertPolicy:
             return gain * (1.0 - max(dist_to_wall, 0.0) / m)
 
         # x walls
-        avoid[0] += wall_push(s - x, gain=1.0) * -1.0 # near +x wall -> push -x
-        avoid[0] += wall_push(x + s, gain=1.0) *  1.0 # near -x wall -> push +x
+        avoid[0] += wall_push(s - x, gain=1.0) * -1.0  # near +x wall -> push -x
+        avoid[0] += wall_push(x + s, gain=1.0) * 1.0  # near -x wall -> push +x
 
         # y walls
-        avoid[1] += wall_push(s - y, gain=1.0) * -1.0 # near +y wall -> push -y
-        avoid[1] += wall_push(y + s, gain=1.0) *  1. # near -y wall -> push +y
+        avoid[1] += wall_push(s - y, gain=1.0) * -1.0  # near +y wall -> push -y
+        avoid[1] += wall_push(y + s, gain=1.0) * 1.0  # near -y wall -> push +y
 
         # z bounds
-        avoid[2] += wall_push(s - z, gain=0.8) * -1.0 # near ceiling -> push down
-        avoid[2] += wall_push(z,     gain=1.0) *  1.0 # near floor   -> push up
+        avoid[2] += wall_push(s - z, gain=0.8) * -1.0  # near ceiling -> push down
+        avoid[2] += wall_push(z, gain=1.0) * 1.0  # near floor   -> push up
 
         return self.clamp_norm(avoid, 1.0)
 
-
-    def _teammate_avoidance(self, obs: np.ndarray, teammate_pos: np.ndarray, distance_to_teammate: float) -> np.ndarray:
+    def _teammate_avoidance(
+        self, obs: np.ndarray, teammate_pos: np.ndarray, distance_to_teammate: float
+    ) -> np.ndarray:
         """
         Soft repulsion from nearest teammate.
 
         Returns a 3D array for the direction vector.
         """
         # check for almost zero distance / teammate far enough away
-        if distance_to_teammate <= 1e-6 or distance_to_teammate >= self.teammate_avoid_radius:
+        if (
+            distance_to_teammate <= 1e-6
+            or distance_to_teammate >= self.teammate_avoid_radius
+        ):
             return np.zeros(3, dtype=np.float32)
 
         # compute unit vector from teammate
@@ -301,17 +307,16 @@ class ExpertPolicy:
         # scale by closeness and clamp norm
         return self.clamp_norm(weight * away, 1.0)
 
-
     def safe_unit(self, v: np.ndarray, eps: float = 1e-8) -> np.ndarray:
         """Normalise a vector; return zero-vector if it's near-zero."""
         n = np.linalg.norm(v)
         return v / (n + eps) if n > eps else np.zeros_like(v)
 
-
-    def clamp_norm(self, v: np.ndarray, max_norm: float = 1.0, eps: float = 1e-8) -> np.ndarray:
+    def clamp_norm(
+        self, v: np.ndarray, max_norm: float = 1.0, eps: float = 1e-8
+    ) -> np.ndarray:
         """Clamp vector magnitude without destroying small magnitudes."""
         n = np.linalg.norm(v)
         if n <= max_norm:
             return v
         return v / (n + eps) * max_norm
-
