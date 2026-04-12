@@ -447,36 +447,8 @@ class DroneSwarm3D(ParallelEnv):
 
     def generate_edge_xyz(self, edge, margin):
         """Generate a random position on a given world edge."""
-
-        if edge == 0:  # +X edge
-            pos = [
-                self.world_scale - margin,
-                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
-                self.rng.uniform(margin, self.world_scale - margin),
-            ]
-
-        elif edge == 1:  # -X edge
-            pos = [
-                -self.world_scale + margin,
-                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
-                self.rng.uniform(margin, self.world_scale - margin),
-            ]
-
-        elif edge == 2:  # +Y edge
-            pos = [
-                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
-                self.world_scale - margin,
-                self.rng.uniform(margin, self.world_scale - margin),
-            ]
-
-        else:  # -Y edge
-            pos = [
-                self.rng.uniform(-self.world_scale + margin, self.world_scale - margin),
-                -self.world_scale + margin,
-                self.rng.uniform(margin, self.world_scale - margin),
-            ]
-
-        return np.array(pos, dtype=np.float32)
+        from envs.createWorld import generate_edge_xyz as _generate_edge_xyz
+        return _generate_edge_xyz(edge, self.world_scale, margin, rng=self.rng)
 
     def generate_swarm_center_xyz(self, edge, margin):
         """ Generates the swarm center """
@@ -694,7 +666,7 @@ class DroneSwarm3D(ParallelEnv):
                 obstacle.update_obstacle(t)
 
     def obstacle_overlap(self, object):
-        """Helper function to see if objects being created overlap with another object."""
+        """Helper function to see if the obstacle being created overlap with other obstalces."""
         for obs in self._obstacles:
             if object.isOverlapping(obs):
                 return True

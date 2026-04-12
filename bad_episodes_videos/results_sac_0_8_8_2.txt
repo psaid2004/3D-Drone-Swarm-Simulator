@@ -1,0 +1,7 @@
+Results for the model: C:\Users\David\PyCharmMiscProject\3d-drone-swarms\models\sac_0_8_8_2
+
+Collision-free Rate     :  96.67%
+Success Rate            :  96.67%
+Collision Episode Rate  :   3.33%
+Avg Episode Length      : 3355.67
+Wall-hit Episode Rate   :   0.00%
