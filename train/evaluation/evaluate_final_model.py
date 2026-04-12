@@ -13,8 +13,9 @@ from train.sac_training_with_expert import ExpertBlendPolicy
 from train.expert_blender import ExpertPolicy
 from wrappers.env_3d import DroneSwarm3D
 
-#TODO: RUN THE BELOW CODE WITH THE CURRICULUM'S EPISODE HORIZONS AND ALSO WITH A FIXED LARGE NUMBER
-#TODO: SET num_episodes HIGH AND (30 OR LARGER)
+"""
+Evaluate trained model on all curriculum stages.
+"""
 
 class EvaluateFinalModel:
     """
