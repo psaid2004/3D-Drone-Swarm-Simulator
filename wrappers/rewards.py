@@ -113,7 +113,10 @@ def compute_rewards(
         speed = float(np.linalg.norm(vel))
 
         # +0.5 if moving directly toward target, else - 0.5
-        r_align = 0.0 if not env.lidar else ALIGN_COEF * alignment
+
+        r_align = 0.0
+        if alignment > 0:
+            r_align =ALIGN_COEF * alignment
 
         # --------------- 5. Final-mile shaping ---------------
 
@@ -170,21 +173,29 @@ def compute_rewards(
         else:
             r_near = 0.0
 
+        # penalty for if drone has no / little speed (is not moving)
+        speed_pen = 0
+        if speed < 0.1:
+            speed_pen = ZERO_SPEED_PEN
+
         # --------------- 8. Combine shaping terms ---------------
 
         r = (
             r_progress
-            + r_distance_pen
-            + r_time
-            + r_ctrl
-            + r_near
+            # + r_distance_pen
+            # + r_time
+            # + r_ctrl
+            # + r_near
             + r_align
-            + r_tan
-            + r_final
-            + step_state.cohesion_pen
-            + step_state.sep_pen
+            # + r_tan
+            # + r_final
+            # + step_state.cohesion_pen
+            # + step_state.sep_pen
+            # + speed_pen
         )
-        r_info = {"r_progress": r_progress}
+        # r_info = {"r_progress": r_progress, "r_distance_pen":r_distance_pen, "r_time":r_time, "r_ctrl":r_ctrl
+        #           , "r_near":r_near, "r_align":r_align, "r_tan":r_tan, "r_final":r_final, "speed_pen":speed_pen}
+        # print(r_info)
 
         # --------------- 9. Extra penalties ---------------
 
@@ -195,9 +206,6 @@ def compute_rewards(
             else:
                 r -= 0.25 * TRUNC_PEN
 
-        # penalty for if drone has no / little speed (is not moving)
-        if speed < 0.1:
-            r -= ZERO_SPEED_PEN
 
         # print(r_info)
         # print(r)

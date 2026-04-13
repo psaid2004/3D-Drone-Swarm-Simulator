@@ -268,9 +268,9 @@ if __name__ == "__main__":
     """The values below must be changed to match the name of the model"""
     runner = TestModel(
         model_num=0,
-        n_drones=8,
-        n_static_obstacles=8,
-        n_dynamic_obstacles=2,
+        n_drones=3,
+        n_static_obstacles=0,
+        n_dynamic_obstacles=0,
         lidar=True,
         render_mode="human",
     )
