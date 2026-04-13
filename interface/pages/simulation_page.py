@@ -75,6 +75,7 @@ class SimulationPage(QWidget):
         # ---- Wire signals ----
         self.sidebar.restart_requested.connect(self._request_restart)
         self.sidebar.swarm_count_changed.connect(self._env_runner.set_num_swarms)
+        self.sidebar.randomize_requested.connect(self._on_randomize)
         self.timeline.speed_changed.connect(self._on_speed_changed)
         self.timeline.frame_seeked.connect(self._on_frame_seeked)
 
@@ -392,6 +393,11 @@ class SimulationPage(QWidget):
         self.stop_btn.setEnabled(False)
         self.status_lbl.setText("Stopped")
         self.timeline.refresh()
+
+    def _on_randomize(self):
+        self._config_manager.randomize()
+        self.sidebar.refresh()
+        self._request_restart("Restarting with randomized config...")
 
     def _request_restart(self, message: str):
         if self._running:

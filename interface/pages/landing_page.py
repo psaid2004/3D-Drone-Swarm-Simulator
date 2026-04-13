@@ -7,19 +7,10 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QComboBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
-    QSpinBox,
-    QVBoxLayout,
     QWidget,
-)
-
-
 )
 
 
@@ -52,6 +43,17 @@ class LandingPage(QWidget):
         config_title.setStyleSheet("font-weight: bold; font-size: 18px;")
         config_layout.addWidget(config_title)
 
+        # Number of swarms
+        swarms_layout = QHBoxLayout()
+        swarms_layout.addWidget(QLabel("Number of Swarms:"))
+        self.swarms_spinbox = QSpinBox()
+        self.swarms_spinbox.setRange(1, 4)
+        self.swarms_spinbox.setValue(1)
+        swarms_layout.addWidget(self.swarms_spinbox)
+        swarms_layout.addStretch()
+        config_layout.addLayout(swarms_layout)
+
+        # Number of drones in a swarm
         drone_layout = QHBoxLayout()
         drone_layout.addWidget(QLabel("Number of Drones:"))
         self.drone_spinbox = QSpinBox()
@@ -72,6 +74,7 @@ class LandingPage(QWidget):
         obstacle_layout.addStretch()
         config_layout.addLayout(obstacle_layout)
 
+        # Steps
         steps_layout = QHBoxLayout()
         steps_layout.addWidget(QLabel("Max Steps:"))
         self.steps_spinbox = QSpinBox()
@@ -82,21 +85,7 @@ class LandingPage(QWidget):
         steps_layout.addStretch()
         config_layout.addLayout(steps_layout)
 
-
-        # Render mode
-        render_layout = QHBoxLayout()
-        render_layout.addWidget(QLabel("Render Mode:"))
-        self.render_combo = QComboBox()
-        self.render_combo.addItems(["human", "none"])
-        render_layout.addWidget(self.render_combo)
-        render_layout.addStretch()
-        config_layout.addLayout(render_layout)
-
-
-        # Lidar option
-        self.lidar_checkbox = QCheckBox("Enable Lidar")
-        config_layout.addWidget(self.lidar_checkbox)
-
+        # Model selection
         model_layout = QHBoxLayout()
         model_layout.addWidget(QLabel("Model:"))
         self.model_combo = QComboBox()
@@ -130,15 +119,6 @@ class LandingPage(QWidget):
         world_layout.addWidget(self.world_scale_spinbox)
         world_layout.addStretch()
         experimental_layout.addLayout(world_layout)
-
-        swarms_layout = QHBoxLayout()
-        swarms_layout.addWidget(QLabel("Number of Swarms:"))
-        self.swarms_spinbox = QSpinBox()
-        self.swarms_spinbox.setRange(1, 4)
-        self.swarms_spinbox.setValue(1)
-        swarms_layout.addWidget(self.swarms_spinbox)
-        swarms_layout.addStretch()
-        experimental_layout.addLayout(swarms_layout)
 
         self.use_seed_checkbox = QCheckBox("Use Custom Seed")
         experimental_layout.addWidget(self.use_seed_checkbox)
@@ -198,8 +178,8 @@ class LandingPage(QWidget):
             "num_drones": self.drone_spinbox.value(),
             "num_obstacles": self.obstacle_spinbox.value(),
             "max_steps": self.steps_spinbox.value(),
-            "render_mode": self.render_combo.currentText(),
-            "lidar": self.lidar_checkbox.isChecked(),
+            "render_mode": "human",
+            "lidar": True,
             "model_path": selected_path,
             "policy_model_path": selected_path,
             "world_scale": self.world_scale_spinbox.value(),

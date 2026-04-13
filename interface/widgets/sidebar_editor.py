@@ -40,11 +40,13 @@ class _NoScrollComboBox(QComboBox):
 class SidebarEditor(QWidget):
     """
     Left-sidebar widget.
-
+    Contains three modes for editing the object spawn configs, drone spawn configs, and target spawn configs.
+    Allows the user to edit the fields of each config entry, and emits signals when changes are made that require the simulation to be restarted.
     """
 
-    restart_requested = pyqtSignal(str)
-    swarm_count_changed = pyqtSignal(int)
+    restart_requested = pyqtSignal(str)     # Emitted when a change is made that requires the simulation to be restarted.
+    swarm_count_changed = pyqtSignal(int)   # Emitted when the swarm count is changed, so that the main window can update its drone count.
+    randomize_requested = pyqtSignal()      # Emmited when the "Generate Random" button is clicked.
 
     def __init__(self, config_manager: ConfigManager, drones_per_swarm: int, parent=None):
         super().__init__(parent)
@@ -64,6 +66,7 @@ class SidebarEditor(QWidget):
         self.side_title = QLabel("Objects")
         self.side_title.setStyleSheet("font-weight: 700;")
 
+        # Mode selection buttons
         mode_row = QWidget()
         mode_layout = QHBoxLayout(mode_row)
         mode_layout.setContentsMargins(0, 0, 0, 0)
@@ -79,12 +82,14 @@ class SidebarEditor(QWidget):
         self.mode_btn_drones.clicked.connect(lambda: self._set_sidebar_mode("drone_spawns"))
         self.mode_btn_targets.clicked.connect(lambda: self._set_sidebar_mode("target_spawns"))
 
+        # Count buttons
         self.count_label = QLabel("Object count")
         self.count_spinbox = QSpinBox()
         self.count_spinbox.setRange(0, 100)
         self.count_spinbox.setValue(self._config_manager.count("object_spawns")) 
         self.count_spinbox.valueChanged.connect(self._on_count_spinbox) 
 
+        # Scroll area for config cards
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_host = QWidget()
@@ -95,13 +100,21 @@ class SidebarEditor(QWidget):
 
         layout.addWidget(self.side_title)
         layout.addWidget(mode_row)
+        self.randomize_btn = QPushButton("Generate Random")
+        self.randomize_btn.clicked.connect(lambda: self.randomize_requested.emit())
+
         layout.addWidget(self.count_label)
         layout.addWidget(self.count_spinbox)
+        layout.addWidget(self.randomize_btn)
         layout.addWidget(self.scroll_area)
 
     # ---- Mode switching ----
 
     def _set_sidebar_mode(self, mode: str):
+        """
+        Switches the sidebar to show one of the three modes: object spawns, drone spawns, or target spawns.
+        The mode buttons also update their checked state to reflect the current mode.
+        """
         if mode not in SIDEBAR_MODES:
             return
         self._sidebar_mode = mode
@@ -128,12 +141,16 @@ class SidebarEditor(QWidget):
     # ---- Count spinbox ----
 
     def _on_count_spinbox(self, value: int):
+        """
+        Handler for when the count spinbox value is changed.
+        Updates the config manager with the new count, refreshes the UI, and emits a restart request signal.
+        """
         if self._sidebar_mode == "object_spawns":
             self._config_manager.sync_object_count(int(value))
             self.refresh()
             self.restart_requested.emit(f"Restarting with updated count: {value}")
         elif self._sidebar_mode == "drone_spawns":
-            self._config_manager.set_swarm_count(int(value))
+            self._config_manager.sync_swarm_count(int(value))
             self.refresh()
             self.swarm_count_changed.emit(int(value))
             self.restart_requested.emit(f"Restarting with updated swarm count: {value}")
@@ -145,6 +162,9 @@ class SidebarEditor(QWidget):
     # ---- Scroll area rebuild ----
 
     def refresh(self):
+        """
+        Rebuilds the scroll area with config cards based on the current sidebar mode and the configs in the config manager.
+        """
         while self.scroll_layout.count():
             item = self.scroll_layout.takeAt(0)
             widget = item.widget()
@@ -162,6 +182,10 @@ class SidebarEditor(QWidget):
         self._build_object_cards()
 
     def _build_drone_cards(self):
+        """
+        Builds the config cards for the drone spawn mode, which are organized by swarms. 
+        Each swarm card can be expanded to show the individual drone configs within that swarm.
+        """
         swarms = self._config_manager.get_swarm_configs()
         drones = self._config_manager.get_drone_spawn_configs()
 

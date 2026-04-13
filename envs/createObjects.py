@@ -277,4 +277,5 @@ class Target:
                 float(self.start_pos[2]),
             ],
         )
+        self.body_id = body
         return body

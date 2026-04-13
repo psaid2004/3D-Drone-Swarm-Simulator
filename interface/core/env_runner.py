@@ -9,23 +9,22 @@ from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 
+from davids_drones.config.defaults import POS_SLICE
 from envs.createObjects import Dynamic, EnvObject, safe_unit
 from envs.createWorld import SUPPORTED_SHAPES
 from interface.core.frame_buffer import FrameBuffer
 from wrappers.env_3d import DroneSwarm3D as _DroneSwarm3D
-from config.defaults import GOAL_REACH_DISTANCE, MIN_SPAWN_DIST_FROM_DRONE, SWARM_MIN_SEPARATION
-
 
 class EnvRunner:
     def __init__(
         self,
-        frame_buffer: FrameBuffer,
+        frame_buffer: FrameBuffer,          
         object_configs_getter: Callable,
         drone_spawn_configs_getter: Callable,
         target_spawn_configs_getter: Callable,
-        on_state: Callable,
-        on_stopped: Callable,
-        on_error: Callable,
+        on_state: Callable,    
+        on_stopped: Callable,   
+        on_error: Callable,     
         num_drones: int = 1,
         max_steps: int = 5000,
         lidar: bool = False,
@@ -35,13 +34,13 @@ class EnvRunner:
         num_swarms: int = 1,
         seed: Optional[int] = None,
     ):
-        self._frame_buffer = frame_buffer
-        self._get_object_configs = object_configs_getter
-        self._get_drone_spawn_configs = drone_spawn_configs_getter
-        self._get_target_spawn_configs = target_spawn_configs_getter
-        self._on_state = on_state
-        self._on_stopped = on_stopped
-        self._on_error = on_error
+        self._frame_buffer = frame_buffer   # Buffer to record frames for replay
+        self._get_object_configs = object_configs_getter    # object = obstacles
+        self._get_drone_spawn_configs = drone_spawn_configs_getter  # Callback to send state updates to the UI
+        self._get_target_spawn_configs = target_spawn_configs_getter  
+        self._on_state = on_state   # Callback to send state updates to the UI    
+        self._on_stopped = on_stopped   # Callback when the simulation loop has fully stopped
+        self._on_error = on_error   # Callback to report errors to the UI
 
         self._num_drones = max(1, int(num_drones))
         self._max_steps = max(1, int(max_steps))
@@ -62,9 +61,9 @@ class EnvRunner:
         self._episode = 0
         self._step = 0
 
-        self._model_path = str(model_path or "").strip()
-        self._model = None
-        self._model_backend: Optional[str] = None
+        self._model_path = str(model_path or "").strip()    # Path to the RL model file; empty string means no model (use heuristic)
+        self._model = None  # Loaded RL model instance (e.g. stable_baselines3 model), or None if no model is loaded
+        self._model_backend: Optional[str] = None   # Name of the backend used to load the model (e.g. "PPO", "SAC"), or None if no model is loaded
         self._model_lock = threading.Lock()
 
         self._last_warning: str = ""
@@ -75,9 +74,16 @@ class EnvRunner:
 
     @property
     def running(self) -> bool:
+        """
+        Return whether the simulation is currently running.
+        """
         return self._running
 
     def start(self):
+        """ 
+        Start the simulation.
+        If the simulation is already running, this method does nothing.
+        """
         if self._running:
             return
         self._frame_buffer.clear()
@@ -89,29 +95,37 @@ class EnvRunner:
         self._sim_thread.start()
 
     def stop(self):
+        """ 
+        Stop the simulation. 
+        """
         if not self._running:
             return
         self._running = False
         self._stop_event.set()
 
     def close(self):
+        """
+        Stop the simulation and clean up resources.
+        """
         self.stop()
         if self._sim_thread is not None:
             self._sim_thread.join(timeout=2.0)
         self._close_current_env()
 
     def request_restart(self):
+        """
+        Request a restart of the simulation. 
+        """
         if self._running:
             self._restart_event.set()
 
     def set_model_path(self, model_path: str) -> Tuple[bool, str]:
+        """
+        Modifies _model_path to the given path. 
+        Try to load the model immediately and return (success, message).
+        """
         self._model_path = str(model_path or "").strip()
         return self._load_model(report_error=True)
-
-    def get_model_display_name(self) -> str:
-        if not self._model_path:
-            return "Heuristic"
-        return Path(self._model_path).name
 
     def set_speed_multiplier(self, speed_multiplier: float):
         with self._speed_lock:
@@ -130,14 +144,17 @@ class EnvRunner:
     def get_replay_index(self) -> int:
         return self._frame_buffer.get_index()
 
-    def seek_replay_frame(self, index: int) -> bool:
-        with self._env_lock:
-            env_ref = self._current_env
-        return self._frame_buffer.seek(index, env_ref)
-
     def get_replay_frame_meta(self, index: int):
         return self._frame_buffer.get_meta(index)
 
+    def seek_replay_frame(self, index: int) -> bool:
+        """
+        Seek to a specific frame in the replay buffer. Returns True if successful, False if index is out of bounds.
+        """
+        with self._env_lock:
+            env_ref = self._current_env
+        return self._frame_buffer.seek(index, env_ref)
+    
     # ---- Simulation loop ----
 
     def _simulation_loop(self):
@@ -160,6 +177,12 @@ class EnvRunner:
                     self._get_drone_spawn_configs() if callable(self._get_drone_spawn_configs) else [],
                     self._get_target_spawn_configs() if callable(self._get_target_spawn_configs) else [],
                 )
+                obs_dict = current_env._build_obs_dict()
+                # refresh _prev_dists to match new positions
+                for i in range(current_env.total_num_drones):
+                    pos = obs_dict[current_env.possible_agents[i]][POS_SLICE]
+                    current_env._prev_dists[i] = float(
+                        np.linalg.norm(current_env._targets[i].start_pos - pos))
                 # print("Env made")
                 self._episode += 1
                 self._step = 0
@@ -190,7 +213,10 @@ class EnvRunner:
                     if self._last_warning:
                         state["warning"] = self._last_warning
                     self._on_state(state)
-                    time.sleep((1 / 30) / self.get_speed_multiplier())
+                    time.sleep((1 / 30) / self.get_speed_multiplier())  # play in 30 fps
+                    if not current_env._pybullet_client_alive():
+                        self._stop_event.set()
+                        break   
 
                     if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated and input is required to continue
                         input("Simulation ended. Press Enter to continue.")
@@ -215,11 +241,10 @@ class EnvRunner:
 
     # ---- Environment construction ----
 
-    def _warn(self, message: str) -> None:
-        """Store a placement warning; it will be included in the next telemetry state."""
-        self._last_warning = message
-
     def _make_env(self, configs):
+        """
+        Create a new environment instance based on the current configuration parameters and the provided object configs.
+        """
         static_count = sum(1 for cfg in configs if cfg.get("kind") == "static")
         dynamic_count = sum(1 for cfg in configs if cfg.get("kind") == "dynamic")
         return _DroneSwarm3D(
@@ -235,6 +260,10 @@ class EnvRunner:
         )
 
     def _close_current_env(self):
+        """
+        Close the current environment instance if it exists.
+        Uses reference to avoid data race conditions with the simulation thread.
+        """
         with self._env_lock:
             env_ref = self._current_env
             self._current_env = None
@@ -245,6 +274,10 @@ class EnvRunner:
                 pass
 
     def _apply_object_configs(self, env_instance, configs):
+        """
+        Apply the given object configurations to the environment instance.
+        This involves removing existing obstacles and adding new ones based on the configs.
+        """
         p = getattr(env_instance, "_p", None)
         if p is None:
             return
@@ -297,6 +330,10 @@ class EnvRunner:
 
 
     def _apply_spawn_configs(self, env_instance, drone_spawns, target_spawns):
+        """
+        Apply the given drone and target spawn configurations to the environment instance.
+        This involves resetting the positions of existing drones and targets, and applying any specified colors.
+        """
         p = getattr(env_instance, "_p", None)
         if p is None:
             return
@@ -320,6 +357,7 @@ class EnvRunner:
 
         drone_ids = list(getattr(env_instance, "_drone_ids", []))
         if drone_ids and drone_spawns:
+            new_positions = []
             for i, body_id in enumerate(drone_ids[: len(drone_spawns)]):
                 cfg = drone_spawns[i]
                 pos = [
@@ -327,6 +365,7 @@ class EnvRunner:
                     float(cfg.get("y", 0.0)),
                     float(cfg.get("z", 0.8)),
                 ]
+                new_positions.append(pos)
                 try:
                     env_instance._call_physics(
                         p.resetBasePositionAndOrientation,
@@ -344,6 +383,9 @@ class EnvRunner:
                         _apply_body_color(int(body_id), cfg["color"])
                 except Exception:
                     continue
+            # keep spawn_positions consistent with actual drone positions
+            if new_positions:
+                env_instance.spawn_positions = np.array(new_positions, dtype=np.float32)
 
         seen: set = set()
         unique_targets = []
@@ -380,7 +422,7 @@ class EnvRunner:
                             target.color = cfg["color"]
                 except Exception:
                     continue
-
+                    
                           # --- TODO: validate user-placed obstacle positions ---
 
 
@@ -445,9 +487,12 @@ class EnvRunner:
             action, _ = model.predict(obs, deterministic=True)
             action = np.asarray(action, dtype=np.float32).reshape(-1)
             if action.size < 4:
+                print("Model output has fewer than 4 values; using heuristic action instead.")
                 return self._heuristic_action(obs)
             return action[:4]
-        except Exception:
+        except Exception as e:
+            print(e.args)
+            print("Model prediction failed; using heuristic action instead.")
             return self._heuristic_action(obs)
 
     def _build_action_dict(self, obs_dict: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:

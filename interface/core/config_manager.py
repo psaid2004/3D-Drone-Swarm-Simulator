@@ -8,10 +8,11 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from config.defaults import GOAL_EDGE_MARGIN, SWARM_EDGE_MARGIN
+from config.defaults import SWARM_EDGE_MARGIN
 from envs.createWorld import SUPPORTED_SHAPES, generate_edge_xyz, random_obstacle_config
 from interface.types import DroneSpawnConfig, ObjectConfig, SwarmConfig, TargetSpawnConfig
 
+# Contains default colors for swarms, used as defaults and for validation when setting by name. Each entry is RGBA with values in [0, 1].
 SWARM_COLOR_PRESETS: Dict[str, List[float]] = {
     "Green":   [0.0, 1.0, 0.0, 0.9],
     "Blue":    [0.0, 0.0, 1.0, 0.9],
@@ -114,6 +115,9 @@ class ConfigManager:
     # ---- Count management ----
 
     def sync_object_count(self, count: int):
+        """
+        Syncs the count of obstacles to the given count, adding default configs or removing from the end as needed.
+        """
         with self._lock:
             current = len(self._object_configs)
             if count > current:
@@ -123,6 +127,9 @@ class ConfigManager:
                 self._object_configs = self._object_configs[:count]
 
     def sync_target_count(self, count: int):
+        """
+        Syncs the count of targets to the given count, adding default configs or removing from the end as needed.
+        """
         with self._lock:
             current = len(self._target_spawn_configs)
             if count > current:
@@ -133,7 +140,10 @@ class ConfigManager:
             elif count < current:
                 self._target_spawn_configs = self._target_spawn_configs[:count]
 
-    def set_swarm_count(self, count: int):
+    def sync_swarm_count(self, count: int):
+        """
+        Syncs the count of swarms to the given count, adding default configs or removing from the end as needed.
+        """
         count = max(1, int(count))
         with self._lock:
             self._num_swarms = count
@@ -163,56 +173,98 @@ class ConfigManager:
 
             self._rebuild_drone_spawn_configs()
 
+    def randomize(self):
+        """
+        Re-randomize obstacle positions, swarm spawn edges, and target positions
+        (targets are placed on the edge opposite their swarm).
+        Names and colors are preserved.
+        """
+        with self._lock:
+            # Re-randomize each obstacle position, keeping count
+            self._object_configs = [
+                self._default_object_config(i)
+                for i in range(len(self._object_configs))
+            ]
+            # Re-randomize each swarm edge/position (keep name and color)
+            for swarm_cfg in self._swarm_configs:
+                edge = random.randint(0, 3)
+                x, y, z = generate_edge_xyz(edge, self._world_scale, SWARM_EDGE_MARGIN)
+                swarm_cfg["x"] = float(x)
+                swarm_cfg["y"] = float(y)
+                swarm_cfg["z"] = float(z)
+                swarm_cfg["_edge"] = edge
+            # Re-generate target positions based on the new swarm edges
+            for i, target_cfg in enumerate(self._target_spawn_configs):
+                new_cfg = self._default_target_spawn_config(i)
+                target_cfg["x"] = new_cfg["x"]
+                target_cfg["y"] = new_cfg["y"]
+                target_cfg["z"] = new_cfg["z"]
+            self._rebuild_drone_spawn_configs()
+
     def remove_at(self, mode: str, index: int) -> bool:
+        """
+        Removes the configuration at the given index for the specified mode.
+        
+        Returns:
+          True if the removal was successful, False otherwise.
+        """
         with self._lock:
             if mode == "object_spawns":
                 if 0 <= index < len(self._object_configs):
                     del self._object_configs[index]
                     return True
             elif mode == "drone_spawns":
-                if 0 <= index < len(self._drone_spawn_configs):
-                    del self._drone_spawn_configs[index]
+                if 0 <= index < len(self._swarm_configs):
+                    del self._swarm_configs[index]
                     return True
-            else:
+            elif mode == "target_spawns":
                 if 0 <= index < len(self._target_spawn_configs):
                     del self._target_spawn_configs[index]
                     return True
-        return False
+            else:
+                return False
 
     # ---- Field setters ----
 
     def set_object_field(self, index: int, key: str, raw_value) -> bool:
+        """
+        Sets the given field of the object at the specified index to the provided value.
+        The raw_value is coerced to the appropriate type based on the existing value for that field, or defaults if not set.
+        """
         with self._lock:
             if not (0 <= index < len(self._object_configs)):
                 return False
             cfg = self._object_configs[index]
             old = cfg.get(key)
-            if isinstance(old, float):
-                value = self._coerce_float(raw_value, old)
-            elif isinstance(old, int):
-                value = self._coerce_int(raw_value, old)
-            else:
-                value = str(raw_value).strip() if str(raw_value).strip() else str(old)
+            if key == "axis":   # Special handling for axis to allow both int and string inputs
+                raw_str = str(raw_value).strip().lower()
+                value = AXIS_LABEL_TO_INT.get(raw_str, self._coerce_int(raw_value, old))
+                value = max(0, min(2, int(value)))  # 0 <= value <= 2
+            else:               # For other keys, determine type based on existing value or defaults
+                value = (
+                    self._coerce_float(raw_value, old) if isinstance(old, float)
+                    else self._coerce_int(raw_value, old) if isinstance(old, int)
+                    else (str(raw_value).strip()) or str(old)
+                )
 
             if key == "shape" and value not in SUPPORTED_SHAPES:
-                value = old
+                value = old 
             if key == "kind" and value not in KINDS:
                 value = old
-            if key == "axis":
-                if isinstance(value, str):
-                    value = AXIS_LABEL_TO_INT.get(value, old)
-                value = max(0, min(2, int(value)))
             if key == "size":
-                value = max(0.1, float(value))
+                value = max(0.1, float(value))  # 0.1 <= size
             if key == "speed":
                 value = max(0.0, float(value))
-            if key == "direction":
+            if key == "direction":              # direction is absolute, either -1 or 1
                 value = -1 if int(value) < 0 else 1
 
             cfg[key] = value
         return True
 
     def set_spawn_field(self, mode: str, index: int, key: str, raw_value) -> bool:
+        """
+        Sets the given field of the target at the specified index to the provided value.
+        """
         with self._lock:
             configs = (
                 self._drone_spawn_configs
@@ -230,6 +282,9 @@ class ConfigManager:
         return True
 
     def set_swarm_field(self, swarm_idx: int, key: str, raw_value) -> bool:
+        """
+        Sets the given field of the swarm at the specified index to the provided value.
+        """
         with self._lock:
             if not (0 <= swarm_idx < len(self._swarm_configs)):
                 return False
@@ -256,6 +311,9 @@ class ConfigManager:
         return True
 
     def set_drone_offset_field(self, drone_index: int, key: str, raw_value) -> bool:
+        """
+        Sets the given local offset field of the drone at the specified index to the provided value.
+        """
         with self._lock:
             if not (0 <= drone_index < len(self._drone_spawn_configs)):
                 return False
@@ -269,6 +327,10 @@ class ConfigManager:
     # ---- Persistence ----
 
     def save_json(self, path: Path):
+        """
+        Saves the current object configurations to a JSON file at the specified path.
+        """
+
         configs = self.get_object_configs()
         with path.open("w", encoding="utf-8") as f:
             json.dump(configs, f, indent=4)
@@ -298,7 +360,7 @@ class ConfigManager:
         else:
             swarm_edge = random.randint(0, 3)
         opposite_edge = {0: 1, 1: 0, 2: 3, 3: 2}[swarm_edge]
-        x, y, z = generate_edge_xyz(opposite_edge, self._world_scale, GOAL_EDGE_MARGIN)
+        x, y, z = generate_edge_xyz(opposite_edge, self._world_scale, SWARM_EDGE_MARGIN)
         return {
             "name": f"Target Spawn {index + 1}",
             "x": x,
