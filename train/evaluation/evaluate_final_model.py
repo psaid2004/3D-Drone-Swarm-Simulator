@@ -77,17 +77,7 @@ class EvaluateFinalModel:
         """
         model = SAC.load(
             self.final_model_path,
-            custom_objects={
-                "policy_class": ExpertBlendPolicy,
-                "replay_buffer_class": None,
-            },
             print_system_info=True,
-        )
-
-        # Reattach runtime expert object used by ExpertBlendPolicy
-        model.policy.expert = ExpertPolicy(
-            world_scale=world_scale_for_expert,
-            use_lidar=self.final_model_lidar,
         )
 
         return model

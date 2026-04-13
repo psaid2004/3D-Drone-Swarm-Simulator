@@ -82,7 +82,7 @@ NEAR_FRONT_OBS_PEN = 0.0  # penalty for being too close to an obstacle in front 
 NEAR_SIDE_OBS_PEN = 0.0  # penalty for being too close to an obstacle on side of drone
 DIST_PEN = 0.03  # 0.15 # penalty coefficient for staying far from target (prevents drone not moving)
 ZERO_SPEED_PEN = 0.0  # penalty for drone not moving
-ALIGN_COEF = 0.1 # reward for being aligned with the direction of the target
+ALIGN_COEF = 0.05 # reward for being aligned with the direction of the target
 
 # =============================================================================
 # Reward (swarm shaping)
@@ -93,11 +93,11 @@ SEPARATION_PEN = 3.0  # penalty for when drones in swarm get too close
 # =============================================================================
 # Reward (terminal bonuses / penalties)
 # =============================================================================
-WALL_COLLISION_PEN = 40.0  # drone vs wall collision penalty
-OBSTACLE_COLLISION_PEN = 40.0  # drone vs obstacle collision penalty
-DRONE_COLLISION_PEN = 40.0  # drone vs drone collision penalty
+WALL_COLLISION_PEN = 50.0  # drone vs wall collision penalty
+OBSTACLE_COLLISION_PEN = 50.0  # drone vs obstacle collision penalty
+DRONE_COLLISION_PEN = 50.0  # drone vs drone collision penalty
 GOAL_BONUS = 250  # one-time bonus for reaching the goal
-TRUNC_PEN = 50  # penalty for if episode was truncated
+TRUNC_PEN = 40  # penalty for if episode was truncated
 
 # =============================================================================
 # Reward (smoothness coefficients)
