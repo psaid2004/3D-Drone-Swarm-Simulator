@@ -2,14 +2,25 @@
 import pybullet as p
 import numpy as np
 
+
 def safe_unit(v: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(v)
     if norm < 1e-6:
         return np.zeros_like(v)
     return v / norm
-    
+
 class EnvObject:
+    """
+    Class for static obstacles, includes functionality spawing obstacle and
+    helper function to enusre the spawn position is valid.
+    Takes as input:
+        - start_pos: [x,y,z] float vector that represents the spawn position of obstacle
+        - size: float value used to scale the obstacle size
+        - orientation: [roll, pitch, yaw] float vector with values between −π and +π, represent orientation of obstacle
+    """
+
     def __init__(self, start_pos, size, orientation):
+        """Initialize preset obstacle parameters"""
         self.size = size
         self.start_pos = start_pos
         self.orientation = orientation
@@ -77,6 +88,7 @@ class EnvObject:
         }
 
     def set_shape_spec(self, shape):
+        """ Determine object geometry based on shape, to be used in overlap checks"""
         self.shape = shape
         conf = self.SHAPE_CONFIGS[shape]
         geom = conf["geom"]
@@ -89,6 +101,7 @@ class EnvObject:
         self.height = collision_kwargs.get("height")
 
     def create(self, shape, physics_call, color=(1, 0, 0, 1)):
+        """ Function to create object in PyBullet simulation """
         self.physics_call = physics_call
         self.shape = shape
         self.set_shape_spec(shape)
@@ -113,11 +126,12 @@ class EnvObject:
             body_kwargs["baseOrientation"] = p.getQuaternionFromEuler(self.orientation)
 
         body = physics_call(p.createMultiBody, **body_kwargs)
-        self.body_id = body  # store ID in object
+        self.body_id = body
         return self.body_id
 
     # and targets?
     def isOverlapping(self, obstacle):
+        """Helper function to see if two obstacles overlap"""
         pts = self.physics_call(
             p.getClosestPoints, bodyA=self.body_id, bodyB=obstacle.body_id, distance=0.0
         )
@@ -134,8 +148,9 @@ class EnvObject:
                 return False
         return True
 
-    # Check if obstacle is too close to drones or the targets
     def isValidPosition(self, dronePositions, targets, min_dist):
+        """ Helper function that checks if an obstacles is a minimum distance from drones and targets """
+
         # Check if too close to drones
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
             return False
@@ -154,7 +169,9 @@ class EnvObject:
 
         return True
 
+
     def pose_at_time(self, t: float):
+        """ Helper function that returns the position of an obstacle at the given time """
         return self.start_pos.tolist(), self.baseQuat
 
 

@@ -666,7 +666,7 @@ class DroneSwarm3D(ParallelEnv):
                 obstacle.update_obstacle(t)
 
     def obstacle_overlap(self, object):
-        """Helper function to see if objects being created overlap with another object."""
+        """Helper function to see if the obstacle being created overlap with other obstalces."""
         for obs in self._obstacles:
             if object.isOverlapping(obs):
                 return True

@@ -12,6 +12,9 @@ from train.sac_training_with_expert import ExpertBlendPolicy
 from train.expert_blender import ExpertPolicy
 from wrappers.env_3d import DroneSwarm3D
 
+"""
+Evaluate trained model on respective curriculum stage.
+"""
 
 class EvaluateTraining:
     def __init__(
