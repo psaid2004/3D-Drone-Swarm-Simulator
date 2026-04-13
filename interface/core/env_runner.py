@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
-from davids_drones.config.defaults import POS_SLICE
+from config.defaults import POS_SLICE
 from envs.createObjects import Dynamic, EnvObject
 from envs.createWorld import SUPPORTED_SHAPES
 from interface.core.frame_buffer import FrameBuffer
@@ -217,7 +217,7 @@ class EnvRunner:
                     if self._last_warning:
                         state["warning"] = self._last_warning
                     self._on_state(state)
-                    time.sleep((1 / 30) / self.get_speed_multiplier())  # play in 30 fps
+                    time.sleep((1 / 144) / self.get_speed_multiplier())  # play in 144 fps
                     if not current_env._pybullet_client_alive():
                         self._stop_event.set()
                         break   
