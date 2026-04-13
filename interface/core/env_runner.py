@@ -217,7 +217,7 @@ class EnvRunner:
                     if self._last_warning:
                         state["warning"] = self._last_warning
                     self._on_state(state)
-                    time.sleep((1 / 30) / self.get_speed_multiplier())  # play in 30 fps
+                    time.sleep((1 / 144) / self.get_speed_multiplier())  # play in 144 fps
                     if not current_env._pybullet_client_alive():
                         self._stop_event.set()
                         break   
