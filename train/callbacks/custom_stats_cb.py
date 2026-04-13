@@ -374,6 +374,15 @@ class StepStatsCallback(BaseCallback):
 
             self._agent_steps += 1
             self._print_agent_steps += 1
+            self._stage_active_steps += 1
+            if (self.stage_info is not None and self._stage_active_steps >= self.stage_info.stage_timesteps):
+                self._should_stop = True
+                self.model._total_timesteps = 1
+                print(
+                    f"[ActiveBudget] reached {self._stage_active_steps}/"
+                    f"{self.stage_info.stage_timesteps} active steps. Stopping stage.",
+                    flush=True,
+                )
 
             self._dist_to_target_sum += dist_to_target
             self._cmd_speed_sum += cmd_speed
@@ -557,7 +566,8 @@ class StepStatsCallback(BaseCallback):
             )
             self.logger.record("curriculum/stage_timesteps", float(si.stage_timesteps))
             self.logger.record(
-                "curriculum/progress_frac", float(self.num_timesteps) / float(total)
+                "curriculum/active_step_progress",
+                float(self._stage_active_steps) / float(max(1, si.stage_timesteps))
             )
 
             prefix = (
@@ -612,7 +622,6 @@ class StepStatsCallback(BaseCallback):
     def _on_rollout_end(self) -> None:
         if self._agent_steps <= 0:
             return
-        self._stage_active_steps += self._agent_steps  # ← add this
 
         denom_all_drones_count = max(1, self.total_drone_count)
         denom_drones_steps = max(1, self._agent_steps)
@@ -626,9 +635,18 @@ class StepStatsCallback(BaseCallback):
         if not self.enable_stage_early_stop:
             return
 
-        steps_in_stage = self.num_timesteps - self._stage_start_ts
         if self._stage_active_steps < self.min_stage_timesteps:
             return
+
+        # if (self.stage_info is not None and self._stage_active_steps >= self.stage_info.stage_timesteps):
+        #     self._should_stop = True
+        #     print(
+        #         f"[ActiveBudget] Active step budget reached: "
+        #         f"{self._stage_active_steps}/{self.stage_info.stage_timesteps}. "
+        #         f"Advancing to next stage.",
+        #         flush=True,
+        #     )
+        #     return
 
         reach_rate = float(reaches_ever) / float(denom_all_drones_count)
         meets_reach = reach_rate >= self.reach_threshold
@@ -656,7 +674,7 @@ class StepStatsCallback(BaseCallback):
             if self.verbose >= 1:
                 print(
                     f"[StageEarlyStop] triggered at num_timesteps={self.num_timesteps} "
-                    f"(stage_steps={steps_in_stage})",
+                    f"(stage_steps={self._stage_active_steps})",
                     flush=True,
                 )
 
