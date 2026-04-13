@@ -15,6 +15,7 @@ class CollisionQueryWorld:
         if p.isConnected(self.cid):
             p.disconnect(self.cid)
 
+    # Recreate object based on its stored specification from the main simulation
     def _create_body_from_spec(self, spec, pos, quat):
         shape_id = p.createCollisionShape(
             physicsClientId=self.cid, shapeType=spec["geom"], **spec["collision_kwargs"]
@@ -29,6 +30,7 @@ class CollisionQueryWorld:
         )
         return body_id
 
+    # Add new dynamic object
     def add_dynamic_object(self, key, obj):
         pos = obj.start_pos
         body_id = self._create_body_from_spec(
@@ -37,6 +39,7 @@ class CollisionQueryWorld:
         self.dynamic_bodies[key] = body_id
         return body_id
 
+    # Add new static object
     def add_static_object(self, obj):
         pos = obj.start_pos
         body_id = self._create_body_from_spec(
@@ -45,6 +48,7 @@ class CollisionQueryWorld:
         self.static_bodies.append(body_id)
         return body_id
 
+    # Add new temporary object into a simulation
     def add_temp_object(self, obj):
         pos = obj.start_pos
         body_id = self._create_body_from_spec(
@@ -53,6 +57,7 @@ class CollisionQueryWorld:
         self.temp_bodies.append(body_id)
         return body_id
 
+    # Update position of an object at a given time
     def set_body_pose(self, body_id, pos, quat):
         p.resetBasePositionAndOrientation(
             body_id,
@@ -60,7 +65,7 @@ class CollisionQueryWorld:
             quat,
             physicsClientId=self.cid,
         )
-
+    # Check whether a two bodies collide in a simulation
     def bodies_collide(self, body_a, body_b, margin=0.0):
         pts = p.getClosestPoints(
             bodyA=body_a,
@@ -69,7 +74,7 @@ class CollisionQueryWorld:
             physicsClientId=self.cid,
         )
         return len(pts) > 0
-
+    # Delete objects from a simulation
     def remove_body(self, body_id):
         try:
             p.removeBody(body_id, physicsClientIds=self.cid)
