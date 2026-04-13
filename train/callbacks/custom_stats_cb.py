@@ -102,6 +102,7 @@ class StepStatsCallback(BaseCallback):
         self._consecutive_good = 0
         self._stage_start_ts = int(stage_start_ts)
         self._stage_active_steps = 0
+
         self._should_stop = False
         self._episode_batch = {}
         self._episode_batch_counter = 0
@@ -377,7 +378,6 @@ class StepStatsCallback(BaseCallback):
             self._stage_active_steps += 1
             if (self.stage_info is not None and self._stage_active_steps >= self.stage_info.stage_timesteps):
                 self._should_stop = True
-                self.model._total_timesteps = 1
                 print(
                     f"[ActiveBudget] reached {self._stage_active_steps}/"
                     f"{self.stage_info.stage_timesteps} active steps. Stopping stage.",
@@ -638,15 +638,7 @@ class StepStatsCallback(BaseCallback):
         if self._stage_active_steps < self.min_stage_timesteps:
             return
 
-        # if (self.stage_info is not None and self._stage_active_steps >= self.stage_info.stage_timesteps):
-        #     self._should_stop = True
-        #     print(
-        #         f"[ActiveBudget] Active step budget reached: "
-        #         f"{self._stage_active_steps}/{self.stage_info.stage_timesteps}. "
-        #         f"Advancing to next stage.",
-        #         flush=True,
-        #     )
-        #     return
+
 
         reach_rate = float(reaches_ever) / float(denom_all_drones_count)
         meets_reach = reach_rate >= self.reach_threshold
