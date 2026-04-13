@@ -378,6 +378,10 @@ class StepStatsCallback(BaseCallback):
             self._stage_active_steps += 1
             if (self.stage_info is not None and self._stage_active_steps >= self.stage_info.stage_timesteps):
                 self._should_stop = True
+                print("thinks it should stop")
+                print("stage_active_steps", self._stage_active_steps)
+                print("self.stage_info.stage_timesteps", self.stage_info.stage_timesteps)
+                print("timesteps", self.num_timesteps)
                 print(
                     f"[ActiveBudget] reached {self._stage_active_steps}/"
                     f"{self.stage_info.stage_timesteps} active steps. Stopping stage.",

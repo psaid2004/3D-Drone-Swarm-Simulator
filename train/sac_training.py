@@ -226,7 +226,6 @@ def safe_close(env) -> None:
 # ---- CALLBACK HELPER ----
 def make_stage_callbacks(
         *,
-        eval_env,
         stage_idx: int,
         world_scale: float,
         num_drones: int,
@@ -289,17 +288,17 @@ def make_stage_callbacks(
     )
 
     # evaluate current policy on clean evaluate environment
-    eval_cb = EvalCallback(
-        eval_env=eval_env,
-        best_model_save_path=str(Path(MODELS_DIR) / "best_model"),
-        log_path=str(Path(MODELS_DIR) / "eval_logs"),
-        eval_freq=max(10_000 // max(1, N_ENVS), 1),
-        n_eval_episodes=5,
-        deterministic=True,
-        render=False,
-        callback_after_eval=stop_no_improve_cb,
-        verbose=1,
-    )
+    # eval_cb = EvalCallback(
+    #     eval_env=eval_env,
+    #     best_model_save_path=str(Path(MODELS_DIR) / "best_model"),
+    #     log_path=str(Path(MODELS_DIR) / "eval_logs"),
+    #     eval_freq=max(10_000 // max(1, N_ENVS), 1),
+    #     n_eval_episodes=5,
+    #     deterministic=True,
+    #     render=False,
+    #     callback_after_eval=stop_no_improve_cb,
+    #     verbose=1,
+    # )
 
     # wandb_cb = WandbCallback(
     #     model_save_path=str(Path(MODELS_DIR) / "wandb_models" / f"stage_{stage_idx}"),
@@ -312,7 +311,7 @@ def make_stage_callbacks(
         [
             stats_cb,
             ckpt_cb,
-            eval_cb,
+            # eval_cb,
             # wandb_cb,
         ]
     )
@@ -381,14 +380,14 @@ def train(device: str = "auto"):
     )
 
     # create an evaluation environment
-    eval_env = create_env(
-        world_scale=ws0,
-        num_drones=nd0,
-        num_static_obstacles=ns0,
-        num_dynamic_obstacles=ndyn0,
-        max_episode_steps=horizon0,
-        lidar_enabled=lidar0,
-    )
+    # eval_env = create_env(
+    #     world_scale=ws0,
+    #     num_drones=nd0,
+    #     num_static_obstacles=ns0,
+    #     num_dynamic_obstacles=ndyn0,
+    #     max_episode_steps=horizon0,
+    #     lidar_enabled=lidar0,
+    # )
 
     # --- create SAC model ---
     model = SAC(
@@ -410,7 +409,6 @@ def train(device: str = "auto"):
 
     # --- train stage 0 first ---
     callbacks = make_stage_callbacks(
-        eval_env=eval_env,
         stage_idx=0,
         world_scale=ws0,
         num_drones=nd0,
@@ -472,7 +470,7 @@ def train(device: str = "auto"):
 
         # swap envs
         old_train_env = model.get_env()
-        old_eval_env = eval_env
+        # old_eval_env = eval_env
 
         new_train_env = create_env(
             world_scale=world_scale,
@@ -482,23 +480,23 @@ def train(device: str = "auto"):
             max_episode_steps=episode_horizon,
             lidar_enabled=lidar_enabled,
         )
-
-        new_eval_env = create_env(
-            world_scale=world_scale,
-            num_drones=num_drones,
-            num_static_obstacles=num_static_obs,
-            num_dynamic_obstacles=num_dynamic_obs,
-            max_episode_steps=episode_horizon,
-            lidar_enabled=lidar_enabled,
-        )
+        #
+        # new_eval_env = create_env(
+        #     world_scale=world_scale,
+        #     num_drones=num_drones,
+        #     num_static_obstacles=num_static_obs,
+        #     num_dynamic_obstacles=num_dynamic_obs,
+        #     max_episode_steps=episode_horizon,
+        #     lidar_enabled=lidar_enabled,
+        # )
 
         # Carry normalization stats forward.
         copy_vec_normalize_stats(old_train_env, new_train_env)
-        copy_vec_normalize_stats(old_train_env, new_eval_env)
+        # copy_vec_normalize_stats(old_train_env, new_eval_env)
 
         if model.observation_space != new_train_env.observation_space:
             safe_close(new_train_env)
-            safe_close(new_eval_env)
+            # safe_close(new_eval_env)
             raise ValueError(
                 f"Observation space changed across stages.\n"
                 f"model.observation_space={model.observation_space}\n"
@@ -507,7 +505,7 @@ def train(device: str = "auto"):
 
         if model.action_space != new_train_env.action_space:
             safe_close(new_train_env)
-            safe_close(new_eval_env)
+            # safe_close(new_eval_env)
             raise ValueError(
                 f"Action space changed across stages.\n"
                 f"model.action_space={model.action_space}\n"
@@ -515,9 +513,9 @@ def train(device: str = "auto"):
             )
 
         model.set_env(new_train_env)
-        eval_env = new_eval_env
+        # eval_env = new_eval_env
 
-        safe_close(old_eval_env)
+        # safe_close(old_eval_env)
         safe_close(old_train_env)
 
         callbacks = make_stage_callbacks(
@@ -530,7 +528,6 @@ def train(device: str = "auto"):
             episode_horizon=episode_horizon,
             total_planned_timesteps=total_planned_timesteps,
             model_num_timesteps=model.num_timesteps,
-            eval_env=eval_env,
         )
 
         model.learn(
@@ -570,7 +567,7 @@ def train(device: str = "auto"):
         print(f"[SAVED FINAL VEC_NORMALIZE] {final_norm_path}")
     safe_close(model.get_env())
 
-    safe_close(eval_env)
+    # safe_close(eval_env)
     safe_close(train_env)
 
     # wandb.finish()
