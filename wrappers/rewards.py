@@ -211,6 +211,5 @@ def compute_rewards(
         # print(r)
 
         reward_dict[agent] = float(r)
-        reward_info[agent] = r_info
 
     return reward_dict
