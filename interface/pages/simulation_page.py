@@ -372,6 +372,9 @@ class SimulationPage(QWidget):
     def _start(self):
         if self._running:
             return
+        if not self._env_runner.has_model:
+            self.status_lbl.setText("No model loaded. Use 'Change model' to load one.")
+            return
         self.timeline.stop_replay()
         self._running = True
         self._on_speed_changed(int(self.timeline.speed_spinbox.value()))

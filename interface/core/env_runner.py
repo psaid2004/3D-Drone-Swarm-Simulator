@@ -7,10 +7,8 @@ import numpy as np
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
-import numpy as np
-
 from davids_drones.config.defaults import POS_SLICE
-from envs.createObjects import Dynamic, EnvObject, safe_unit
+from envs.createObjects import Dynamic, EnvObject
 from envs.createWorld import SUPPORTED_SHAPES
 from interface.core.frame_buffer import FrameBuffer
 from wrappers.env_3d import DroneSwarm3D as _DroneSwarm3D
@@ -61,7 +59,7 @@ class EnvRunner:
         self._episode = 0
         self._step = 0
 
-        self._model_path = str(model_path or "").strip()    # Path to the RL model file; empty string means no model (use heuristic)
+        self._model_path = str(model_path or "").strip()    # Path to the RL model file
         self._model = None  # Loaded RL model instance (e.g. stable_baselines3 model), or None if no model is loaded
         self._model_backend: Optional[str] = None   # Name of the backend used to load the model (e.g. "PPO", "SAC"), or None if no model is loaded
         self._model_lock = threading.Lock()
@@ -78,6 +76,12 @@ class EnvRunner:
         Return whether the simulation is currently running.
         """
         return self._running
+
+    @property
+    def has_model(self) -> bool:
+        """Return True if a model is currently loaded."""
+        with self._model_lock:
+            return self._model is not None
 
     def start(self):
         """ 
@@ -163,26 +167,25 @@ class EnvRunner:
         try:
             while not self._stop_event.is_set(): # Loop over episodes
                 configs = self._get_object_configs()
-                if current_env is None:
+                if current_env is None:     # if no env exists create one
                     current_env = self._make_env(configs)
 
-                with self._env_lock:
+                with self._env_lock:    # set reference to current env for replay seeking and safe cleanup
                     self._current_env = current_env
 
                 obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1)) # Reset env with a random seed for variability
                 self._last_warning = "" 
-                self._apply_object_configs(current_env, configs)
-                self._apply_spawn_configs(
+                self._apply_object_configs(current_env, configs)    # Apply obstacle configurations
+                self._apply_spawn_configs(  # Apply drone and target spawn configurations
                     current_env,
                     self._get_drone_spawn_configs() if callable(self._get_drone_spawn_configs) else [],
                     self._get_target_spawn_configs() if callable(self._get_target_spawn_configs) else [],
                 )
-                obs_dict = current_env._build_obs_dict()
+                obs_dict = current_env._build_obs_dict()    # Rebuild obs_dict to reflect any changes from applying configs
                 # refresh _prev_dists to match new positions
                 for i in range(current_env.total_num_drones):
-                    pos = obs_dict[current_env.possible_agents[i]][POS_SLICE]
-                    current_env._prev_dists[i] = float(
-                        np.linalg.norm(current_env._targets[i].start_pos - pos))
+                    pos = obs_dict[current_env.possible_agents[i]][POS_SLICE]   # Get current position of the drone
+                    current_env._prev_dists[i] = float(np.linalg.norm(current_env._targets[i].start_pos - pos))    # Update previous distances to targets based on new drone positions
                 # print("Env made")
                 self._episode += 1
                 self._step = 0
@@ -196,8 +199,9 @@ class EnvRunner:
                         restart_requested = True
                         self._restart_event.clear()
                         break
-
-                    act_dict = self._build_action_dict(obs_dict) 
+                    
+                    # Simulation steps
+                    act_dict = self._build_action_dict(obs_dict)
                     obs_dict, _, done, trunc, _ = current_env.step(act_dict)
                     self._step += 1
                     self._frame_buffer.record(current_env, self._episode, self._step) # Record after action
@@ -434,7 +438,7 @@ class EnvRunner:
             with self._model_lock:
                 self._model = None
                 self._model_backend = None
-            return True, "No model selected."
+            return False, "No model selected."
 
         path = Path(self._model_path)
         if not path.is_file():
@@ -469,31 +473,16 @@ class EnvRunner:
 
     # ---- Action selection ----
 
-    def _heuristic_action(self, obs: np.ndarray) -> np.ndarray:
-        to_target = obs[6:9]
-        to_centroid = obs[12:15]
-        dir_vec = 0.8 * safe_unit(to_target) + 0.2 * safe_unit(to_centroid)
-        dir_vec = safe_unit(dir_vec)
-        speed = float(np.clip(np.linalg.norm(to_target) / 5.0, 0.05, 1.0))
-        u3 = speed * 2.0 - 1.0
-        return np.array([dir_vec[0], dir_vec[1], dir_vec[2], u3], dtype=np.float32)
-
     def _predict_action(self, obs: np.ndarray) -> np.ndarray:
         with self._model_lock:
             model = self._model
         if model is None:
-            return self._heuristic_action(obs)
-        try:
-            action, _ = model.predict(obs, deterministic=True)
-            action = np.asarray(action, dtype=np.float32).reshape(-1)
-            if action.size < 4:
-                print("Model output has fewer than 4 values; using heuristic action instead.")
-                return self._heuristic_action(obs)
-            return action[:4]
-        except Exception as e:
-            print(e.args)
-            print("Model prediction failed; using heuristic action instead.")
-            return self._heuristic_action(obs)
+            raise RuntimeError("No model loaded.")
+        action, _ = model.predict(obs, deterministic=True)
+        action = np.asarray(action, dtype=np.float32).reshape(-1)
+        if action.size < 4:
+            raise RuntimeError(f"Model output has fewer than 4 values ({action.size}).")
+        return action[:4]
 
     def _build_action_dict(self, obs_dict: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
         return {agent: self._predict_action(obs) for agent, obs in obs_dict.items()}

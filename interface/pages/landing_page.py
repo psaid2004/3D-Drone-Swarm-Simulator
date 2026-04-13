@@ -147,6 +147,12 @@ class LandingPage(QWidget):
         )
         self.start_btn.clicked.connect(self._on_start_clicked)
 
+        if not self._model_options:
+            self.model_combo.addItem("(no models found)")
+            self.model_combo.setEnabled(False)
+            self.start_btn.setEnabled(False)
+            self.start_btn.setToolTip("No model .zip files found in the models/ directory")
+
         # ---- Final layout ----
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -164,7 +170,7 @@ class LandingPage(QWidget):
         # parents[2] = davids_drones/
         project_root = Path(__file__).resolve().parents[2]
         models_dir = project_root / "models"
-        options = {"No model": ""}
+        options = {}
         if not models_dir.is_dir():
             return options
         for model_file in sorted(models_dir.glob("*.zip")):
