@@ -1,8 +1,5 @@
 #TODO: Add search function
 #TODO: Expand/collapse for objects and targets as well, not just swarms
-#TODO: "Add new" button for each category that appends a new default-config entry to the end of the list and opens it for editing, instead of having to increase the count and scroll to the end to edit the new entry
-#TODO: Unscrollable count spinbox 
-#TODO: potentially: implement easier way to place objects
 #TODO: Pre play simulation in the background for replayability; 
 from functools import partial
 

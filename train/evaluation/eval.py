@@ -81,18 +81,9 @@ class EvaluateTraining:
     def _load_model(self):
         model = SAC.load(
             self.MODEL_PATH,
-            custom_objects={
-                "policy_class": ExpertBlendPolicy,
-                "replay_buffer_class": None,
-            },
             print_system_info=True,
         )
 
-        # Reattach runtime expert object used by ExpertBlendPolicy
-        model.policy.expert = ExpertPolicy(
-            world_scale=self.world_scale,
-            use_lidar=self.lidar,
-        )
 
         return model
 

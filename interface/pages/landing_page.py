@@ -44,55 +44,35 @@ class LandingPage(QWidget):
         config_layout.addWidget(config_title)
 
         # Number of swarms
-        swarms_layout = QHBoxLayout()
-        swarms_layout.addWidget(QLabel("Number of Swarms:"))
         self.swarms_spinbox = QSpinBox()
         self.swarms_spinbox.setRange(1, 4)
         self.swarms_spinbox.setValue(1)
-        swarms_layout.addWidget(self.swarms_spinbox)
-        swarms_layout.addStretch()
-        config_layout.addLayout(swarms_layout)
+        config_layout.addLayout(self._labeled_row("Number of Swarms:", self.swarms_spinbox))
 
         # Number of drones in a swarm
-        drone_layout = QHBoxLayout()
-        drone_layout.addWidget(QLabel("Number of Drones:"))
         self.drone_spinbox = QSpinBox()
         self.drone_spinbox.setRange(1, 10)
         self.drone_spinbox.setValue(2)
-        drone_layout.addWidget(self.drone_spinbox)
-        drone_layout.addStretch()
-        config_layout.addLayout(drone_layout)
+        config_layout.addLayout(self._labeled_row("Number of Drones:", self.drone_spinbox))
 
 
         # Number of obstacles
-        obstacle_layout = QHBoxLayout()
-        obstacle_layout.addWidget(QLabel("Number of Obstacles:"))
         self.obstacle_spinbox = QSpinBox()
         self.obstacle_spinbox.setRange(0, 50)
         self.obstacle_spinbox.setValue(15)
-        obstacle_layout.addWidget(self.obstacle_spinbox)
-        obstacle_layout.addStretch()
-        config_layout.addLayout(obstacle_layout)
+        config_layout.addLayout(self._labeled_row("Number of Obstacles:", self.obstacle_spinbox))
 
         # Steps
-        steps_layout = QHBoxLayout()
-        steps_layout.addWidget(QLabel("Max Steps:"))
         self.steps_spinbox = QSpinBox()
         self.steps_spinbox.setRange(100, 10000)
         self.steps_spinbox.setValue(5000)
         self.steps_spinbox.setSingleStep(100)
-        steps_layout.addWidget(self.steps_spinbox)
-        steps_layout.addStretch()
-        config_layout.addLayout(steps_layout)
+        config_layout.addLayout(self._labeled_row("Max Steps:", self.steps_spinbox))
 
         # Model selection
-        model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("Model:"))
         self.model_combo = QComboBox()
         self.model_combo.addItems(list(self._model_options.keys()))
-        model_layout.addWidget(self.model_combo)
-        model_layout.addStretch()
-        config_layout.addLayout(model_layout)
+        config_layout.addLayout(self._labeled_row("Model:", self.model_combo))
 
         config_layout.addStretch()
 
@@ -106,33 +86,22 @@ class LandingPage(QWidget):
         experimental_title.setStyleSheet(
             "font-weight: bold; font-size: 18px; margin-bottom: 10px;"
         )
-        experimental_title.setStyleSheet(
-            "font-weight: bold; font-size: 18px; margin-bottom: 10px;"
-        )
         experimental_layout.addWidget(experimental_title)
 
-        world_layout = QHBoxLayout()
-        world_layout.addWidget(QLabel("World Scale:"))
         self.world_scale_spinbox = QSpinBox()
         self.world_scale_spinbox.setRange(1, 100)
         self.world_scale_spinbox.setValue(5)
-        world_layout.addWidget(self.world_scale_spinbox)
-        world_layout.addStretch()
-        experimental_layout.addLayout(world_layout)
+        experimental_layout.addLayout(self._labeled_row("World Scale:", self.world_scale_spinbox))
 
         self.use_seed_checkbox = QCheckBox("Use Custom Seed")
         experimental_layout.addWidget(self.use_seed_checkbox)
 
-        seed_layout = QHBoxLayout()
-        seed_layout.addWidget(QLabel("Seed:"))
         self.seed_spinbox = QSpinBox()
         self.seed_spinbox.setRange(0, 9_999_999)
         self.seed_spinbox.setValue(1)
         self.seed_spinbox.setEnabled(False)
         self.use_seed_checkbox.toggled.connect(self.seed_spinbox.setEnabled)
-        seed_layout.addWidget(self.seed_spinbox)
-        seed_layout.addStretch()
-        experimental_layout.addLayout(seed_layout)
+        experimental_layout.addLayout(self._labeled_row("Seed:", self.seed_spinbox))
 
         experimental_layout.addStretch()
 
@@ -165,6 +134,14 @@ class LandingPage(QWidget):
         self.setLayout(layout)
 
     # ---- Helpers ----
+
+    @staticmethod
+    def _labeled_row(label_text: str, widget) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.addWidget(QLabel(label_text))
+        row.addWidget(widget)
+        row.addStretch()
+        return row
 
     def _discover_models(self) -> dict:
         # parents[2] = davids_drones/
