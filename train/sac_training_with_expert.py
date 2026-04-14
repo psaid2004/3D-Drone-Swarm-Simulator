@@ -457,7 +457,7 @@ def train(device: str = "auto"):
     )
 
     model.learn(
-        total_timesteps=steps0,
+        total_timesteps=int(1e12),
         reset_num_timesteps=False,
         callback=callbacks,
         progress_bar=True,
@@ -550,7 +550,7 @@ def train(device: str = "auto"):
         print(f"timesteps={model.num_timesteps}, blend={model.policy.blend_ratio:.4f}")
 
         model.learn(
-            total_timesteps=stage_steps,
+            total_timesteps=int(1e12),
             reset_num_timesteps=False,
             callback=callbacks,
             progress_bar=True,

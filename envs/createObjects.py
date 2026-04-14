@@ -30,6 +30,7 @@ class EnvObject:
         self.height = None
         self.shape = None
         self.collision_shape_spec = None
+        # Shape configuration, which include necessary parameters for object creations.
         self.SHAPE_CONFIGS = {
             "box": {
                 "geom": p.GEOM_BOX,
@@ -129,7 +130,6 @@ class EnvObject:
         self.body_id = body
         return self.body_id
 
-    # and targets?
     def isOverlapping(self, obstacle):
         """Helper function to see if two obstacles overlap"""
         pts = self.physics_call(
@@ -141,6 +141,7 @@ class EnvObject:
             return False
 
     def is_in_swept_area(self, object, safety_margin=0.3):
+        """ Funbction that checks whether a spawned static object is in the swept area of a dynamic object """
         center, half_extents = object.get_swept_area()
         p = self.start_pos
         for axis in range(3):
@@ -184,6 +185,7 @@ class Dynamic(EnvObject):
         self.direction = direction
         super().__init__(start_pos, size, orientation)
 
+    """ Function used to update the dynamic obstacle coordinates based on its movement axis """
     def update_obstacle(self, dt):
         pos, orn = self.physics_call(p.getBasePositionAndOrientation, self.body_id)
         pos = list(pos)
@@ -201,6 +203,7 @@ class Dynamic(EnvObject):
 
         self.physics_call(p.resetBasePositionAndOrientation, self.body_id, pos, orn)
 
+    """ Function which calculates the movement area of dynamic object """
     def get_swept_area(self):
         center = self.start_pos.copy()
         center[self.axis] = (self.min + self.max) / 2
@@ -210,6 +213,7 @@ class Dynamic(EnvObject):
         return center, half_extents
 
     def isOverlapping(self, obstacle):
+        """Helper function to see if two obstacles overlap"""
         pts = self.physics_call(
             p.getClosestPoints, bodyA=self.body_id, bodyB=obstacle.body_id, distance=0.0
         )
@@ -218,6 +222,7 @@ class Dynamic(EnvObject):
         else:
             return False
 
+    """ Function that calculates the movement axis coordinate at a given time """
     def axis_position_at_time(self, t):
         path_length = self.max - self.min
         x0 = float(self.start_pos[self.axis])
@@ -229,15 +234,16 @@ class Dynamic(EnvObject):
             return self.min + y
         else:
             return self.min + (2 * path_length - y)  # bounce backwards
-
+    """ Function which returns coordinates of a dynamic object at any given time """
     def full_position_at_time(self, t):
         pos = self.start_pos.copy()
         pos[self.axis] = self.axis_position_at_time(t)
         return pos
 
+    """ Function which returns coordinates of a dynamic object at any given step of simulation """
     def full_position_at_step(self, step: int, dt: float = 1.0 / 60.0) -> np.array:
         return self.full_position_at_time(step * dt)
-
+    """ This function calculates the time it takes for a dynamic obstacle to complete one full back-and-forth cycle along its axis """
     def get_period(self) -> float:
         path_length = self.max - self.min
         return 2.0 * path_length / self.speed
@@ -253,8 +259,8 @@ class Target:
         self.physics_call = physics_call
         self.call_gui = call_gui
         self.color = color
-
-    # Check if the target is too close to drones and other targets
+        
+    """ This function checks whether a target position is valid for a spawn """
     def isValidPosition(self, dronePositions, targets, min_dist):
         if np.any(np.linalg.norm(dronePositions - self.start_pos, axis=1) < min_dist):
             return False
