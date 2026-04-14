@@ -1,0 +1,4 @@
+episode,steps,total_collision_counts,reached_total,wall_collisions,drone_collisions,obstacle_collisions,mean_reward
+0,69,0,0,0,0,0,-0.04749670983602602
+0,165,0,0,0,0,0,-7.431277744488383
+0,122,0,0,0,0,0,-11.187835422941474
