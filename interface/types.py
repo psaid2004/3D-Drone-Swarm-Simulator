@@ -1,4 +1,3 @@
-from typing import List
 from typing import TypedDict
 
 
@@ -25,7 +24,7 @@ class SwarmConfig(TypedDict, total=False):
     y: float
     z: float
     color_name: str     # Optional color name for the swarm, e.g. "red", "blue", "green"; default color will be assigned if not specified.
-    color: List[float]   # RGBA values between 0 and 1
+    color: list[float]   # RGBA values between 0 and 1
 
 
 class DroneSpawnConfig(TypedDict, total=False):
@@ -37,7 +36,7 @@ class DroneSpawnConfig(TypedDict, total=False):
     x: float
     y: float
     z: float
-    color: List[float]  # RGBA values between 0 and 1
+    color: list[float]  # RGBA values between 0 and 1
 
 
 class TargetSpawnConfig(TypedDict, total=False):
@@ -45,5 +44,11 @@ class TargetSpawnConfig(TypedDict, total=False):
     x: float
     y: float
     z: float
-    color: List[float]  # RGBA values between 0 and 1
+    color: list[float]  # RGBA values between 0 and 1
 
+
+class LiveState(TypedDict):
+    episode: int
+    step: int
+    drones: int
+    obstacles: int

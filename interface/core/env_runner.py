@@ -10,7 +10,7 @@ from typing import Callable, Dict, Optional, Tuple
 from config.defaults import POS_SLICE
 from envs.createObjects import Dynamic, EnvObject
 from envs.createWorld import SUPPORTED_SHAPES
-from interface.core.frame_buffer import FrameBuffer
+from interface.core.frame_buffer import FrameBuffer, get_unique_targets
 from wrappers.env_3d import DroneSwarm3D as _DroneSwarm3D
 
 class EnvRunner:
@@ -40,7 +40,7 @@ class EnvRunner:
         self._on_stopped = on_stopped   # Callback when the simulation loop has fully stopped
         self._on_error = on_error   # Callback to report errors to the UI
 
-        self._num_drones = max(1, int(num_drones))
+        self._num_drones = max(1, min(4, int(num_drones)))
         self._max_steps = max(1, int(max_steps))
         self._lidar = bool(lidar)
         self._render_mode = render_mode
@@ -90,6 +90,8 @@ class EnvRunner:
         """
         if self._running:
             return
+        if self._sim_thread is not None and self._sim_thread.is_alive():
+            self._sim_thread.join(timeout=2.0)
         self._frame_buffer.clear()
         self._close_current_env()
         self._running = True
@@ -201,9 +203,36 @@ class EnvRunner:
                         break
                     
                     # Simulation steps
+                    # Check alive before step — prevents _ensure_live_aviary() inside
+                    # step() from silently rebuilding a connection, which would
+                    # make the post-step alive check see a "live" client and not stop.
+                    if not current_env._pybullet_client_alive():
+                        with self._env_lock:
+                            self._current_env = None
+                        current_env = None
+                        self._stop_event.set()
+                        break
                     act_dict = self._build_action_dict(obs_dict)
-                    obs_dict, _, done, trunc, _ = current_env.step(act_dict)
+                    obs_dict, _, done, trunc, info_dict = current_env.step(act_dict, allow_rebuild=False)
                     self._step += 1
+                    # If step() detected a dead connection, stop before any physics reads.
+                    if any(
+                        isinstance(info_dict.get(a), dict) and info_dict[a].get("physics_server_recovered")
+                        for a in info_dict
+                    ):
+                        with self._env_lock:
+                            self._current_env = None
+                        current_env = None
+                        self._stop_event.set()
+                        break
+                    # Check alive after step — catches PyBullet dying mid-step before
+                    # any further physics reads (record, state).
+                    if not current_env._pybullet_client_alive():
+                        with self._env_lock:
+                            self._current_env = None
+                        current_env = None
+                        self._stop_event.set()
+                        break
                     self._frame_buffer.record(current_env, self._episode, self._step) # Record after action
                     state = {
                         "episode": self._episode,
@@ -218,11 +247,8 @@ class EnvRunner:
                         state["warning"] = self._last_warning
                     self._on_state(state)
                     time.sleep((1 / 144) / self.get_speed_multiplier())  # play in 144 fps
-                    if not current_env._pybullet_client_alive():
-                        self._stop_event.set()
-                        break   
 
-                    if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated and input is required to continue
+                    if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated; input required to prevent advancing to next episode
                         input("Simulation ended. Press Enter to continue.")
                         break
 
@@ -276,6 +302,28 @@ class EnvRunner:
                 env_ref.close()
             except Exception:
                 pass
+
+    @staticmethod
+    def _apply_body_color(env_instance, body_id: int, rgba) -> None:
+        """Apply an RGBA color to all visual links of a physics body."""
+        p = getattr(env_instance, "_p", None)
+        if p is None:
+            return
+        rgba = [max(0.0, min(1.0, float(c))) for c in rgba]
+        try:
+            num_joints = env_instance._call_physics(p.getNumJoints, int(body_id))
+        except Exception:
+            num_joints = 0
+        for link_idx in range(-1, int(num_joints)):
+            try:
+                env_instance._call_physics(
+                    p.changeVisualShape,
+                    int(body_id),
+                    int(link_idx),
+                    rgbaColor=rgba,
+                )
+            except Exception:
+                continue
 
     def _apply_object_configs(self, env_instance, configs):
         """
@@ -342,23 +390,6 @@ class EnvRunner:
         if p is None:
             return
 
-        def _apply_body_color(body_id: int, rgba):
-            rgba = [max(0.0, min(1.0, float(c))) for c in rgba]
-            try:
-                num_joints = env_instance._call_physics(p.getNumJoints, int(body_id))
-            except Exception:
-                num_joints = 0
-            for link_idx in range(-1, int(num_joints)):
-                try:
-                    env_instance._call_physics(
-                        p.changeVisualShape,
-                        int(body_id),
-                        int(link_idx),
-                        rgbaColor=rgba,
-                    )
-                except Exception:
-                    continue
-
         drone_ids = list(getattr(env_instance, "_drone_ids", []))
         if drone_ids and drone_spawns:
             new_positions = []
@@ -384,21 +415,14 @@ class EnvRunner:
                         [0.0, 0.0, 0.0],
                     )
                     if "color" in cfg:
-                        _apply_body_color(int(body_id), cfg["color"])
+                        self._apply_body_color(env_instance, int(body_id), cfg["color"])
                 except Exception:
                     continue
             # keep spawn_positions consistent with actual drone positions
             if new_positions:
                 env_instance.spawn_positions = np.array(new_positions, dtype=np.float32)
 
-        seen: set = set()
-        unique_targets = []
-        for tgt in list(getattr(env_instance, "_targets", []) or []):
-            body_id = getattr(tgt, "body_id", None)
-            if body_id is None or body_id in seen:
-                continue
-            seen.add(body_id)
-            unique_targets.append(tgt)
+        unique_targets = get_unique_targets(env_instance)
 
         if unique_targets and target_spawns:
             for i, target in enumerate(unique_targets[: len(target_spawns)]):
@@ -421,7 +445,7 @@ class EnvRunner:
                     if hasattr(target, "start_pos"):
                         target.start_pos = np.array(pos, dtype=np.float32)
                     if "color" in cfg:
-                        _apply_body_color(int(body_id), cfg["color"])
+                        self._apply_body_color(env_instance, int(body_id), cfg["color"])
                         if hasattr(target, "color"):
                             target.color = cfg["color"]
                 except Exception:

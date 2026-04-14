@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from interface.types import LiveState
 from interface.core.config_manager import ConfigManager
 from interface.core.env_runner import EnvRunner
 from interface.core.frame_buffer import FrameBuffer
@@ -37,7 +38,7 @@ class SimulationPage(QWidget):
         self._console: DualTerminal | None = None
         self._console_visible = False
         self._state_queue: queue.Queue = queue.Queue(maxsize=1)
-        self._last_live_state = {"episode": 0, "step": 0, "drones": 0, "obstacles": 0}
+        self._last_live_state = LiveState(episode=0, step=0, drones=0, obstacles=0)
 
         num_swarms = max(1, int(self.config.get("num_swarms", 1)))
         drones_per_swarm = max(1, int(self.config.get("num_drones", 3)))
@@ -288,12 +289,12 @@ class SimulationPage(QWidget):
         )
 
     def _update_telemetry(self, state):
-        self._last_live_state = {
-            "episode": int(state.get("episode", self._last_live_state["episode"])),
-            "step": int(state.get("step", self._last_live_state["step"])),
-            "drones": int(state.get("drones", self._last_live_state["drones"])),
-            "obstacles": int(state.get("obstacles", self._last_live_state["obstacles"])),
-        }
+        self._last_live_state = LiveState(
+            episode=int(state.get("episode", self._last_live_state["episode"])),
+            step=int(state.get("step", self._last_live_state["step"])),
+            drones=int(state.get("drones", self._last_live_state["drones"])),
+            obstacles=int(state.get("obstacles", self._last_live_state["obstacles"])),
+        )
         speed = float(
             state.get("speed_multiplier", self._env_runner.get_speed_multiplier())
         )
@@ -307,13 +308,13 @@ class SimulationPage(QWidget):
             + f"Speed       : {speed:.2f}x\n"
         )
 
-    def _on_frame_seeked(self, meta: dict):
+    def _on_frame_seeked(self):
         """Called by TimelineWidget after a successful seeks; updates telemetry."""
-        replay_state = dict(self._last_live_state)
-        replay_state["episode"] = int(meta.get("episode", replay_state["episode"]))
-        replay_state["step"] = int(meta.get("step", replay_state["step"]))
-        replay_state["speed_multiplier"] = float(
-            meta.get("speed_multiplier", self._env_runner.get_speed_multiplier())
+        replay_state = LiveState(
+            episode=self._last_live_state["episode"],
+            step=self._last_live_state["step"],
+            drones=self._last_live_state["drones"],
+            obstacles=self._last_live_state["obstacles"],
         )
         self._update_telemetry(replay_state)
 
