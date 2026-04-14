@@ -2,6 +2,19 @@ import threading
 from typing import Any, Dict, List, Optional
 
 
+def get_unique_targets(env_instance) -> list:
+    """Returns targets from env_instance with duplicate body_ids removed."""
+    seen: set = set()
+    unique = []
+    for tgt in list(getattr(env_instance, "_targets", []) or []):
+        body_id = getattr(tgt, "body_id", None)
+        if body_id is None or body_id in seen:
+            continue
+        seen.add(body_id)
+        unique.append(tgt)
+    return unique
+
+
 class FrameBuffer:
     """Captures and replays physics body states during simulation."""
 
@@ -82,13 +95,10 @@ class FrameBuffer:
             state = self._capture_body_state(env_instance, body_id)
             if state is not None:
                 obstacle_states.append(state)
-
-        seen_targets: set = set()
-        for target in list(getattr(env_instance, "_targets", []) or []):
+        for target in get_unique_targets(env_instance):
             body_id = getattr(target, "body_id", None)
-            if body_id is None or body_id in seen_targets:
+            if body_id is None:
                 continue
-            seen_targets.add(body_id)
             state = self._capture_body_state(env_instance, body_id)
             if state is not None:
                 target_states.append(state)

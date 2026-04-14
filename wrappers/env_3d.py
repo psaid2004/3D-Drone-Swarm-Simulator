@@ -1314,7 +1314,7 @@ class DroneSwarm3D(ParallelEnv):
         return hit_frac.astype(np.float32)
 
     # ----------------------------- STEP FUNCTION -----------------------------
-    def step(self, actions: Dict[str, np.ndarray]):
+    def step(self, actions: Dict[str, np.ndarray], allow_rebuild: bool = True):
         """
         One environment step.
 
@@ -1354,28 +1354,57 @@ class DroneSwarm3D(ParallelEnv):
         self._last_sim_actions = sim_actions.copy()
 
         # 4. Ensure the simulator connection is alive before stepping
-        self._ensure_live_aviary()
+        if allow_rebuild:
+            self._ensure_live_aviary()
 
-        try:
-            self._env.step(sim_actions)
-        except Exception as e:
-            # If PyBullet died mid-episode, rebuild once and hard-reset this env
-            msg = str(e)
-            if "Not connected to physics server" in msg:
-                self._rebuild_aviary()
-                obs_dict, info_dict = self.reset()
+            try:
+                self._env.step(sim_actions)
+            except Exception as e:
+                # If PyBullet died mid-episode, rebuild once and hard-reset this env
+                msg = str(e)
+                if "Not connected to physics server" in msg:
+                    self._rebuild_aviary()
+                    obs_dict, info_dict = self.reset()
 
-                reward_dict = {agent: 0.0 for agent in self.agents}
-                term_dict = {agent: False for agent in self.agents}
-                trunc_dict = {agent: True for agent in self.agents}
+                    reward_dict = {agent: 0.0 for agent in self.agents}
+                    term_dict = {agent: False for agent in self.agents}
+                    trunc_dict = {agent: True for agent in self.agents}
 
-                for agent in self.agents:
-                    if agent in info_dict and isinstance(info_dict[agent], dict):
-                        info_dict[agent]["physics_server_recovered"] = True
+                    for agent in self.agents:
+                        if agent in info_dict and isinstance(info_dict[agent], dict):
+                            info_dict[agent]["physics_server_recovered"] = True
 
-                return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+                    return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+            
+                raise
 
-            raise
+        elif not allow_rebuild:
+            try:
+                self._env.step(sim_actions)
+            except Exception as e:
+                msg = str(e)
+                if "Not connected to physics server" in msg or not self._pybullet_client_alive():
+                    if not allow_rebuild:
+                        obs_dict = {
+                            agent: np.zeros(self.observation_space(agent).shape, dtype=np.float32)
+                            for agent in self.agents
+                        }
+                        reward_dict = {agent: 0.0 for agent in self.agents}
+                        term_dict = {agent: False for agent in self.agents}
+                        trunc_dict = {agent: True for agent in self.agents}
+                        info_dict = {agent: {"physics_server_recovered": True} for agent in self.agents}
+                        return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+                    self._rebuild_aviary()
+                    obs_dict, info_dict = self.reset()
+                    reward_dict = {agent: 0.0 for agent in self.agents}
+                    term_dict = {agent: False for agent in self.agents}
+                    trunc_dict = {agent: True for agent in self.agents}
+                    for agent in self.agents:
+                        if agent in info_dict and isinstance(info_dict[agent], dict):
+                            info_dict[agent]["physics_server_recovered"] = True
+                    return obs_dict, reward_dict, term_dict, trunc_dict, info_dict
+
+                raise
 
         # 5. Build the observation dictionary
         obs_dict = self._build_obs_dict()
