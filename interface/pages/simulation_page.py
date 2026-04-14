@@ -26,6 +26,30 @@ from interface.widgets.timeline_widget import TimelineWidget
 LEFT_SIDEBAR_WIDTH = 550
 
 
+OBJECT_COLORS = [
+    "#E6F5D4",  # Verde lima muy claro
+    "#D9F0C3",  # Verde menta suave
+    "#CCEBB2",  # Verde pastel
+    "#BFE6A1",  # Verde manzana claro
+    "#B2E190",  # Verde primavera
+    "#A5DC7F",  # Verde salvia claro
+    "#98D76E",  # Verde hierba suave
+    "#8BD25D",  # Verde pistacho
+    "#7ECD4C",  # Verde musgo claro
+    "#C8EDB8",  # Verde té verde
+    "#BEE8AB",  # Verde pera
+    "#B4E39E",  # Verde albahaca clara
+    "#AADE91",  # Verde esmeralda claro
+    "#A0D984",  # Verde oliva claro
+    "#96D477",  # Verde césped suave
+    "#DCF5CC",  # Verde nieve
+    "#D2F0BF",  # Verde junco
+    "#F0FAD8",  # Verde muy pálido
+    "#EAF9D0",  # Verde lima pálido
+    "#E2F7C8",  # Verde brillante claro
+]
+
+
 class SimulationPage(QWidget):
     """
     Creates ConfigManager, FrameBuffer, EnvRunner, SidebarEditor, and TimelineWidget, then wires them together.
@@ -103,11 +127,11 @@ class SimulationPage(QWidget):
         top_bar = QFrame()
         top_bar.setFrameShape(QFrame.Shape.Box)
         top_bar.setFixedHeight(52)
-        top_bar.setStyleSheet("background-color: #4CAF50; color: black; font-size: 12px;")
+        top_bar.setStyleSheet("background-color: #7ECD4C; color: black; font-size: 12px;")
         top_layout = QHBoxLayout(top_bar)
         top_layout.setContentsMargins(12, 8, 12, 8)
 
-        title_lbl = QLabel("Simulation Controls")
+        title_lbl = QLabel(f"Project {self.config.get('project_name', '')} | Simulation Controls")
         title_lbl.setStyleSheet("font-weight: 700;")
 
         self.status_lbl = QLabel("Stopped")
@@ -146,21 +170,21 @@ class SimulationPage(QWidget):
         top_layout.addStretch(1)
         top_layout.addWidget(self.status_lbl)
         top_layout.addSpacing(10)
-        self.change_model_btn.setStyleSheet("QPushButton:hover { background-color: #45a049; }")
+        self.change_model_btn.setStyleSheet("QPushButton:hover { background-color: #6BA03D; }")
         top_layout.addWidget(self.change_model_btn)
         top_layout.addSpacing(10)
-        self.return_btn.setStyleSheet("QPushButton:hover { background-color: #45a049; }")
+        self.return_btn.setStyleSheet("QPushButton:hover { background-color: #6BA03D; }")
         top_layout.addWidget(self.return_btn)
         top_layout.addSpacing(10)
-        self.save_config_btn.setStyleSheet("QPushButton:hover { background-color: #45a049; }")
+        self.save_config_btn.setStyleSheet("QPushButton:hover { background-color: #6BA03D; }")
         top_layout.addWidget(self.save_config_btn)
-        self.load_config_btn.setStyleSheet("QPushButton:hover { background-color: #45a049; }")
+        self.load_config_btn.setStyleSheet("QPushButton:hover { background-color: #6BA03D; }")
         top_layout.addWidget(self.load_config_btn)
-        self.console_btn.setStyleSheet("QPushButton:hover { background-color: #45a049; }")
+        self.console_btn.setStyleSheet("QPushButton:hover { background-color: #6BA03D; }")
         top_layout.addWidget(self.console_btn)
-        self.stop_btn.setStyleSheet("QPushButton:hover { background-color: #45a049; }")
+        self.stop_btn.setStyleSheet("QPushButton:hover { background-color: #6BA03D; }")
         top_layout.addWidget(self.stop_btn)
-        self.start_btn.setStyleSheet("QPushButton:hover { background-color: #45a049; }")
+        self.start_btn.setStyleSheet("QPushButton:hover { background-color: #6BA03D; }")
         top_layout.addWidget(self.start_btn)
 
         # ---- Timeline bar ----
@@ -196,6 +220,13 @@ class SimulationPage(QWidget):
 
         self.info_panel = QFrame()
         self.info_panel.setFrameShape(QFrame.Shape.Box)
+        self.info_panel.setStyleSheet(
+            "QFrame {"
+            "  background-color: #E6F5D4;"
+            "  border: 1px solid #7ECD4C;"
+            "  border-radius: 5px;"
+            "}"
+        )
         info_layout = QVBoxLayout(self.info_panel)
         info_layout.setContentsMargins(14, 14, 14, 12)
 
@@ -295,9 +326,12 @@ class SimulationPage(QWidget):
             drones=int(state.get("drones", self._last_live_state["drones"])),
             obstacles=int(state.get("obstacles", self._last_live_state["obstacles"])),
         )
-        speed = float(
-            state.get("speed_multiplier", self._env_runner.get_speed_multiplier())
-        )
+        try:
+            speed = float(
+                state.get("speed_multiplier", self._env_runner.get_speed_multiplier())
+            )
+        except:
+            speed = 1
         self.telemetry_lbl.setText(
             self._telemetry_text(
                 self._last_live_state["episode"],
@@ -425,7 +459,7 @@ class SimulationPage(QWidget):
         configs_dir = Path(__file__).resolve().parents[1] / "configs"
         configs_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        file_path = configs_dir / f"obj_{timestamp}.json"
+        file_path = configs_dir / f"{self.config.get('project_name','obj')}_{timestamp}.json"
         self._config_manager.save_json(file_path)
 
     def _load_config(self):
@@ -453,6 +487,7 @@ class SimulationPage(QWidget):
         self.sidebar.count_spinbox.setValue(len(configs))
         self.sidebar.count_spinbox.blockSignals(False)
         self.sidebar.refresh()
+        self.sidebar._update_table = self._update_telemetry
 
         self.telemetry_lbl.setText(
             self._telemetry_text(0, 0, 0, len(configs))

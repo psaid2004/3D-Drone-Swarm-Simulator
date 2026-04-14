@@ -54,11 +54,10 @@ class MainWindow(QMainWindow):
         
     def switch_to_simulation(self, config: dict):
         """Create the SimulationPage with the given config an switch to it."""
-        # Create progress dialog with indeterminate mode initially
         self.loading_dialog = QProgressDialog("Loading simulation...", None, 0, 100, self)
         self.loading_dialog.setWindowTitle("Please Wait")
         self.loading_dialog.setCancelButton(None)
-        self.loading_dialog.setMinimumDuration(0)  # Show immediately
+        self.loading_dialog.setMinimumDuration(0)
         self.loading_dialog.show()
         
         # Start a timer to animate the progress
