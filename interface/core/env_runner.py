@@ -40,12 +40,12 @@ class EnvRunner:
         self._on_stopped = on_stopped   # Callback when the simulation loop has fully stopped
         self._on_error = on_error   # Callback to report errors to the UI
 
-        self._num_drones = max(1, min(4, int(num_drones)))
+        self._num_drones = max(1, min(10, int(num_drones)))
         self._max_steps = max(1, int(max_steps))
         self._lidar = bool(lidar)
         self._render_mode = render_mode
         self._world_scale = max(1.0, float(world_scale))
-        self._num_swarms = max(1, int(num_swarms))
+        self._num_swarms = max(1, min(6, int(num_swarms)))
         self._seed = int(seed) if seed is not None else None
 
         self._running = False
@@ -173,9 +173,9 @@ class EnvRunner:
                     current_env = self._make_env(configs)
 
                 with self._env_lock:    # set reference to current env for replay seeking and safe cleanup
-                    self._current_env = current_env
+                    self._current_env = current_env # Assign the current environment to the shared variable for access by other methods 
 
-                obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1)) # Reset env with a random seed for variability
+                obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1)) # Reset env with a random seed for variability (seed is overriden by config and does not affect anything but possibly the lidar)
                 self._last_warning = "" 
                 self._apply_object_configs(current_env, configs)    # Apply obstacle configurations
                 self._apply_spawn_configs(  # Apply drone and target spawn configurations
@@ -185,15 +185,15 @@ class EnvRunner:
                 )
                 obs_dict = current_env._build_obs_dict()    # Rebuild obs_dict to reflect any changes from applying configs
                 # refresh _prev_dists to match new positions
-                for i in range(current_env.total_num_drones):
+                for i in range(current_env.total_num_drones):   # Loop over all drones to update their previous distances to targets based on their new positions after applying spawn configs
                     pos = obs_dict[current_env.possible_agents[i]][POS_SLICE]   # Get current position of the drone
                     current_env._prev_dists[i] = float(np.linalg.norm(current_env._targets[i].start_pos - pos))    # Update previous distances to targets based on new drone positions
                 # print("Env made")
                 self._episode += 1
                 self._step = 0
-                done = {agent: False for agent in current_env.possible_agents} 
-                trunc = {agent: False for agent in current_env.possible_agents} 
-                restart_requested = False 
+                done = {agent: False for agent in current_env.possible_agents}  # Track done status for each agent; episode ends when all agents are done
+                trunc = {agent: False for agent in current_env.possible_agents} # Track truncated status for each agent; episode ends when all agents are truncated
+                restart_requested = False
                 self._frame_buffer.record(current_env, self._episode, self._step) # Record initial state
 
                 while not self._stop_event.is_set(): # Loop over steps within the episode
@@ -206,7 +206,7 @@ class EnvRunner:
                     # Check alive before step — prevents _ensure_live_aviary() inside
                     # step() from silently rebuilding a connection, which would
                     # make the post-step alive check see a "live" client and not stop.
-                    if not current_env._pybullet_client_alive():
+                    if not current_env._pybullet_client_alive():    # Check if physics client is alive before step and stop if not. 
                         with self._env_lock:
                             self._current_env = None
                         current_env = None
@@ -225,14 +225,7 @@ class EnvRunner:
                         current_env = None
                         self._stop_event.set()
                         break
-                    # Check alive after step — catches PyBullet dying mid-step before
-                    # any further physics reads (record, state).
-                    if not current_env._pybullet_client_alive():
-                        with self._env_lock:
-                            self._current_env = None
-                        current_env = None
-                        self._stop_event.set()
-                        break
+
                     self._frame_buffer.record(current_env, self._episode, self._step) # Record after action
                     state = {
                         "episode": self._episode,

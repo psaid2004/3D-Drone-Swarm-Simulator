@@ -45,10 +45,17 @@ class SidebarEditor(QWidget):
     swarm_count_changed = pyqtSignal(int)   # Emitted when the swarm count is changed, so that the main window can update its drone count.
     randomize_requested = pyqtSignal()      # Emmited when the "Generate Random" button is clicked.
 
-    def __init__(self, config_manager: ConfigManager, drones_per_swarm: int, parent=None):
+    def __init__(
+            self, config_manager: ConfigManager,
+            drones_per_swarm: int, 
+            parent=None,
+            max_swarms: int = 4,
+            max_drones_per_swarm: int = 10,):
         super().__init__(parent)
         self._config_manager = config_manager
         self._drones_per_swarm = drones_per_swarm
+        self._max_swarms = max_swarms
+        self._max_drones_per_swarm = max_drones_per_swarm
         self._sidebar_mode = "object_spawns"
         self._expanded_swarms: set = set() # indicates which swarm configs have their drone details expanded in the UI
         self._build_ui()
@@ -82,7 +89,6 @@ class SidebarEditor(QWidget):
         # Count buttons
         self.count_label = QLabel("Object count")
         self.count_spinbox = QSpinBox()
-        self.count_spinbox.setRange(0, 100)
         self.count_spinbox.setValue(self._config_manager.count("object_spawns")) 
         self.count_spinbox.valueChanged.connect(self._on_count_spinbox) 
 
@@ -123,13 +129,15 @@ class SidebarEditor(QWidget):
         if mode == "object_spawns":
             self.side_title.setText("Objects")
             self.count_label.setText("Object count")
+            self.count_spinbox.setRange(0, 500)
         elif mode == "drone_spawns":
             self.side_title.setText("Swarms")
             self.count_label.setText("Swarm count")
+            self.count_spinbox.setRange(0, self._max_swarms)
         else:
             self.side_title.setText("Targets")
             self.count_label.setText("Target count")
-
+            self.count_spinbox.setRange(0, self._max_swarms)
         self.count_spinbox.blockSignals(True)
         self.count_spinbox.setValue(self._config_manager.count(mode))
         self.count_spinbox.blockSignals(False)
