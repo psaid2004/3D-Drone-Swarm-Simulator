@@ -3,13 +3,14 @@
   Do not add any Qt imports here.
 """
 import json
+import math
 import random
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from config.defaults import SWARM_EDGE_MARGIN
-from envs.createWorld import SUPPORTED_SHAPES, generate_edge_xyz, random_obstacle_config
+from envs.createWorld import SUPPORTED_SHAPES, generate_edge_xyz
 from interface.types import DroneSpawnConfig, ObjectConfig, SwarmConfig, TargetSpawnConfig
 
 # Contains default colors for swarms, used as defaults and for validation when setting by name. Each entry is RGBA with values in [0, 1].
@@ -24,12 +25,61 @@ SWARM_COLOR_PRESETS: Dict[str, List[float]] = {
 }
 
 AXIS_LABEL_TO_INT: Dict[str, int] = {"x": 0, "y": 1, "z": 2}
-AXIS_INT_TO_LABEL: Dict[int, str] = {0: "x", 1: "y", 2: "z"}
+AXIS_INT_TO_LABEL: Dict[int, str] = {v: k for k, v in AXIS_LABEL_TO_INT.items()}
 KINDS = ("static", "dynamic")
 
+def random_obstacle_config(index: int, world_scale: float) -> dict:
+    """Return a randomly placed ObjectConfig-shaped dict for the interface."""
+    shape = random.choice(SUPPORTED_SHAPES)
+    limit = world_scale * 0.8
+    x = random.uniform(-limit, limit)
+    y = random.uniform(-limit, limit)
+    z = random.uniform(0, limit)
+    size = random.uniform(0.5, limit / 2)
+    yaw = round(random.uniform(-math.pi, math.pi), 3)
+    obj_type_prob = random.random()
+    if obj_type_prob < 0.7:
+        return {
+            "name": f"Object {index + 1}",
+            "kind": "static",
+            "shape": shape,
+            "x": x,
+            "y": y,
+            "z": z,
+            "size": size,
+            "yaw": yaw,
+            "axis": 0,
+            "min": -1.0,
+            "max": 1.0,
+            "speed": 0.2,
+            "direction": 1,
+        }
+    elif obj_type_prob >= 0.7:
+        return {
+            "name": f"Object {index + 1}",
+            "kind": "dynamic",
+            "shape": shape,
+            "x": x,
+            "y": y,
+            "z": z,
+            "size": size,
+            "yaw": yaw,
+            "axis": random.randint(0, 2),
+            "min": round(random.uniform(-1.0, 0.0), 3),
+            "max": round(random.uniform(0.0, 1.0), 3),
+            "speed": round(random.uniform(0.1, 0.5), 3),
+            "direction": random.choice([-1, 1]),
+        }
+    
 
 class ConfigManager:
     """Owner of all entity configuration states."""
+
+    _MODE_LABEL: Dict[str, str] = {
+        "object_spawns": "Object",
+        "drone_spawns": "Drone",
+        "target_spawns": "Target",
+    }
 
     def __init__(self, num_swarms: int = 1, drones_per_swarm: int = 1, world_scale: float = 5.0):
         self._lock = threading.Lock()
@@ -83,13 +133,9 @@ class ConfigManager:
 
     def get_name(self, mode: str, index: int) -> str:
         """Returns the name of the entity at the given index, or a default if not set."""
+        default = f"{self._MODE_LABEL.get(mode, 'Entity')} {index + 1}"
         with self._lock:
-            if mode == "object_spawns":
-                configs, default = self._object_configs, f"Object {index + 1}"
-            elif mode == "drone_spawns":
-                configs, default = self._drone_spawn_configs, f"Drone {index + 1}"
-            else:
-                configs, default = self._target_spawn_configs, f"Target {index + 1}"
+            configs = self._list_for_mode(mode)
             if 0 <= index < len(configs):
                 return str(configs[index].get("name", default))
         return default
@@ -97,12 +143,7 @@ class ConfigManager:
     def count(self, mode: str) -> int:
         """Returns the count of entities for the given mode."""
         with self._lock:
-            if mode == "object_spawns":
-                return len(self._object_configs)
-            elif mode == "drone_spawns":
-                return len(self._swarm_configs)
-            else:
-                return len(self._target_spawn_configs)
+            return len(self._list_for_mode(mode))
 
     # ---- Setters ----
 
@@ -119,50 +160,31 @@ class ConfigManager:
         Syncs the count of obstacles to the given count, adding default configs or removing from the end as needed.
         """
         with self._lock:
-            current = len(self._object_configs)
-            if count > current:
-                for i in range(current, count):
-                    self._object_configs.append(self._default_object_config(i))
-            elif count < current:
-                self._object_configs = self._object_configs[:count]
+            self._resize_list(self._object_configs, count, self._default_object_config)
 
     def sync_target_count(self, count: int):
         """
         Syncs the count of targets to the given count, adding default configs or removing from the end as needed.
+        Also ensures that target spawns are kept in sync with swarm count, and that each target has a color matching its swarm.
         """
         with self._lock:
-            current = len(self._target_spawn_configs)
-            if count > current:
-                for i in range(current, count):
-                    self._target_spawn_configs.append(
-                        self._default_target_spawn_config(i)
-                    )
-            elif count < current:
-                self._target_spawn_configs = self._target_spawn_configs[:count]
+            count = max(1, min(4, int(count)))
+            self._resize_list(self._target_spawn_configs, count, self._default_target_spawn_config)
+            self._resize_list(self._swarm_configs, count, self._default_swarm_config)
+
+            self._rebuild_drone_spawn_configs()
 
     def sync_swarm_count(self, count: int):
         """
         Syncs the count of swarms to the given count, adding default configs or removing from the end as needed.
+        Also ensures that target spawns are kept in sync with swarm count, and that each target has a color matching its swarm.
         """
-        count = max(1, int(count))
+        count = max(1, min(4, int(count)))
         with self._lock:
             self._num_swarms = count
 
-            current = len(self._swarm_configs)
-            if count > current:
-                for i in range(current, count):
-                    self._swarm_configs.append(self._default_swarm_config(i))
-            elif count < current:
-                self._swarm_configs = self._swarm_configs[:count]
-
-            current_targets = len(self._target_spawn_configs)
-            if count > current_targets:
-                for i in range(current_targets, count):
-                    self._target_spawn_configs.append(
-                        self._default_target_spawn_config(i)
-                    )
-            elif count < current_targets:
-                self._target_spawn_configs = self._target_spawn_configs[:count]
+            self._resize_list(self._swarm_configs, count, self._default_swarm_config)
+            self._resize_list(self._target_spawn_configs, count, self._default_target_spawn_config)
 
             for i, target_cfg in enumerate(self._target_spawn_configs):
                 if "name" not in target_cfg:
@@ -204,25 +226,16 @@ class ConfigManager:
     def remove_at(self, mode: str, index: int) -> bool:
         """
         Removes the configuration at the given index for the specified mode.
-        
+
         Returns:
           True if the removal was successful, False otherwise.
         """
         with self._lock:
-            if mode == "object_spawns":
-                if 0 <= index < len(self._object_configs):
-                    del self._object_configs[index]
-                    return True
-            elif mode == "drone_spawns":
-                if 0 <= index < len(self._swarm_configs):
-                    del self._swarm_configs[index]
-                    return True
-            elif mode == "target_spawns":
-                if 0 <= index < len(self._target_spawn_configs):
-                    del self._target_spawn_configs[index]
-                    return True
-            else:
+            lst = self._list_for_mode(mode)
+            if not (0 <= index < len(lst)):
                 return False
+            del lst[index]
+            return True
 
     # ---- Field setters ----
 
@@ -238,13 +251,12 @@ class ConfigManager:
             old = cfg.get(key)
             if key == "axis":   # Special handling for axis to allow both int and string inputs
                 raw_str = str(raw_value).strip().lower()
-                value = AXIS_LABEL_TO_INT.get(raw_str, self._coerce_int(raw_value, old))
+                value = AXIS_LABEL_TO_INT.get(raw_str, self._coerce(raw_value, old))
                 value = max(0, min(2, int(value)))  # 0 <= value <= 2
             else:               # For other keys, determine type based on existing value or defaults
                 value = (
-                    self._coerce_float(raw_value, old) if isinstance(old, float)
-                    else self._coerce_int(raw_value, old) if isinstance(old, int)
-                    else (str(raw_value).strip()) or str(old)
+                    self._coerce(raw_value, old) if isinstance(old, (float, int))
+                    else (str(raw_value).strip() or str(old))
                 )
 
             if key == "shape" and value not in SUPPORTED_SHAPES:
@@ -275,7 +287,7 @@ class ConfigManager:
                 return False
             old = configs[index].get(key)
             if key in ("x", "y", "z"):
-                value = self._coerce_float(raw_value, old)
+                value = self._coerce(raw_value, old)
             else:
                 value = str(raw_value).strip() if str(raw_value).strip() else str(old)
             configs[index][key] = value
@@ -290,7 +302,7 @@ class ConfigManager:
                 return False
             swarm_cfg = self._swarm_configs[swarm_idx]
             if key in ("x", "y", "z"):
-                value = self._coerce_float(raw_value, float(swarm_cfg.get(key, 0.0)))
+                value = self._coerce(raw_value, float(swarm_cfg.get(key, 0.0)))
                 swarm_cfg[key] = value
             elif key == "color_name":
                 color_name = str(raw_value).strip()
@@ -318,7 +330,7 @@ class ConfigManager:
             if not (0 <= drone_index < len(self._drone_spawn_configs)):
                 return False
             current = float(self._drone_spawn_configs[drone_index].get(key, 0.0))
-            self._drone_spawn_configs[drone_index][key] = self._coerce_float(
+            self._drone_spawn_configs[drone_index][key] = self._coerce(
                 raw_value, current
             )
             self._rebuild_drone_spawn_configs()
@@ -397,7 +409,7 @@ class ConfigManager:
 
     def _ensure_object_fields(self, config: dict) -> ObjectConfig:
         """ Ensures that the given object config has all required fields, filling in defaults as needed."""
-        defaults = {
+        return self._apply_defaults(config, {
             "name": "Object",
             "kind": "static",
             "shape": "box",
@@ -411,18 +423,10 @@ class ConfigManager:
             "max": 1.0,
             "speed": 0.2,
             "direction": 1,
-        }
-        for key, val in defaults.items():
-            if key not in config:
-                config[key] = val
-        return config
+        })
 
     def ensure_spawn_fields(self, config: dict, prefix: str) -> dict:
-        defaults = {"name": f"{prefix} count", "x": 0.0, "y": 0.0, "z": 0.5}
-        for key, val in defaults.items():
-            if key not in config:
-                config[key] = val
-        return config
+        return self._apply_defaults(config, {"name": f"{prefix} count", "x": 0.0, "y": 0.0, "z": 0.5})
 
     # ---- Internal rebuild ----
 
@@ -488,15 +492,36 @@ class ConfigManager:
     # ---- Utilities ----
 
     @staticmethod
-    def _coerce_float(text, fallback: float) -> float:
+    def _coerce(value, fallback):
         try:
-            return float(text)
+            if isinstance(fallback, float):
+                return float(value)
+            elif isinstance(fallback, int):
+                return int(float(value))
+            return type(fallback)(value)
         except Exception:
-            return float(fallback)
+            return fallback
 
     @staticmethod
-    def _coerce_int(text, fallback: int) -> int:
-        try:
-            return int(float(text))
-        except Exception:
-            return int(fallback)
+    def _apply_defaults(config: dict, defaults: dict) -> dict:
+        for key, val in defaults.items():
+            if key not in config:
+                config[key] = val
+        return config
+
+    def _list_for_mode(self, mode: str) -> list:
+        """Returns the internal list for the given mode. Must be called while holding self._lock."""
+        if mode == "object_spawns":
+            return self._object_configs
+        elif mode == "drone_spawns":
+            return self._swarm_configs
+        return self._target_spawn_configs
+
+    def _resize_list(self, lst: list, count: int, factory) -> None:
+        """Resizes lst to count items using factory(i) for new entries. Must be called while holding self._lock."""
+        current = len(lst)
+        if count > current:
+            for i in range(current, count):
+                lst.append(factory(i))
+        elif count < current:
+            del lst[count:]
