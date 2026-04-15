@@ -93,11 +93,22 @@ python train/sac_training_with_expert.py
 This class also contains additional features such as the use of an early-stopping callback, and
 the integration of Weights and Biases to plot statistics to assist during training. 
 
-Training needs to undergo further hyperparameter tuning and parameter selection. These can be found in 
-`/config/sac_defualts.py`. Additionally, the reward function also needs to be altered for the 
-sake of training an optimal model, which can be done from the `/config/defaults.py`. This 
-class contains the coefficients that make up the reward function and determine the 
-strength of each term.
+Training configurations such as, reward function, curriculum and expert blend, can be altered
+according to ones goals.
+
+The reward function can be altered in `/wrappers/rewards.py`. Different 
+rewards have already been implemented and they can be included or removed based on the model 
+objective. Additionally, the weight of each reward can be altered in `/config/defaults.py`.
+Furthermore, changing SAC parameters and expert blending policy parameters can be done from the `/config/sac_defaults.py`. 
+
+The training curriculum can be found in `config/curriculum.py`. The file already contains some curriculums
+used for the training and evaluation of models. There should be only 1 active curriculum and the other
+ones should be commented out. 
+
+
+If one wishes to also change the observation space of agents, this is found in `wrappers/env_3d.py`. The function that
+should be changed is called `_build_obs_dict` and is responsible for building a dictionary with the information, that is
+used as the observation space.
 
 *The model checkpoints will be saved in the `models/` directory.*
 
