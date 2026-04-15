@@ -91,7 +91,11 @@ class EnvRunner:
         if self._running:
             return
         if self._sim_thread is not None and self._sim_thread.is_alive():
-            self._sim_thread.join(timeout=2.0)
+            self._stop_event.set()  # signal the old thread to stop
+            self._sim_thread.join(timeout=5.0)
+            if self._sim_thread.is_alive():
+                print("[EnvRunner] Warning: old simulation thread did not stop in time")
+                return
         self._frame_buffer.clear()
         self._close_current_env()
         self._running = True
@@ -115,7 +119,7 @@ class EnvRunner:
         """
         self.stop()
         if self._sim_thread is not None:
-            self._sim_thread.join(timeout=2.0)
+            self._sim_thread.join(timeout=5.0)
         self._close_current_env()
 
     def request_restart(self):
@@ -159,6 +163,13 @@ class EnvRunner:
         """
         with self._env_lock:
             env_ref = self._current_env
+        if env_ref is None:
+            return False
+        try:
+            if not env_ref._pybullet_client_alive():
+                return False
+        except Exception:
+            return False
         return self._frame_buffer.seek(index, env_ref)
     
     # ---- Simulation loop ----
@@ -225,7 +236,6 @@ class EnvRunner:
                         current_env = None
                         self._stop_event.set()
                         break
-
                     self._frame_buffer.record(current_env, self._episode, self._step) # Record after action
                     state = {
                         "episode": self._episode,
@@ -241,8 +251,7 @@ class EnvRunner:
                     self._on_state(state)
                     time.sleep((1 / 144) / self.get_speed_multiplier())  # play in 144 fps
 
-                    if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated; input required to prevent advancing to next episode
-                        input("Simulation ended. Press Enter to continue.")
+                    if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated
                         break
 
                 if restart_requested:
@@ -333,7 +342,8 @@ class EnvRunner:
                 continue
             try:
                 env_instance._call_physics(p.removeBody, body_id)
-            except Exception:
+            except Exception as exc:
+                print(f"[EnvRunner] Failed to remove obstacle body {body_id}: {exc}")
                 continue
 
         new_obstacles = []
@@ -360,7 +370,8 @@ class EnvRunner:
             try:
                 obj.create(shape, physics_call=env_instance._call_physics)
                 new_obstacles.append(obj)
-            except Exception:
+            except Exception as exc:
+                print(f"[EnvRunner] Failed to create obstacle (shape={shape}): {exc}")
                 continue
 
         env_instance._obstacles = new_obstacles
@@ -409,7 +420,8 @@ class EnvRunner:
                     )
                     if "color" in cfg:
                         self._apply_body_color(env_instance, int(body_id), cfg["color"])
-                except Exception:
+                except Exception as exc:
+                    print(f"[EnvRunner] Failed to apply drone spawn config {i}: {exc}")
                     continue
             # keep spawn_positions consistent with actual drone positions
             if new_positions:
@@ -441,7 +453,8 @@ class EnvRunner:
                         self._apply_body_color(env_instance, int(body_id), cfg["color"])
                         if hasattr(target, "color"):
                             target.color = cfg["color"]
-                except Exception:
+                except Exception as exc:
+                    print(f"[EnvRunner] Failed to apply target spawn config {i}: {exc}")
                     continue
                     
                           # --- TODO: validate user-placed obstacle positions ---
