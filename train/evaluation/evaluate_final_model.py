@@ -428,7 +428,7 @@ class EvaluateFinalModel:
 if __name__ == "__main__":
     evaluator = EvaluateFinalModel(
         #FINAL MODEL BEING EVALUATED ON ALL CIRUCULUM STAGES
-        final_model_num=1,
+        final_model_num=0,
         final_model_n_drones=1,
         final_model_n_static_obstacles=1,
         final_model_n_dynamic_obstacles=0,
