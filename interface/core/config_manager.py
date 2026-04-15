@@ -169,6 +169,7 @@ class ConfigManager:
         """
         with self._lock:
             count = max(1, min(4, int(count)))
+            self._num_swarms = count  
             self._resize_list(self._target_spawn_configs, count, self._default_target_spawn_config)
             self._resize_list(self._swarm_configs, count, self._default_swarm_config)
 
@@ -182,7 +183,6 @@ class ConfigManager:
         count = max(1, min(4, int(count)))
         with self._lock:
             self._num_swarms = count
-
             self._resize_list(self._swarm_configs, count, self._default_swarm_config)
             self._resize_list(self._target_spawn_configs, count, self._default_target_spawn_config)
 
