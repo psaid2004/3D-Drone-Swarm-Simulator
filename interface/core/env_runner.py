@@ -40,12 +40,12 @@ class EnvRunner:
         self._on_stopped = on_stopped   # Callback when the simulation loop has fully stopped
         self._on_error = on_error   # Callback to report errors to the UI
 
-        self._num_drones = max(1, min(4, int(num_drones)))
+        self._num_drones = max(1, min(10, int(num_drones)))
         self._max_steps = max(1, int(max_steps))
         self._lidar = bool(lidar)
         self._render_mode = render_mode
         self._world_scale = max(1.0, float(world_scale))
-        self._num_swarms = max(1, int(num_swarms))
+        self._num_swarms = max(1, min(6, int(num_swarms)))
         self._seed = int(seed) if seed is not None else None
 
         self._running = False
@@ -91,7 +91,11 @@ class EnvRunner:
         if self._running:
             return
         if self._sim_thread is not None and self._sim_thread.is_alive():
-            self._sim_thread.join(timeout=2.0)
+            self._stop_event.set()  # signal the old thread to stop
+            self._sim_thread.join(timeout=5.0)
+            if self._sim_thread.is_alive():
+                print("[EnvRunner] Warning: old simulation thread did not stop in time")
+                return
         self._frame_buffer.clear()
         self._close_current_env()
         self._running = True
@@ -115,7 +119,7 @@ class EnvRunner:
         """
         self.stop()
         if self._sim_thread is not None:
-            self._sim_thread.join(timeout=2.0)
+            self._sim_thread.join(timeout=5.0)
         self._close_current_env()
 
     def request_restart(self):
@@ -159,6 +163,13 @@ class EnvRunner:
         """
         with self._env_lock:
             env_ref = self._current_env
+        if env_ref is None:
+            return False
+        try:
+            if not env_ref._pybullet_client_alive():
+                return False
+        except Exception:
+            return False
         return self._frame_buffer.seek(index, env_ref)
     
     # ---- Simulation loop ----
@@ -173,9 +184,9 @@ class EnvRunner:
                     current_env = self._make_env(configs)
 
                 with self._env_lock:    # set reference to current env for replay seeking and safe cleanup
-                    self._current_env = current_env
+                    self._current_env = current_env # Assign the current environment to the shared variable for access by other methods 
 
-                obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1)) # Reset env with a random seed for variability
+                obs_dict, _ = current_env.reset(seed=random.randint(0, 2**31 - 1)) # Reset env with a random seed for variability (seed is overriden by config and does not affect anything but possibly the lidar)
                 self._last_warning = "" 
                 self._apply_object_configs(current_env, configs)    # Apply obstacle configurations
                 self._apply_spawn_configs(  # Apply drone and target spawn configurations
@@ -185,15 +196,15 @@ class EnvRunner:
                 )
                 obs_dict = current_env._build_obs_dict()    # Rebuild obs_dict to reflect any changes from applying configs
                 # refresh _prev_dists to match new positions
-                for i in range(current_env.total_num_drones):
+                for i in range(current_env.total_num_drones):   # Loop over all drones to update their previous distances to targets based on their new positions after applying spawn configs
                     pos = obs_dict[current_env.possible_agents[i]][POS_SLICE]   # Get current position of the drone
                     current_env._prev_dists[i] = float(np.linalg.norm(current_env._targets[i].start_pos - pos))    # Update previous distances to targets based on new drone positions
                 # print("Env made")
                 self._episode += 1
                 self._step = 0
-                done = {agent: False for agent in current_env.possible_agents} 
-                trunc = {agent: False for agent in current_env.possible_agents} 
-                restart_requested = False 
+                done = {agent: False for agent in current_env.possible_agents}  # Track done status for each agent; episode ends when all agents are done
+                trunc = {agent: False for agent in current_env.possible_agents} # Track truncated status for each agent; episode ends when all agents are truncated
+                restart_requested = False
                 self._frame_buffer.record(current_env, self._episode, self._step) # Record initial state
 
                 while not self._stop_event.is_set(): # Loop over steps within the episode
@@ -206,7 +217,7 @@ class EnvRunner:
                     # Check alive before step — prevents _ensure_live_aviary() inside
                     # step() from silently rebuilding a connection, which would
                     # make the post-step alive check see a "live" client and not stop.
-                    if not current_env._pybullet_client_alive():
+                    if not current_env._pybullet_client_alive():    # Check if physics client is alive before step and stop if not. 
                         with self._env_lock:
                             self._current_env = None
                         current_env = None
@@ -220,14 +231,6 @@ class EnvRunner:
                         isinstance(info_dict.get(a), dict) and info_dict[a].get("physics_server_recovered")
                         for a in info_dict
                     ):
-                        with self._env_lock:
-                            self._current_env = None
-                        current_env = None
-                        self._stop_event.set()
-                        break
-                    # Check alive after step — catches PyBullet dying mid-step before
-                    # any further physics reads (record, state).
-                    if not current_env._pybullet_client_alive():
                         with self._env_lock:
                             self._current_env = None
                         current_env = None
@@ -248,8 +251,7 @@ class EnvRunner:
                     self._on_state(state)
                     time.sleep((1 / 144) / self.get_speed_multiplier())  # play in 144 fps
 
-                    if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated; input required to prevent advancing to next episode
-                        input("Simulation ended. Press Enter to continue.")
+                    if all(done[a] or trunc[a] for a in done): # Episode ends when all agents are done or truncated
                         break
 
                 if restart_requested:
@@ -340,7 +342,8 @@ class EnvRunner:
                 continue
             try:
                 env_instance._call_physics(p.removeBody, body_id)
-            except Exception:
+            except Exception as exc:
+                print(f"[EnvRunner] Failed to remove obstacle body {body_id}: {exc}")
                 continue
 
         new_obstacles = []
@@ -367,7 +370,8 @@ class EnvRunner:
             try:
                 obj.create(shape, physics_call=env_instance._call_physics)
                 new_obstacles.append(obj)
-            except Exception:
+            except Exception as exc:
+                print(f"[EnvRunner] Failed to create obstacle (shape={shape}): {exc}")
                 continue
 
         env_instance._obstacles = new_obstacles
@@ -416,7 +420,8 @@ class EnvRunner:
                     )
                     if "color" in cfg:
                         self._apply_body_color(env_instance, int(body_id), cfg["color"])
-                except Exception:
+                except Exception as exc:
+                    print(f"[EnvRunner] Failed to apply drone spawn config {i}: {exc}")
                     continue
             # keep spawn_positions consistent with actual drone positions
             if new_positions:
@@ -448,7 +453,8 @@ class EnvRunner:
                         self._apply_body_color(env_instance, int(body_id), cfg["color"])
                         if hasattr(target, "color"):
                             target.color = cfg["color"]
-                except Exception:
+                except Exception as exc:
+                    print(f"[EnvRunner] Failed to apply target spawn config {i}: {exc}")
                     continue
                     
                           # --- TODO: validate user-placed obstacle positions ---

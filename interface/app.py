@@ -51,6 +51,12 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.landing_page)
         self.stacked_widget.setCurrentWidget(self.landing_page)
 
+    def closeEvent(self, event):
+        """Ensure the simulation is stopped before the window closes."""
+        if self.simulation_page is not None:
+            self.simulation_page.close()
+        super().closeEvent(event)
+    
     def switch_to_simulation(self, config: dict):
         """Create the SimulationPage with the given config an switch to it."""
         self.simulation_page = SimulationPage(config)
@@ -61,9 +67,9 @@ class MainWindow(QMainWindow):
         """Switch back to the LandingPage and remove the SimulationPage if it exists."""
         self.stacked_widget.setCurrentWidget(self.landing_page)
         if self.simulation_page is not None:
+            self.simulation_page.close()  # stop env runner & release PyBullet GUI
             self.stacked_widget.removeWidget(self.simulation_page)
             self.simulation_page = None
-
 
 def main():
     if _torch_error:
