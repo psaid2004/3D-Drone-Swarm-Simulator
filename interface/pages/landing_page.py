@@ -11,7 +11,31 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QWidget,
+    QLineEdit
 )
+
+OBJECT_COLORS = [
+    "#E6F5D4",  # Verde lima muy claro
+    "#D9F0C3",  # Verde menta suave
+    "#CCEBB2",  # Verde pastel
+    "#BFE6A1",  # Verde manzana claro
+    "#B2E190",  # Verde primavera
+    "#A5DC7F",  # Verde salvia claro
+    "#98D76E",  # Verde hierba suave
+    "#8BD25D",  # Verde pistacho
+    "#7ECD4C",  # Verde musgo claro
+    "#C8EDB8",  # Verde té verde
+    "#BEE8AB",  # Verde pera
+    "#B4E39E",  # Verde albahaca clara
+    "#AADE91",  # Verde esmeralda claro
+    "#A0D984",  # Verde oliva claro
+    "#96D477",  # Verde césped suave
+    "#DCF5CC",  # Verde nieve
+    "#D2F0BF",  # Verde junco
+    "#F0FAD8",  # Verde muy pálido
+    "#EAF9D0",  # Verde lima pálido
+    "#E2F7C8",  # Verde brillante claro
+]
 
 
 class LandingPage(QWidget):
@@ -36,12 +60,24 @@ class LandingPage(QWidget):
         config_frame = QFrame()
         config_frame.setFrameShape(QFrame.Shape.Box)
         config_frame.setMaximumWidth(500)
+        config_frame.setStyleSheet(
+            "QFrame {"
+            "  background-color: #E6F5D4;"
+            "  border: 2px;"
+            "  border-radius: 5px;"
+            "}"
+        )
         config_layout = QVBoxLayout(config_frame)
 
 
         config_title = QLabel("Quick Configuration")
         config_title.setStyleSheet("font-weight: bold; font-size: 18px;")
         config_layout.addWidget(config_title)
+
+        # Project Name
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Enter Project Name")
+        config_layout.addLayout(self._labeled_row("Name of Project:", self.name_input))
 
         # Number of swarms
         self.swarms_spinbox = QSpinBox()
@@ -80,6 +116,13 @@ class LandingPage(QWidget):
         experimental_frame = QFrame()
         experimental_frame.setFrameShape(QFrame.Shape.Box)
         experimental_frame.setMaximumWidth(500)
+        experimental_frame.setStyleSheet(
+            "QFrame {"
+            "  background-color: #E6F5D4;"
+            "  border: 2px;"
+            "  border-radius: 5px;"
+            "}"
+        )
         experimental_layout = QVBoxLayout(experimental_frame)
 
         experimental_title = QLabel("Experimental Settings")
@@ -109,10 +152,10 @@ class LandingPage(QWidget):
         self.start_btn = QPushButton("Launch Simulation")
         self.start_btn.setStyleSheet(
             "QPushButton {"
-            "  background-color: #4CAF50; color: white; font-size: 16px;"
-            "  padding: 10px; min-width: 200px; border-radius: 5px;"
+            "  background-color: #7ECD4C; color: white; font-size: 16px;"
+            "  padding: 10px; min-width: 200px; font-weight: bold;"
             "}"
-            "QPushButton:hover { background-color: #45a049; }"
+            "QPushButton:hover { background-color: #6BA03D; }"
         )
         self.start_btn.clicked.connect(self._on_start_clicked)
 
@@ -157,7 +200,9 @@ class LandingPage(QWidget):
     def _on_start_clicked(self):
         selected_label = self.model_combo.currentText()
         selected_path = self._model_options.get(selected_label, "")
+        t = self.name_input.text()
         config = {
+            "project_name": (t if t else "obj"),
             "num_drones": self.drone_spinbox.value(),
             "num_obstacles": self.obstacle_spinbox.value(),
             "max_steps": self.steps_spinbox.value(),

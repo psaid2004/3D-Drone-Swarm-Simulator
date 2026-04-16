@@ -28,6 +28,29 @@ from interface.core.config_manager import (
 
 SIDEBAR_MODES = ("object_spawns", "drone_spawns", "target_spawns")
 
+# Color palette for objects - cycles through these colors
+OBJECT_COLORS = [
+    "#E6F5D4",  # Verde lima muy claro
+    "#D9F0C3",  # Verde menta suave
+    "#CCEBB2",  # Verde pastel
+    "#BFE6A1",  # Verde manzana claro
+    "#B2E190",  # Verde primavera
+    "#A5DC7F",  # Verde salvia claro
+    "#98D76E",  # Verde hierba suave
+    "#8BD25D",  # Verde pistacho
+    "#7ECD4C",  # Verde musgo claro
+    "#C8EDB8",  # Verde té verde
+    "#BEE8AB",  # Verde pera
+    "#B4E39E",  # Verde albahaca clara
+    "#AADE91",  # Verde esmeralda claro
+    "#A0D984",  # Verde oliva claro
+    "#96D477",  # Verde césped suave
+    "#DCF5CC",  # Verde nieve
+    "#D2F0BF",  # Verde junco
+    "#F0FAD8",  # Verde muy pálido
+    "#EAF9D0",  # Verde lima pálido
+    "#E2F7C8",  # Verde brillante claro
+]
 
 class _NoScrollComboBox(QComboBox):
     def wheelEvent(self, event):
@@ -58,8 +81,12 @@ class SidebarEditor(QWidget):
         self._max_drones_per_swarm = max_drones_per_swarm
         self._sidebar_mode = "object_spawns"
         self._expanded_swarms: set = set() # indicates which swarm configs have their drone details expanded in the UI
+        self._expanded_objects: set = set() # indicates which object configs have their details expanded in the UI
+        self._object_filter = "all"  # Filter for objects: "all", "static", or "dynamic"
+        self._object_search = ""  # Search filter for object names
         self._build_ui()
         self._set_sidebar_mode("object_spawns")
+        self._update_table = None
 
     # ---- UI construction ----
 
@@ -81,6 +108,10 @@ class SidebarEditor(QWidget):
         self.mode_btn_targets = QPushButton("Targets")
         for btn in (self.mode_btn_objects, self.mode_btn_drones, self.mode_btn_targets):
             btn.setCheckable(True)
+            btn.setStyleSheet(
+                "QPushButton { border: 1px solid #ccc; border-radius: 3px; padding: 2px; }"
+                "QPushButton:checked { background-color: #C8EDB8; border: 2px solid #7ECD4C; }"
+            )
             mode_layout.addWidget(btn)
         self.mode_btn_objects.clicked.connect(lambda: self._set_sidebar_mode("object_spawns"))
         self.mode_btn_drones.clicked.connect(lambda: self._set_sidebar_mode("drone_spawns"))
@@ -103,6 +134,46 @@ class SidebarEditor(QWidget):
 
         layout.addWidget(self.side_title)
         layout.addWidget(mode_row)
+        
+        # Filter buttons for objects (shown only in object mode)
+        self.filter_row = QWidget()
+        filter_layout = QHBoxLayout(self.filter_row)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        filter_layout.setSpacing(4)
+        
+        self.filter_btn_all = QPushButton("All")
+        self.filter_btn_static = QPushButton("Static")
+        self.filter_btn_dynamic = QPushButton("Dynamic")
+        for btn in (self.filter_btn_all, self.filter_btn_static, self.filter_btn_dynamic):
+            btn.setCheckable(True)
+            btn.setStyleSheet(
+                "QPushButton { border: 1px solid #ccc; border-radius: 3px; padding: 2px; }"
+                "QPushButton:checked { background-color: #C8EDB8; border: 2px solid #7ECD4C; }"
+            )
+            filter_layout.addWidget(btn)
+        
+        self.filter_btn_all.clicked.connect(lambda: self._set_object_filter("all"))
+        self.filter_btn_static.clicked.connect(lambda: self._set_object_filter("static"))
+        self.filter_btn_dynamic.clicked.connect(lambda: self._set_object_filter("dynamic"))
+        
+        self.filter_row.setVisible(False)  # Hidden by default, shown when in object mode
+        layout.addWidget(self.filter_row)
+        
+        # Search box for objects (shown only in object mode)
+        self.search_row = QWidget()
+        search_layout = QHBoxLayout(self.search_row)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.setSpacing(4)
+        search_label = QLabel("Search:")
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Filter by name...")
+        self.search_box.textChanged.connect(self._on_search_text_changed)
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_box)
+        
+        self.search_row.setVisible(False)  # Hidden by default, shown when in object mode
+        layout.addWidget(self.search_row)
+        
         self.randomize_btn = QPushButton("Generate Random")
         self.randomize_btn.clicked.connect(lambda: self.randomize_requested.emit())
 
@@ -126,9 +197,19 @@ class SidebarEditor(QWidget):
         self.mode_btn_drones.setChecked(mode == "drone_spawns")
         self.mode_btn_targets.setChecked(mode == "target_spawns")
 
+        # Show filter row and search row only in object mode
+        self.filter_row.setVisible(mode == "object_spawns")
+        self.search_row.setVisible(mode == "object_spawns")
+
         if mode == "object_spawns":
             self.side_title.setText("Objects")
             self.count_label.setText("Object count")
+            self._object_filter = "all"
+            self._object_search = ""
+            self.search_box.blockSignals(True)
+            self.search_box.setText("")
+            self.search_box.blockSignals(False)
+            self._update_filter_buttons()
             self.count_spinbox.setRange(0, 500)
         elif mode == "drone_spawns":
             self.side_title.setText("Swarms")
@@ -162,6 +243,7 @@ class SidebarEditor(QWidget):
         else:
             self._config_manager.sync_target_count(int(value))
             self.refresh()
+            self.swarm_count_changed.emit(int(value))
             self.restart_requested.emit(f"Restarting with updated count: {value}")
 
     # ---- Scroll area rebuild ----
@@ -195,10 +277,29 @@ class SidebarEditor(QWidget):
         drones = self._config_manager.get_drone_spawn_configs()
 
         for swarm_idx, swarm_cfg in enumerate(swarms):
-            card = QGroupBox(f"Swarm {swarm_idx + 1}")
+            swarm_name = swarm_cfg.get("name", f"Swarm {swarm_idx + 1}")
+            card = QGroupBox("")
+            
+            # Apply color styling to the swarm card
+            color = self._get_object_color(swarm_idx)
+            card.setStyleSheet(
+                f"QGroupBox {{"
+                f"  background-color: {color};"
+                f"  border: 2px solid {color};"
+                f"  border-radius: 5px;"
+                f"  margin-top: 0px;"
+                f"  padding-top: 0px;"
+                f"}}"
+            )
+            
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(8, 8, 8, 8)
             card_layout.setSpacing(6)
+            
+            # Add swarm name label
+            name_label = QLabel(swarm_name)
+            name_label.setStyleSheet("font-weight: 700; font-size: 11pt;")
+            card_layout.addWidget(name_label)
 
             toggle_btn = QPushButton(
                 "Collapse drones" if swarm_idx in self._expanded_swarms else "Expand drones"
@@ -207,7 +308,7 @@ class SidebarEditor(QWidget):
             card_layout.addWidget(toggle_btn)
 
             card_layout.addWidget(self._labeled_entry(
-                card, "Name", swarm_cfg.get("name", f"Swarm {swarm_idx + 1}"),
+                card, "Name", swarm_name,
                 partial(self._on_swarm_field, swarm_idx, "name"),
             ))
             card_layout.addWidget(self._labeled_entry(
@@ -236,10 +337,28 @@ class SidebarEditor(QWidget):
                         continue
                     drone_cfg = drones[drone_index]
 
-                    drone_card = QGroupBox(f"Drone {drone_local_idx + 1}")
+                    drone_card = QGroupBox("")
+                    
+                    # Apply color styling to the drone card
+                    drone_color = self._get_object_color(drone_index)
+                    drone_card.setStyleSheet(
+                        f"QGroupBox {{"
+                        f"  background-color: {drone_color};"
+                        f"  border: 2px solid {drone_color};"
+                        f"  border-radius: 5px;"
+                        f"  margin-top: 0px;"
+                        f"  padding-top: 0px;"
+                        f"}}"
+                    )
+                    
                     drone_layout = QVBoxLayout(drone_card)
                     drone_layout.setContentsMargins(8, 8, 8, 8)
                     drone_layout.setSpacing(4)
+                    
+                    # Add drone name label
+                    drone_name_label = QLabel(f"Drone {drone_local_idx + 1}")
+                    drone_name_label.setStyleSheet("font-weight: 700; font-size: 11pt;")
+                    drone_layout.addWidget(drone_name_label)
                     drone_layout.addWidget(self._labeled_entry(
                         drone_card, "Offset X", drone_cfg.get("local_x", 0.0),
                         partial(self._on_drone_offset, drone_index, "local_x"),
@@ -264,12 +383,31 @@ class SidebarEditor(QWidget):
             return
         for i, raw_cfg in enumerate(configs):
             cfg = self._config_manager.ensure_spawn_fields(raw_cfg, "Target")
-            card = QGroupBox(f"Target {i + 1}")
+            target_name = cfg.get("name", f"Target {i + 1}")
+            card = QGroupBox("")
+            
+            # Apply color styling to the target card
+            color = self._get_object_color(i)
+            card.setStyleSheet(
+                f"QGroupBox {{"
+                f"  background-color: {color};"
+                f"  border: 2px solid {color};"
+                f"  border-radius: 5px;"
+                f"  margin-top: 0px;"
+                f"  padding-top: 0px;"
+                f"}}"
+            )
+            
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(8, 8, 8, 8)
             card_layout.setSpacing(4)
+            
+            # Add target name label
+            name_label = QLabel(target_name)
+            name_label.setStyleSheet("font-weight: 700; font-size: 11pt;")
+            card_layout.addWidget(name_label)
             card_layout.addWidget(self._labeled_entry(
-                card, "Name", cfg["name"],
+                card, "Name", target_name,
                 partial(self._on_spawn_field, "target_spawns", i, "name"),
             ))
             card_layout.addWidget(self._labeled_entry(
@@ -292,13 +430,55 @@ class SidebarEditor(QWidget):
         if not configs:
             self._show_empty()
             return
+        
+        # Filter objects based on current filter setting and search text
+        filtered_configs = []
+        search_lower = self._object_search.lower()
         for i, raw_cfg in enumerate(configs):
             cfg = self._config_manager._ensure_object_fields(dict(raw_cfg))
-
-            card = QGroupBox(f"Object {i + 1}")
+            obj_kind = cfg.get("kind", "static")
+            obj_name = cfg.get("name", f"Object {i + 1}").lower()
+            
+            # Apply type filter
+            if self._object_filter == "static" and obj_kind != "static":
+                continue
+            elif self._object_filter == "dynamic" and obj_kind != "dynamic":
+                continue
+            
+            # Apply search filter
+            if search_lower and search_lower not in obj_name:
+                continue
+            
+            filtered_configs.append((i, raw_cfg, cfg))
+        
+        if not filtered_configs:
+            self._show_empty()
+            return
+        
+        for i, raw_cfg, cfg in filtered_configs:
+            obj_name = cfg.get("name", f"Object {i + 1}")
+            card = QGroupBox("")
+            
+            # Apply color styling to the card
+            color = self._get_object_color(i)
+            card.setStyleSheet(
+                f"QGroupBox {{"
+                f"  background-color: {color};"
+                f"  border: 2px solid {color};"
+                f"  border-radius: 5px;"
+                f"  margin-top: 0px;"
+                f"  padding-top: 0px;"
+                f"}}"
+            )
+            
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(8, 8, 8, 8)
             card_layout.setSpacing(4)
+
+            # Add object name label in top left corner
+            name_label = QLabel(obj_name)
+            name_label.setStyleSheet("font-weight: 700; font-size: 11pt;")
+            card_layout.addWidget(name_label)
 
             header_row = QWidget(card)
             header_layout = QHBoxLayout(header_row)
@@ -306,6 +486,12 @@ class SidebarEditor(QWidget):
             header_layout.addStretch(1)
             header_layout.addWidget(self._remove_object_button(i), 0, Qt.AlignmentFlag.AlignRight)
             card_layout.addWidget(header_row)
+
+            toggle_btn = QPushButton(
+                "Collapse details" if i in self._expanded_objects else "Expand details"
+            )
+            toggle_btn.clicked.connect(partial(self._toggle_object_expand, i))
+            card_layout.addWidget(toggle_btn)
 
             card_layout.addWidget(self._labeled_entry(
                 card, "Name", cfg["name"],
@@ -315,53 +501,55 @@ class SidebarEditor(QWidget):
                 card, "Type", cfg["kind"], KINDS,
                 partial(self._on_object_field, i, "kind"),
             ))
-            card_layout.addWidget(self._option_menu(
-                card, "Shape", cfg["shape"], SUPPORTED_SHAPES,
-                partial(self._on_object_field, i, "shape"),
-            ))
-            card_layout.addWidget(self._labeled_entry(
-                card, "Coord X", cfg["x"],
-                partial(self._on_object_field, i, "x"),
-            ))
-            card_layout.addWidget(self._labeled_entry(
-                card, "Coord Y", cfg["y"],
-                partial(self._on_object_field, i, "y"),
-            ))
-            card_layout.addWidget(self._labeled_entry(
-                card, "Coord Z", cfg["z"],
-                partial(self._on_object_field, i, "z"),
-            ))
-            card_layout.addWidget(self._labeled_entry(
-                card, "Size", cfg["size"],
-                partial(self._on_object_field, i, "size"),
-            ))
-            card_layout.addWidget(self._labeled_entry(
-                card, "Yaw", cfg["yaw"],
-                partial(self._on_object_field, i, "yaw"),
-            ))
 
-            if cfg["kind"] == "dynamic":
-                axis_label = AXIS_INT_TO_LABEL.get(int(cfg["axis"]), "x")
+            if i in self._expanded_objects:
                 card_layout.addWidget(self._option_menu(
-                    card, "Axis", axis_label, ("x", "y", "z"),
-                    partial(self._on_object_field, i, "axis"),
+                    card, "Shape", cfg["shape"], SUPPORTED_SHAPES,
+                    partial(self._on_object_field, i, "shape"),
                 ))
                 card_layout.addWidget(self._labeled_entry(
-                    card, "Min", cfg["min"],
-                    partial(self._on_object_field, i, "min"),
+                    card, "Coord X", cfg["x"],
+                    partial(self._on_object_field, i, "x"),
                 ))
                 card_layout.addWidget(self._labeled_entry(
-                    card, "Max", cfg["max"],
-                    partial(self._on_object_field, i, "max"),
+                    card, "Coord Y", cfg["y"],
+                    partial(self._on_object_field, i, "y"),
                 ))
                 card_layout.addWidget(self._labeled_entry(
-                    card, "Speed", cfg["speed"],
-                    partial(self._on_object_field, i, "speed"),
+                    card, "Coord Z", cfg["z"],
+                    partial(self._on_object_field, i, "z"),
                 ))
                 card_layout.addWidget(self._labeled_entry(
-                    card, "Dir", cfg["direction"],
-                    partial(self._on_object_field, i, "direction"),
+                    card, "Size", cfg["size"],
+                    partial(self._on_object_field, i, "size"),
                 ))
+                card_layout.addWidget(self._labeled_entry(
+                    card, "Yaw", cfg["yaw"],
+                    partial(self._on_object_field, i, "yaw"),
+                ))
+
+                if cfg["kind"] == "dynamic":
+                    axis_label = AXIS_INT_TO_LABEL.get(int(cfg["axis"]), "x")
+                    card_layout.addWidget(self._option_menu(
+                        card, "Axis", axis_label, ("x", "y", "z"),
+                        partial(self._on_object_field, i, "axis"),
+                    ))
+                    card_layout.addWidget(self._labeled_entry(
+                        card, "Min", cfg["min"],
+                        partial(self._on_object_field, i, "min"),
+                    ))
+                    card_layout.addWidget(self._labeled_entry(
+                        card, "Max", cfg["max"],
+                        partial(self._on_object_field, i, "max"),
+                    ))
+                    card_layout.addWidget(self._labeled_entry(
+                        card, "Speed", cfg["speed"],
+                        partial(self._on_object_field, i, "speed"),
+                    ))
+                    card_layout.addWidget(self._labeled_entry(
+                        card, "Dir", cfg["direction"],
+                        partial(self._on_object_field, i, "direction"),
+                    ))
 
             self.scroll_layout.addWidget(card)
         self.scroll_layout.addStretch(1)
@@ -373,6 +561,10 @@ class SidebarEditor(QWidget):
         self.scroll_layout.addStretch(1)
 
     # ---- Widget builders ----
+
+    def _get_object_color(self, index: int) -> str:
+        """Returns a hex color for an object based on its index."""
+        return OBJECT_COLORS[index % len(OBJECT_COLORS)]
 
     def _labeled_entry(self, parent: QWidget, label: str, value, on_apply):
         row = QWidget(parent)
@@ -422,6 +614,8 @@ class SidebarEditor(QWidget):
         self._config_manager.set_object_field(index, key, raw_value)
         if key == "kind":
             self.refresh()
+        elif key == "name":
+            self.refresh()
         name = self._config_manager.get_name("object_spawns", index)
         self.restart_requested.emit(f"Restarting after updating {name}...")
 
@@ -443,6 +637,30 @@ class SidebarEditor(QWidget):
             self._expanded_swarms.remove(swarm_idx)
         else:
             self._expanded_swarms.add(swarm_idx)
+        self.refresh()
+
+    def _toggle_object_expand(self, obj_idx: int):
+        if obj_idx in self._expanded_objects:
+            self._expanded_objects.remove(obj_idx)
+        else:
+            self._expanded_objects.add(obj_idx)
+        self.refresh()
+
+    def _set_object_filter(self, filter_type: str):
+        """Sets the object filter and updates the UI."""
+        self._object_filter = filter_type
+        self._update_filter_buttons()
+        self.refresh()
+
+    def _update_filter_buttons(self):
+        """Updates the filter button states based on current filter."""
+        self.filter_btn_all.setChecked(self._object_filter == "all")
+        self.filter_btn_static.setChecked(self._object_filter == "static")
+        self.filter_btn_dynamic.setChecked(self._object_filter == "dynamic")
+
+    def _on_search_text_changed(self, text: str):
+        """Handler for when the search text is changed."""
+        self._object_search = text
         self.refresh()
 
     def _on_remove_object(self, index: int):
