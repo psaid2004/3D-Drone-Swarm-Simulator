@@ -6,8 +6,6 @@ __pycache__/
 *.pyc
 .idea/
 .DS_Store
-models/
-models0/
 *.zip
 old_files/
 interface/__pycache__/
