@@ -26,6 +26,7 @@ class Curriculum:
     - stage_training_timesteps = how long to train for in that curriculum stage
     - episode_horizon = per-episode max number of steps before truncation
     - lidar_enabled = whether LiDAR is included in the observation/action logic for that stage
+    - Only one curriculum should be active at a time, the others should be commented out
     """
 
     def __init__(self):
@@ -53,16 +54,16 @@ class Curriculum:
 
 
             # TEST CURRICULUM
-            (2, 1, 0, 0, 0, 1000, True),
-            (2, 1, 1, 0, 0, 3000, True),
-            (2, 2, 0, 0, 0, 3000, True),
-            (3, 1, 0, 0, 0, 3000, True),
-            (3, 1, 2, 0, 0, 4000, True),
-            (3, 2, 2, 0, 0, 4000, True),
-            (4, 5, 3, 0, 0, 5000, True),
-            (4, 5, 4, 1, 0, 5000, True),
-            (5, 5, 5, 1, 0, 5000, True),
-            (4, 4, 4, 6, 0, 5000, True),
+            # (2, 1, 0, 0, 0, 1000, True),
+            # (2, 1, 1, 0, 0, 3000, True),
+            # (2, 2, 0, 0, 0, 3000, True),
+            # (3, 1, 0, 0, 0, 3000, True),
+            # (3, 1, 2, 0, 0, 4000, True),
+            # (3, 2, 2, 0, 0, 4000, True),
+            # (4, 5, 3, 0, 0, 5000, True),
+            # (4, 5, 4, 1, 0, 5000, True),
+            # (5, 5, 5, 1, 0, 5000, True),
+            # (4, 4, 4, 6, 0, 5000, True),
 
         ]
         self.current_stage = 0
