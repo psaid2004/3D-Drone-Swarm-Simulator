@@ -427,7 +427,7 @@ class EvaluateFinalModel:
 
 if __name__ == "__main__":
     evaluator = EvaluateFinalModel(
-        #FINAL MODEL BEING EVALUATED ON ALL CIRUCULUM STAGES
+        # FINAL MODEL BEING EVALUATED ON ALL CURRICULUM STAGES
         final_model_num=0,
         final_model_n_drones=1,
         final_model_n_static_obstacles=1,
@@ -435,7 +435,7 @@ if __name__ == "__main__":
         final_model_lidar=True,
 
         render_mode=None,   # keep None for fast evaluation
-        num_episodes=50,    #set to 5 for quick testing
+        num_episodes=50,    # set to lower number for quick testing
         compute_path_optimality=False,
     )
 

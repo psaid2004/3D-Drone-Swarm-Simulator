@@ -17,7 +17,7 @@ from config.defaults import (
 def freeze_inactive_actions(env, actions: Dict[str, np.ndarray]) -> None:
     """Freeze actions for drones that are no longer active in the episode."""
 
-    # - IMPORTANT: to make speed=0 in the mapping, we must set u[3] = -1
+    #   To make speed=0 in the mapping, we must set u[3] = -1
     #   because u[3] in [-1,1] maps to speed01 in [0,1] by:
     #     speed01 = (u[3] + 1) * 0.5
 

@@ -64,7 +64,7 @@ class TestModel:
         )
 
 
-        # Load environments for specfic scenarios
+        # Load environments for specific scenarios
         # --- Uncomment to load scenarios ---
 
         # scenarios = self.get_ml_test_scenarios()
@@ -104,7 +104,6 @@ class TestModel:
         obstacle_collision_agents = set()
         drone_collision_agents = set()
 
-        # optional: count total collision events (not just unique drones)
         wall_collision_events = 0
         obstacle_collision_events = 0
         drone_collision_events = 0

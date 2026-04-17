@@ -121,7 +121,6 @@ def compute_rewards(
         speed = float(np.linalg.norm(vel))
 
         # +0.5 if moving directly toward target, else - 0.5
-
         r_align = 0.0
         if alignment > 0:
             r_align =ALIGN_COEF * alignment
@@ -193,20 +192,15 @@ def compute_rewards(
             # + step_state.cohesion_pen
             # + step_state.sep_pen
         )
-        # r_info = {"r_progress": r_progress, "r_distance_pen":r_distance_pen, "r_time":r_time, "r_ctrl":r_ctrl
-        #           , "r_near":r_near, "r_align":r_align, "r_tan":r_tan, "r_final":r_final, "speed_pen":speed_pen}
-        # print(r_info)
+        r_info = {"r_progress": r_progress, "r_distance_pen":r_distance_pen, "r_time":r_time, "r_ctrl":r_ctrl
+                  , "r_near":r_near, "r_align":r_align, "r_tan":r_tan, "r_final":r_final, "speed_pen":speed_pen}
+        print(r_info)
 
         # --------------- 9. Extra penalties ---------------
 
         # penalty for if time limit was reached
         if step_state.time_limit:
             r -= TRUNC_PEN
-
-
-
-        # print(r_info)
-        # print(r)
 
         reward_dict[agent] = float(r)
 

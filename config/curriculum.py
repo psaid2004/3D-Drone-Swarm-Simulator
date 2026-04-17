@@ -39,7 +39,7 @@ class Curriculum:
             (3, 2, 1, 0, 200_000, 3000, True),
 
 
-            #train curriculum for 80-20 model
+            # train curriculum for 80-20 model
             #(3, 3, 0, 0, 300_000, 1500, True),
             #(3, 5, 0, 0, 350_000, 1700, True),
             #(3, 5, 2, 0, 400_000, 1700, True),

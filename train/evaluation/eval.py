@@ -8,8 +8,6 @@ from tqdm import trange
 from tabulate import tabulate
 
 from config.defaults import MODELS_DIR
-from train.sac_training_with_expert import ExpertBlendPolicy
-from train.expert_blender import ExpertPolicy
 from wrappers.env_3d import DroneSwarm3D
 
 """
@@ -28,7 +26,6 @@ class EvaluateTraining:
         world_scale: float = 5.0,
         max_steps: int = 4000,
         num_episodes: int = 30,
-        compute_path_optimality: bool = False,  # set True if your env emits 'optimal_path_length'
     ):
         self.n_drones = n_drones
         self.n_static_obstacles = n_static_obstacles
@@ -38,7 +35,6 @@ class EvaluateTraining:
         self.render_mode = render_mode
         self.world_scale = world_scale
         self.num_episodes = num_episodes
-        self.compute_path_optimality = compute_path_optimality
 
         self.MODEL_N = model_num
         self.MODEL_PREFIX = "sac"
@@ -57,7 +53,6 @@ class EvaluateTraining:
         self.avg_collision = []
         self.episode_lengths = []
         self.wall_hits_count = []
-        self.path_opt_ratios = [] if self.compute_path_optimality else None
         self.bad_seeds = []
 
         self.env = DroneSwarm3D(
@@ -112,10 +107,6 @@ class EvaluateTraining:
                 trunc = {a: False for a in self.env.possible_agents}
 
                 while True:
-                    #act_dict = {
-                    #    a: model.predict(obs, deterministic=True)[0]
-                    #    for a, obs in obs_dict.items()
-                    #}
 
                     agents = list(obs_dict.keys())
                     obs_batch = np.stack([obs_dict[a] for a in agents], axis=0)
@@ -187,8 +178,6 @@ class EvaluateTraining:
                 f"Wall-hit Episode Rate   : {np.mean(self.wall_hits_count) * 100:6.2f}%\n"
             )
 
-        if self.compute_path_optimality and self.path_opt_ratios:
-            print(f"Avg Path Optimality     : {np.mean(self.path_opt_ratios):6.4f}")
 
     def replay_episode(self, seed: Optional[int] = None):
         if seed is not None:

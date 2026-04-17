@@ -151,7 +151,6 @@ def run_episode(
         len(obs_dict) == max_drones
     ), "obs_dict should contain all fixed-capacity agents"
 
-    # Initial padded-agent sanity check
     initial_rewards = {a: 0.0 for a in obs_dict}
     initial_terms = {a: False for a in obs_dict}
     initial_truncs = {a: False for a in obs_dict}
