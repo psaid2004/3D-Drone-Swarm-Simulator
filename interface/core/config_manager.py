@@ -364,9 +364,15 @@ class ConfigManager:
     # ---- Defaults ----
 
     def _default_object_config(self, index: int) -> ObjectConfig:
+        """
+        Returns the default object configuration for the given index.
+        """
         return random_obstacle_config(index, self._world_scale)
 
     def _default_target_spawn_config(self, index: int) -> TargetSpawnConfig:
+        """
+        Returns the default target spawn configuration for the given index.
+        """
         if 0 <= index < len(self._swarm_configs):
             swarm_edge = self._swarm_configs[index].get("_edge", random.randint(0, 3))
         else:
@@ -381,10 +387,16 @@ class ConfigManager:
         }
 
     def _default_swarm_color_name(self, index: int) -> str:
+        """
+        Returns the default color name for a swarm based on its index.
+        """
         names = list(SWARM_COLOR_PRESETS.keys())
         return names[index % len(names)]
 
     def _default_swarm_config(self, index: int) -> SwarmConfig:
+        """
+        Default swarm config generator that assigns a default color based on index and places the swarm on a random edge of the world.
+        """
         color_name = self._default_swarm_color_name(index)
         edge = random.randint(0, 3)
         x, y, z = generate_edge_xyz(edge, self._world_scale, SWARM_EDGE_MARGIN)
@@ -399,6 +411,9 @@ class ConfigManager:
         }
 
     def _default_drone_offset(self, index: int) -> dict:
+        """
+        Returns a default local offset for a drone based on its index within its swarm, arranged in a grid pattern.
+        """
         row = index // 3
         col = index % 3
         return {
@@ -426,11 +441,17 @@ class ConfigManager:
         })
 
     def ensure_spawn_fields(self, config: dict, prefix: str) -> dict:
+        """
+        Ensures that the given spawn config has all required fields, filling in defaults as needed.
+        """
         return self._apply_defaults(config, {"name": f"{prefix} count", "x": 0.0, "y": 0.0, "z": 0.5})
 
     # ---- Internal rebuild ----
 
     def _init_swarm_spawn_configs(self):
+        """
+        Initializes the swarm, target, and drone spawn configurations with default values.
+        """
         self._swarm_configs = [
             self._default_swarm_config(i) for i in range(self._num_swarms)
         ]
@@ -452,11 +473,11 @@ class ConfigManager:
 
     def _rebuild_drone_spawn_configs(self):
         """Must be called while holding self._lock."""
-        expected = self._num_swarms * self._drones_per_swarm
+        expected = self._num_swarms * self._drones_per_swarm    # get total number of drones
 
-        if len(self._drone_spawn_configs) > expected:
+        if len(self._drone_spawn_configs) > expected:   # If there are too many drone configs, remove the extras from the end
             self._drone_spawn_configs = self._drone_spawn_configs[:expected]
-        elif len(self._drone_spawn_configs) < expected:
+        elif len(self._drone_spawn_configs) < expected: # If there are too few drone configs, add new ones with default offsets and names
             for idx in range(len(self._drone_spawn_configs), expected):
                 swarm_idx = idx // self._drones_per_swarm
                 drone_local_idx = idx % self._drones_per_swarm
@@ -469,7 +490,7 @@ class ConfigManager:
                     }
                 )
 
-        for idx, cfg in enumerate(self._drone_spawn_configs):
+        for idx, cfg in enumerate(self._drone_spawn_configs): # Loop over drone configs and ensure their fields are correct based on their swarm's config and their local offset
             swarm_idx = int(cfg.get("swarm_index", idx // self._drones_per_swarm))
             swarm_idx = max(0, min(self._num_swarms - 1, swarm_idx))
             drone_local_idx = idx % self._drones_per_swarm

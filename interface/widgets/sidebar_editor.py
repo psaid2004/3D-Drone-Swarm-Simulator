@@ -214,12 +214,12 @@ class SidebarEditor(QWidget):
         elif mode == "drone_spawns":
             self.side_title.setText("Swarms")
             self.count_label.setText("Swarm count")
-            self.count_spinbox.setRange(0, self._max_swarms)
         else:
             self.side_title.setText("Targets")
             self.count_label.setText("Target count")
-            self.count_spinbox.setRange(0, self._max_swarms)
         self.count_spinbox.blockSignals(True)
+        if mode == "drone_spawns" or mode == "target_spawns":
+            self.count_spinbox.setRange(0, self._max_swarms)
         self.count_spinbox.setValue(self._config_manager.count(mode))
         self.count_spinbox.blockSignals(False)
         self.refresh()

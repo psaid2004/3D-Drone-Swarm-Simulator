@@ -6,9 +6,9 @@ def get_unique_targets(env_instance) -> list:
     """Returns targets from env_instance with duplicate body_ids removed."""
     seen: set = set()
     unique = []
-    for tgt in list(getattr(env_instance, "_targets", []) or []):
-        body_id = getattr(tgt, "body_id", None)
-        if body_id is None or body_id in seen:
+    for tgt in list(getattr(env_instance, "_targets", []) or []):   # Loops over targets in the environment, handling the case where _targets might be None
+        body_id = getattr(tgt, "body_id", None) # Safely gets the body_id of the target, defaulting to None if it doesn't exist
+        if body_id is None or body_id in seen:  # If body_id is None or has already been seen, skip this target
             continue
         seen.add(body_id)
         unique.append(tgt)
@@ -36,11 +36,11 @@ class FrameBuffer:
         """ Records the current state of the environment. """
         frame = self._capture_frame(env_instance, episode, step)
         with self._lock:
-            self._frames.append(frame)
-            if len(self._frames) > self._max_frames:
-                overflow = len(self._frames) - self._max_frames
-                self._frames = self._frames[overflow:]
-            self._index = max(0, len(self._frames) - 1)
+            self._frames.append(frame)      # Appends the captured frame to the list of frames
+            if len(self._frames) > self._max_frames:    # If the number of frames exceeds the maximum allowed, remove the oldest frames to maintain the limit (should never happen)
+                overflow = len(self._frames) - self._max_frames # Calculates how many frames need to be removed to get back down to the maximum
+                self._frames = self._frames[overflow:]  # Removes the oldest frames from the list, keeping only the most recent ones up to the maximum limit
+            self._index = max(0, len(self._frames) - 1) # Updates the current index to point to the most recently recorded frame
 
     def get_count(self) -> int:
         with self._lock:
@@ -66,6 +66,11 @@ class FrameBuffer:
         return True
 
     def get_meta(self, index: int) -> Optional[Dict[str, int]]:
+        """
+        Returns metadata for the frame at the given index.
+        Metadata = episode and step numbers.  
+        (Could be extended in the future to include other info like timestamps, rewards, etc. for detailed statitics)
+        """
         with self._lock:
             if not self._frames:
                 return None
@@ -79,6 +84,10 @@ class FrameBuffer:
     # ---- Frame capture ----
 
     def _capture_frame(self, env_instance, episode: int, step: int) -> Dict[str, Any]:
+        """
+        Captures a frame of the current environment state, including the states of all drones, obstacles, and targets.
+        Each body's state includes its position, orientation, linear velocity, and angular velocity.
+        """
         drone_states: List[Dict[str, Any]] = []
         obstacle_states: List[Dict[str, Any]] = []
         target_states: List[Dict[str, Any]] = []
@@ -112,6 +121,9 @@ class FrameBuffer:
         }
 
     def _capture_body_state(self, env_instance, body_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Captures the state of a single physics body given its body_id, including position, orientation, linear velocity, and angular velocity.
+        """
         p = getattr(env_instance, "_p", None)
         if p is None:
             return None
@@ -135,6 +147,9 @@ class FrameBuffer:
     # ---- Frame restore ----
 
     def _apply_frame(self, env_instance, frame: Dict[str, Any]):
+        """
+        Restores the environment state from a captured frame, applying the saved position, orientation, linear velocity, and angular velocity to each drone, obstacle, and target based on their body_ids.
+        """
         p = getattr(env_instance, "_p", None)
         if p is None:
             return

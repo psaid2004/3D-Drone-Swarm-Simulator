@@ -267,6 +267,9 @@ class SimulationPage(QWidget):
     # ---- State queue helpers ----
 
     def _enqueue_state(self, state):
+        """
+        Enqueue a new state into the state queue, ensuring that only the latest state is kept.
+        """
         while not self._state_queue.empty():
             try:
                 self._state_queue.get_nowait()
@@ -286,6 +289,9 @@ class SimulationPage(QWidget):
     # ---- UI update loop ----
 
     def _consume_state_updates(self):
+        """
+        Consume a state update from the state queue and apply it to the UI.
+        """
         latest = None
         while not self._state_queue.empty():
             try:
@@ -320,6 +326,9 @@ class SimulationPage(QWidget):
         )
 
     def _update_telemetry(self, state):
+        """
+        Update the telemetry panel with the latest state information.
+        """
         self._last_live_state = LiveState(
             episode=int(state.get("episode", self._last_live_state["episode"])),
             step=int(state.get("step", self._last_live_state["step"])),
@@ -330,7 +339,7 @@ class SimulationPage(QWidget):
             speed = float(
                 state.get("speed_multiplier", self._env_runner.get_speed_multiplier())
             )
-        except:
+        except Exception:
             speed = 1
         self.telemetry_lbl.setText(
             self._telemetry_text(
@@ -364,6 +373,9 @@ class SimulationPage(QWidget):
     # ---- Speed ----
 
     def _on_speed_changed(self, value: int):
+        """
+        Called by TimelineWidget when the speed slider is changed; updates EnvRunner speed.
+        """
         self._env_runner.set_speed_multiplier(value / 100.0)
 
     # ---- Console ----
@@ -405,9 +417,9 @@ class SimulationPage(QWidget):
     # ---- Simulation control ----
 
     def _start(self):
-        if self._running:
+        if self._running:   # if already running do nothing
             return
-        if not self._env_runner.has_model:
+        if not self._env_runner.has_model:      # model required to run simulation, no heuristic available
             self.status_lbl.setText("No model loaded. Use 'Change model' to load one.")
             return
         self.timeline.stop_replay()
@@ -455,6 +467,9 @@ class SimulationPage(QWidget):
     # ---- Config persistence ----
 
     def _save_config(self):
+        """
+        Saves OBSTACLES only in the config.
+        """
         # parents[1] = interface/
         configs_dir = Path(__file__).resolve().parents[1] / "configs"
         configs_dir.mkdir(parents=True, exist_ok=True)
@@ -463,6 +478,9 @@ class SimulationPage(QWidget):
         self._config_manager.save_json(file_path)
 
     def _load_config(self):
+        """
+        Loads a config file containing OBSTACLES only, and updates the current config and UI accordingly.
+        """
         configs_dir = Path(__file__).resolve().parents[1] / "configs"
         configs_dir.mkdir(parents=True, exist_ok=True)
         file_name, _ = QFileDialog.getOpenFileName(

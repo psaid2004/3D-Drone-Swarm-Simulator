@@ -308,12 +308,12 @@ class EnvRunner:
     @staticmethod
     def _apply_body_color(env_instance, body_id: int, rgba) -> None:
         """Apply an RGBA color to all visual links of a physics body."""
-        p = getattr(env_instance, "_p", None)
+        p = getattr(env_instance, "_p", None)   # p is the physics client
         if p is None:
             return
-        rgba = [max(0.0, min(1.0, float(c))) for c in rgba]
+        rgba = [max(0.0, min(1.0, float(c))) for c in rgba] 
         try:
-            num_joints = env_instance._call_physics(p.getNumJoints, int(body_id))
+            num_joints = env_instance._call_physics(p.getNumJoints, int(body_id)) # Get the number of joints for the body to determine how many visual links it has. If this fails, assume 0 joints.
         except Exception:
             num_joints = 0
         for link_idx in range(-1, int(num_joints)):
@@ -382,22 +382,19 @@ class EnvRunner:
             1 for cfg in configs if cfg.get("kind") == "dynamic"
         )
 
-        # --- TODO: validate user-placed obstacle positions ---
-
-
     def _apply_spawn_configs(self, env_instance, drone_spawns, target_spawns):
         """
         Apply the given drone and target spawn configurations to the environment instance.
         This involves resetting the positions of existing drones and targets, and applying any specified colors.
         """
-        p = getattr(env_instance, "_p", None)
+        p = getattr(env_instance, "_p", None)   # get the physics client
         if p is None:
             return
 
-        drone_ids = list(getattr(env_instance, "_drone_ids", []))
+        drone_ids = list(getattr(env_instance, "_drone_ids", []))   # get the list of drone IDs
         if drone_ids and drone_spawns:
             new_positions = []
-            for i, body_id in enumerate(drone_ids[: len(drone_spawns)]):
+            for i, body_id in enumerate(drone_ids[: len(drone_spawns)]):    # for each drone, apply the corresponding spawn config
                 cfg = drone_spawns[i]
                 pos = [
                     float(cfg.get("x", 0.0)),
@@ -406,13 +403,13 @@ class EnvRunner:
                 ]
                 new_positions.append(pos)
                 try:
-                    env_instance._call_physics(
+                    env_instance._call_physics(     # reset drone position and orientation
                         p.resetBasePositionAndOrientation,
                         int(body_id),
                         pos,
                         [0.0, 0.0, 0.0, 1.0],
                     )
-                    env_instance._call_physics(
+                    env_instance._call_physics(    # reset drone linear and angular velocity
                         p.resetBaseVelocity,
                         int(body_id),
                         [0.0, 0.0, 0.0],
@@ -429,7 +426,7 @@ class EnvRunner:
 
         unique_targets = get_unique_targets(env_instance)
 
-        if unique_targets and target_spawns:
+        if unique_targets and target_spawns:    # for each target, apply the corresponding spawn config
             for i, target in enumerate(unique_targets[: len(target_spawns)]):
                 cfg = target_spawns[i]
                 pos = [
@@ -441,7 +438,7 @@ class EnvRunner:
                 if body_id is None:
                     continue
                 try:
-                    env_instance._call_physics(
+                    env_instance._call_physics(     # reset target position and orientation
                         p.resetBasePositionAndOrientation,
                         int(body_id),
                         pos,
@@ -456,10 +453,6 @@ class EnvRunner:
                 except Exception as exc:
                     print(f"[EnvRunner] Failed to apply target spawn config {i}: {exc}")
                     continue
-                    
-                          # --- TODO: validate user-placed obstacle positions ---
-
-
 
     # ---- Model loading ----
 
